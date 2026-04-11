@@ -1,0 +1,8 @@
+{
+  "name": "core-aiws",
+  "description": "Shared process plugin for the AI workspace.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Sasha Kang"
+  }
+}

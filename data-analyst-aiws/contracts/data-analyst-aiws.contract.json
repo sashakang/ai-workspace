@@ -1,0 +1,42 @@
+{
+  "plugin_id": "data-analyst-aiws",
+  "version": "0.1.0",
+  "public_skills": [
+    "data-analyst-forecast"
+  ],
+  "public_agents": [
+    "data-analyst"
+  ],
+  "dependencies": [
+    "core-aiws",
+    "memory-aiws"
+  ],
+  "project_memory_read_scope": [
+    "daily_logs",
+    "memory_index",
+    "topic_files"
+  ],
+  "project_memory_write_scope": [
+    "daily_logs",
+    "topic_files"
+  ],
+  "shared_memory_read_scope": [
+    "global.user-preferences",
+    "global.tool-quirks",
+    "global.workflow-patterns",
+    "domains.data-analyst"
+  ],
+  "shared_memory_write_scope": [
+    "domains.data-analyst"
+  ],
+  "improve_targets": [
+    "skills/*/SKILL.md",
+    "agents/**/*.md",
+    "references/**/*.md",
+    "bootstrap/**/*.md",
+    "contracts/*.json",
+    ".claude-plugin/plugin.json",
+    ".mcp.json",
+    "README.md"
+  ]
+}

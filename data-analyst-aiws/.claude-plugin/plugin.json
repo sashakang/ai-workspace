@@ -1,0 +1,8 @@
+{
+  "name": "data-analyst-aiws",
+  "description": "Domain plugin for time-series forecasting and analytical review.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Sasha Kang"
+  }
+}

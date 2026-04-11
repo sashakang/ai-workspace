@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "warehouse": {
+      "transport": "stdio",
+      "command": "env",
+      "args": [
+        "DATA_ANALYST_MCP_COMMAND=${DATA_ANALYST_MCP_COMMAND}",
+        "DATA_ANALYST_MCP_CONFIG=${DATA_ANALYST_MCP_CONFIG}",
+        "sh",
+        "-c",
+        "\"$DATA_ANALYST_MCP_COMMAND\" \"$DATA_ANALYST_MCP_CONFIG\""
+      ]
+    }
+  }
+}

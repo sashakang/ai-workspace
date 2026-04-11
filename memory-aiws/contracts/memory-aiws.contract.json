@@ -1,0 +1,32 @@
+{
+  "plugin_id": "memory-aiws",
+  "version": "0.1.0",
+  "public_skills": [],
+  "public_agents": [],
+  "dependencies": [
+    "core-aiws"
+  ],
+  "project_memory_read_scope": [],
+  "project_memory_write_scope": [],
+  "shared_memory_read_scope": [
+    "global.user-preferences",
+    "global.tool-quirks",
+    "global.workflow-patterns",
+    "global.prompt-improvement-patterns",
+    "domains.data-analyst"
+  ],
+  "shared_memory_write_scope": [
+    "global.user-preferences",
+    "global.tool-quirks",
+    "global.workflow-patterns",
+    "global.prompt-improvement-patterns",
+    "domains.data-analyst"
+  ],
+  "improve_targets": [
+    "contracts/*.json",
+    "contracts/*.md",
+    "memory/**/*.md",
+    ".claude-plugin/plugin.json",
+    "README.md"
+  ]
+}

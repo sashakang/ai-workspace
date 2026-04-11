@@ -1,0 +1,28 @@
+{
+  "plugin_id": "core-aiws",
+  "version": "0.1.0",
+  "public_skills": [
+    "aiws-improve"
+  ],
+  "public_agents": [],
+  "dependencies": [],
+  "project_memory_read_scope": [
+    "daily_logs",
+    "memory_index",
+    "topic_files"
+  ],
+  "project_memory_write_scope": [],
+  "shared_memory_read_scope": [
+    "global.workflow-patterns",
+    "global.prompt-improvement-patterns"
+  ],
+  "shared_memory_write_scope": [],
+  "improve_targets": [
+    "protocols/*.md",
+    "skills/*/SKILL.md",
+    "contracts/*.json",
+    "contracts/*.md",
+    ".claude-plugin/plugin.json",
+    "README.md"
+  ]
+}
