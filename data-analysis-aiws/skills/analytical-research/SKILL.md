@@ -36,6 +36,11 @@ Read from these surfaces when available:
 - `${CLAUDE_PLUGIN_DATA}/shared-memory/`
 - `${CLAUDE_PLUGIN_DATA}/project-memory/current/`
 
+Agents used:
+
+- `data-analyst` — steps 4, 5, 9 (execution); steps 7, 10 (gate review); step 12 (Gate 3 fix delegation)
+- `customer-rep` — step 12 (Gate 3 stakeholder comprehension review)
+
 Consult these shared references when the task touches their domain:
 
 - `references/research-framing.md` — steps 1-2 (interview, brief)
@@ -43,7 +48,7 @@ Consult these shared references when the task touches their domain:
 - `references/statistical-test-selection.md` — step 9 (testing)
 - `references/statistical-interpretation.md` — step 9 (testing)
 - `references/experiment-and-observational-caveats.md` — step 9 (testing)
-- `references/stakeholder-readouts.md` — step 11 (presentation)
+- `references/stakeholder-readouts.md` — steps 11-12 (presentation, Gate 3 fix resolution)
 - `references/source-hierarchy.md` — step 4 (data discovery)
 - `references/freshness-and-caveats.md` — step 4 (data discovery)
 
@@ -309,15 +314,83 @@ Consult: shared `stakeholder-readouts.md`.
 
 Notebook + presentation together satisfy Phase 7. If the research established reusable methodology or revised metric definitions, flag for reference doc update.
 
-**Exit:** Presentation package assembled. Proceed to step 12.
+**Exit:** Presentation package (PDF) assembled. Proceed to step 12.
 
-### 12. Deliver and confirm
+### 12. Gate 3: Stakeholder comprehension
+
+Stakeholder comprehension validation gate. Gate mechanics follow SOP consensus rules and escalation protocol.
+
+The notebook is the analytical work product for analysts. The presentation package (PDF: main slide + supporting materials) is the customer deliverable, derived from the notebook's visuals, logic, and conclusions. Gate 3 reviews the PDF.
+
+Spawn 4 `customer-rep` sub-agents in parallel, each with independent prompt. Each reviewer receives ONLY the presentation PDF. They do NOT receive the notebook, code cells, or methodology sections. Reviewers must not reason about statistical methodology or critique analytical choices — their scope is comprehension, not correctness.
+
+**Reviewer V — Language and Clarity**
+
+Persona: First-time reader who has never seen this topic before AND a senior leader with 5 minutes.
+
+Prompt focus: Go term by term. Is every term either plain language or explicitly defined on first use with plain words? Are sentences short enough to parse without re-reading? Can the main finding be stated in one sentence using only words that appear with definitions in the report? Are there sentences where the meaning depends on unstated technical knowledge? If a term is defined, does the definition use more technical terms that also need defining?
+
+**Reviewer W — Assumption Transparency**
+
+Persona: Risk-aware operations director who needs to know what could be wrong.
+
+Prompt focus: Are ALL assumptions underlying the analysis explicitly stated in the PDF? Does each assumption say what happens to the conclusion if it turns out to be wrong? Are there hidden assumptions the reader would not know to question? Is the difference between what was measured and what was concluded clearly stated? Would a reader know exactly what was NOT checked or NOT included?
+
+**Reviewer Y — Actionability and Completeness**
+
+Persona: Project manager who needs to turn this into a plan.
+
+Prompt focus: After reading the recommendation, list: (1) the exact action with verb, object, and success metric; (2) required preconditions — what must be true for this to work; (3) how you will know it worked — measurement or validation approach; (4) what you will do if it does not work — fallback or trigger for re-analysis. For each item, note whether it is stated in the report or would require asking the analyst. Is it clear what this analysis does NOT cover, so I do not over-extend the conclusion? If the answer is genuinely "no specific action," is that stated explicitly rather than left ambiguous?
+
+**Reviewer Z — Caveat Completeness and Narrative Flow**
+
+Persona: Marketing professional who has been burned by misleading reports before.
+
+Prompt focus: List every place where the narrative could be misinterpreted if someone skipped to the recommendation without reading the supporting evidence. For each, what clarification is missing? Does the narrative flow logically from question to answer without losing a non-technical reader? Can every visual be understood in 10 seconds without analyst help? Does every element in the supporting material serve a non-analyst, or are there sections that use unexplained technical terms beyond those already defined in the main narrative? If this recommendation failed, would the reader understand why from the caveats provided?
+
+Each reviewer returns a structured verdict:
+
+- **pass** — every statement in the reviewed materials can be understood by someone with no analytical training; all jargon is defined or avoided; all recommendations are actionable without analyst consultation
+- **flag** — minor comprehension issue (e.g., one term used without definition, one chart that needs a single-sentence annotation); fix is additive; does not change analytical content
+- **block** — major comprehension failure (e.g., entire section depends on unstated assumptions, recommendation is not actionable without further analysis, narrative logic breaks for a non-analyst reader); requires rework, not just annotation
+
+Resolution — triage the failure into one of three cases:
+
+**Case 1: PDF clarity issue** — content exists in the notebook but is unclear in the PDF. Delegate fix to a new `data-analyst` sub-agent. The fix agent receives the PDF, the blocker feedback, and shared `stakeholder-readouts.md`. Fix scope: PDF only. May rewrite text, add definitions, change wording if meaning is preserved. May NOT change analytical conclusions or numbers.
+
+**Case 2: Extraction gap** — notebook has the content but it did not make it into the PDF, or it is in the wrong place. Rebuild the relevant PDF section from existing notebook content. No notebook changes needed.
+
+**Case 3: Content gap** — the PDF needs something that is not in the notebook (e.g., a missing assumption, an unexplained exclusion, a visual that was never produced). This is a notebook revision. Delegate to a `data-analyst` sub-agent to add the missing content to the notebook first, then rebuild the relevant PDF section. Notebook additions must be complete and include necessary context. The notebook is the source of truth — everything in the PDF must trace back to it. If the same content gap is flagged again after notebook revision, escalate immediately.
+
+Fix tiers:
+
+- **simplification** — reduce wordcount, rewrite for clarity, cut jargon, tighten language; no justification needed
+- **clarification** — add definitions, explicit scope statements, unit explanations; OK without length justification if it prevents misapplication of findings
+- **caveat addition** — add limitations, conditions, risk statements; allowed ONLY if the caveat is necessary for correct decision-making; must escalate to user if the caveat materially changes the recommendation strength; a caveat is material if it changes the recommended action, moves the confidence level by at least one step (high→medium or medium→low), or constrains the decision to a subset the original recommendation did not specify (e.g., "all customers" → "US enterprise customers only"); if uncertain whether a caveat is material, escalate
+
+The fix agent must flag if the comprehension failure is structural (cannot be resolved by PDF or notebook changes alone). Escalate to user rather than forcing a workaround.
+
+After fix, re-run ONLY the blocking reviewer with: (1) revised PDF, (2) fix agent's summary of changes, (3) previous blocker feedback for context. Re-run counts toward the reviewer's 3-iteration budget.
+
+Flag → incorporate the minor fix and proceed.
+
+Final round: all 4 must return pass.
+
+Each reviewer that blocks gets independent fix-and-recheck cycles, up to 3 per reviewer per escalation protocol. Gates 1, 2, and 3 have independent iteration budgets — "gate iterations: 3" from the escalation protocol applies per gate, not across all gates combined. If any reviewer remains blocked after 3 attempts, escalate to user.
+
+If two or more reviewers issue conflicting feedback on the same element and prescribe mutually exclusive fixes, escalate with both feedback vectors to the user before attempting fix.
+
+**Relationship to Gate 2 Challenger B:** Gate 2 Challenger B validates that a non-analyst *could* understand (checked by an analyst). Gate 3 validates that a non-analyst *does* understand (checked by a simulated non-analyst). Complementary, not redundant.
+
+**Exit:** All 4 reviewers pass. Proceed to step 13.
+
+### 13. Deliver and confirm
 
 SOP Phase 8: Delivery.
 
-Present final notebook + presentation package to the user. Wait for explicit acceptance. Work is not done without it.
+Present final notebook + presentation PDF to the user. Wait for explicit acceptance. Work is not done without it.
 
-**If rejected:** If issue is analytical → return to step 9. If issue is presentational → return to step 11. If issue is foundational (scope, question, data) → escalate as scope expansion and discuss with user whether to restart or abandon.
+**If rejected:** If issue is analytical → return to step 9. If issue is presentational → return to step 11 (then re-run Gate 3). If issue is foundational (scope, question, data) → escalate as scope expansion and discuss with user whether to restart or abandon.
 
 **Exit:** User has accepted. Proceed to self-improvement.
 
@@ -333,6 +406,9 @@ Domain-specific dimensions to review:
 - did hypothesis formulation precede testing
 - was the report understandable by a non-analyst
 - what confused the audience
+- did Gate 3 reviewers identify comprehension failures that Gate 2 missed
+- what jargon or complexity passed Gate 2 but failed Gate 3
+- what pattern of Gate 3 failures should refine Gate 2 Challenger B prompts
 - what should change in the workflow next time
 
 ## Safety Rules
@@ -343,5 +419,6 @@ Domain-specific dimensions to review:
 - never skip EDA
 - never start testing before Gate 1 passes
 - never deliver before Gate 2 passes
+- never deliver before Gate 3 passes
 - never hard-code data in notebooks
 - never let polished prose hide weak evidence or wide intervals

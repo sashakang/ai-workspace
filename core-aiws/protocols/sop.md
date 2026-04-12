@@ -433,7 +433,7 @@ Each skill maps its domain-specific phases into this universal framework. **SOP 
 | Skill | SOP Mapping / Overrides |
 |-------|------------------------|
 | `/dev` | Phase 2 adds DEV_LOG, test generation, multi-repo check, pre-flight checklists. Phase 4 maps to specialist implementation. Gates map to Gate 1 / Gate 2. |
-| `/analytical-research` | Phase 1 adds interview + decision framing. Phase 2 adds data discovery, EDA, hypothesis formulation, and user approval (brief). Gate 1 uses domain-specific reviewers (data quality, EDA, hypothesis). Phase 3 adds user approval (test plan). Phase 4 is hypothesis testing + deep analysis. Phase 5 is peer challenge (validity, readability, decision-readiness). Phase 8 adds user approval (deliverable). |
+| `/analytical-research` | Phase 1 adds interview + decision framing. Phase 2 adds data discovery, EDA, hypothesis formulation, and user approval (brief). Gate 1 uses domain-specific reviewers (data quality, EDA, hypothesis). Phase 3 adds user approval (test plan). Phase 4 is hypothesis testing + deep analysis. Phase 5 is peer challenge (validity, readability, decision-readiness). Gate 3 adds stakeholder comprehension review (4 customer-rep reviewers: language/clarity, assumption transparency, actionability, caveat completeness). Phase 8 adds user approval (deliverable). |
 | `/data-analysis` | Phase 2 adds data-source-specific patterns, cache-first access. Phase 4 is SQL + Python execution. Phase 8 adds notebook structure. |
 | `/data-extraction` | Phase 1 adds request clarification. Phase 2 adds data exploration. Phase 4 is extraction + transformation. |
 | `/deploy` | Phase 4 adds CI/CD monitoring. Phase 6 adds namespace verification, health checks. |

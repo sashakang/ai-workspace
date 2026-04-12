@@ -6,7 +6,8 @@
     "analytical-research"
   ],
   "public_agents": [
-    "data-analyst"
+    "data-analyst",
+    "customer-rep"
   ],
   "dependencies": [
     "core-aiws",

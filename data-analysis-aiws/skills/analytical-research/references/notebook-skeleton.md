@@ -23,6 +23,7 @@ First cell in every notebook. Updated by the main agent after each major step.
 | Conclusion | pending/done | |
 | Gate 2 | pending/passed | |
 | Presentation | pending/done | |
+| Gate 3 | pending/passed | |
 | User approval 3 | pending/approved | |
 
 ## Section markers (handoff boundaries)
@@ -46,8 +47,9 @@ Each sub-agent owns specific sections and must not modify sections outside its s
 14. `# Final Analytical Conclusion` — owned by step 9 sub-agent
 15. `## [Gate 2 — Analytical Quality]`
 16. `# Presentation Outputs`
-17. `## [User Approval 3 — Delivery Accepted]`
-18. `# Self-Improvement Notes`
+17. `## [Gate 3 — Stakeholder Comprehension]`
+18. `## [User Approval 3 — Delivery Accepted]`
+19. `# Self-Improvement Notes`
 
 ## Rules
 
