@@ -13,6 +13,19 @@ These references are declared dependencies of the forecast skill:
 - [statistical-interpretation](./statistical-interpretation.md) — uncertainty language and interval semantics
 - [freshness-and-caveats](./freshness-and-caveats.md) — data-age warnings and regime-change flags
 
+## Referenced by `analytical-research`
+
+These references are declared dependencies of the analytical research skill:
+
+- [research-framing](./research-framing.md) — interview + brief (steps 1-2)
+- [hypothesis-and-evidence](./hypothesis-and-evidence.md) — hypothesis formulation (step 6)
+- [stakeholder-readouts](./stakeholder-readouts.md) — presentation (step 11)
+- [statistical-test-selection](./statistical-test-selection.md) — testing (step 9)
+- [statistical-interpretation](./statistical-interpretation.md) — testing (step 9)
+- [experiment-and-observational-caveats](./experiment-and-observational-caveats.md) — testing (step 9)
+- [source-hierarchy](./source-hierarchy.md) — data discovery (step 4)
+- [freshness-and-caveats](./freshness-and-caveats.md) — data discovery (step 4)
+
 ## General analytical references
 
 These references support future skills (stat-test, research, extraction) and provide general analytical grounding:

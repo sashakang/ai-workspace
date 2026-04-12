@@ -2,7 +2,8 @@
   "plugin_id": "data-analyst-aiws",
   "version": "0.1.0",
   "public_skills": [
-    "data-analyst-forecast"
+    "data-analyst-forecast",
+    "analytical-research"
   ],
   "public_agents": [
     "data-analyst"
