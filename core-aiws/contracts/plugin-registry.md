@@ -42,7 +42,7 @@ V1 assumption:
 ## Naming rules
 
 - one contract file per plugin
-- filename should match `plugin_id`, for example `data-analyst-aiws.json`
+- filename should match `plugin_id`, for example `data-analysis-aiws.json`
 - the contract payload remains authoritative; filename is only a convenience
 
 ## Minimum v1 behavior

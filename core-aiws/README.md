@@ -33,5 +33,5 @@ Contract files:
 Planned consumers:
 
 - `memory-aiws`
-- `data-analyst-aiws`
+- `data-analysis-aiws`
 - future domain plugins such as `lawyer-aiws`, `marketologist-aiws`, and `product-manager-aiws`

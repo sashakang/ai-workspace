@@ -1,6 +1,6 @@
-# data-analyst-aiws
+# data-analysis-aiws
 
-`data-analyst-aiws` is the domain plugin for analyst workflows in the AI workspace.
+`data-analysis-aiws` is the domain plugin for analyst workflows in the AI workspace.
 
 It owns:
 
@@ -30,7 +30,8 @@ Current useful slice:
 
 Implemented now:
 
-- a usable `data-analyst-forecast` skill
+- `data-analyst-forecast` skill (time-series forecasting)
+- `analytical-research` skill (hypothesis-driven research with dual-gate review)
 - one reusable `data-analyst` agent
 - generic domain, analytical, and statistical reference notes
 - bootstrap guidance for local runtime testing

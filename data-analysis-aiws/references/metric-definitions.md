@@ -1,6 +1,6 @@
 # Metric Definitions
 
-This file defines the default analytical meaning of common forecastable metrics used by `data-analyst-aiws`.
+This file defines the default analytical meaning of common forecastable metrics used by `data-analysis-aiws`.
 
 These are working defaults for forecasting and analysis. If a stakeholder or project has an explicit local definition, the local definition wins, but any override should be called out.
 

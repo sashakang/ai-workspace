@@ -12,7 +12,7 @@ Run Claude with explicit plugin roots:
 claude \
   --plugin-dir ~/Documents/ai-workspace/core-aiws \
   --plugin-dir ~/Documents/ai-workspace/memory-aiws \
-  --plugin-dir ~/Documents/ai-workspace/data-analyst-aiws
+  --plugin-dir ~/Documents/ai-workspace/data-analysis-aiws
 ```
 
 ## Required user setup
@@ -26,7 +26,7 @@ claude \
 Verify that:
 - `core-aiws@inline` loads
 - `memory-aiws@inline` loads
-- `data-analyst-aiws@inline` loads
+- `data-analysis-aiws@inline` loads
 - the `data-analyst-forecast` skill is visible in a session
 
 ## Security rule

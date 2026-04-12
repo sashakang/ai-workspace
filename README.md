@@ -8,7 +8,7 @@ The platform currently gives teams three reusable layers:
 
 - `core-aiws` for shared process and improvement workflows
 - `memory-aiws` for shared cross-project memory contracts
-- `data-analyst-aiws` for analyst-specific workflows
+- `data-analysis-aiws` for analyst-specific workflows
 
 ## What It Is For
 
@@ -48,13 +48,14 @@ It defines:
 - automatic candidate capture and consolidation rules
 - the boundary between authoritative docs and advisory shared memory
 
-### `data-analyst-aiws`
+### `data-analysis-aiws`
 
 The first real domain plugin.
 
 It currently provides:
 
-- `data-analyst-forecast`
+- `data-analyst-forecast` (time-series forecasting)
+- `analytical-research` (hypothesis-driven research with dual-gate review)
 
 This plugin is intentionally **primed**, not blank-slate: it ships domain references and workflow structure so users get useful behavior on day one.
 
@@ -97,7 +98,7 @@ In Claude Code:
 /plugin marketplace add sashakang/ai-workspace
 /plugin install core-aiws@ai-workspace
 /plugin install memory-aiws@ai-workspace
-/plugin install data-analyst-aiws@ai-workspace
+/plugin install data-analysis-aiws@ai-workspace
 ```
 
 Then restart Claude Code if prompted.
@@ -127,7 +128,7 @@ What that means in practice:
 ai-workspace/
 ├── core-aiws/
 ├── memory-aiws/
-├── data-analyst-aiws/
+├── data-analysis-aiws/
 └── docs/
 ```
 
@@ -145,7 +146,7 @@ Local runtime testing:
 claude \
   --plugin-dir ~/Documents/ai-workspace/core-aiws \
   --plugin-dir ~/Documents/ai-workspace/memory-aiws \
-  --plugin-dir ~/Documents/ai-workspace/data-analyst-aiws
+  --plugin-dir ~/Documents/ai-workspace/data-analysis-aiws
 ```
 
 End users should install through the marketplace, not by cloning or symlinking the repo.

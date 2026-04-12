@@ -1,6 +1,6 @@
 # Analyst Reference Pack
 
-This directory is the shipped knowledge pack for `data-analyst-aiws`.
+This directory is the shipped knowledge pack for `data-analysis-aiws`.
 
 It is the primary home for publishable analyst knowledge that should be available even in standalone mode.
 

@@ -63,7 +63,7 @@ Recommended shape:
 ~/Documents/ai-workspace/
 ├── core-aiws/
 ├── memory-aiws/
-├── data-analyst-aiws/
+├── data-analysis-aiws/
 ├── docs/
 │   ├── ai-workspace-architecture.md
 │   └── ai-workspace-github-rollout-strategy.md
@@ -96,7 +96,7 @@ Expected user installs:
 
 - `core-aiws`
 - `memory-aiws`
-- `data-analyst-aiws`
+- `data-analysis-aiws`
 
 Future users may install:
 
@@ -130,7 +130,7 @@ Contents:
 - optional empty top-level plugin directories:
   - `core-aiws/`
   - `memory-aiws/`
-  - `data-analyst-aiws/`
+  - `data-analysis-aiws/`
 
 Purpose:
 
@@ -187,9 +187,9 @@ Acceptance focus:
 - shared-memory snapshot import contract is explicit
 - memory ownership is separated from process ownership
 
-### Phase 3: `data-analyst-aiws`
+### Phase 3: `data-analysis-aiws`
 
-Implement `data-analyst-aiws` third.
+Implement `data-analysis-aiws` third.
 
 Scope:
 
@@ -219,7 +219,7 @@ Recommended sequence:
 2. `scaffold/core-memory-analyst-layout`
 3. `feat/core-aiws-v1`
 4. `feat/memory-aiws-v1`
-5. `feat/data-analyst-aiws-v1`
+5. `feat/data-analysis-aiws-v1`
 
 ### Pull request shape
 
@@ -267,7 +267,7 @@ Examples:
 claude \
   --plugin-dir ~/Documents/ai-workspace/core-aiws \
   --plugin-dir ~/Documents/ai-workspace/memory-aiws \
-  --plugin-dir ~/Documents/ai-workspace/data-analyst-aiws
+  --plugin-dir ~/Documents/ai-workspace/data-analysis-aiws
 ```
 
 This is a developer workflow, not a user install workflow.
@@ -331,7 +331,7 @@ The first implementation milestone should be:
 
 - `core-aiws` usable
 - `memory-aiws` usable
-- `data-analyst-aiws` usable
+- `data-analysis-aiws` usable
 - local Claude validation completed
 
 ### Publishing rule
@@ -365,5 +365,5 @@ The release path from monorepo to users is:
 
 1. clean and merge the current plugin PR stack into `master`
 2. keep local runtime validation on `--plugin-dir`, not symlinks
-3. publish early alpha with `core-aiws`, `memory-aiws`, and `data-analyst-aiws`
+3. publish early alpha with `core-aiws`, `memory-aiws`, and `data-analysis-aiws`
 4. collect install and usage feedback before adding new plugins

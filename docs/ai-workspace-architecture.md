@@ -317,7 +317,7 @@ Required fields:
 
 Examples:
 
-- `data-analyst-aiws`
+- `data-analysis-aiws`
 - `lawyer-aiws`
 - `marketologist-aiws`
 - `product-manager-aiws`
@@ -492,7 +492,7 @@ Package ids:
 
 - `core-aiws`
 - `memory-aiws`
-- `data-analyst-aiws`
+- `data-analysis-aiws`
 - future examples: `lawyer-aiws`, `marketologist-aiws`, `product-manager-aiws`
 
 Public analyst skill prefix:
