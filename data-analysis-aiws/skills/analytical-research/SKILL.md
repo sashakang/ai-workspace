@@ -52,6 +52,12 @@ Consult these shared references when the task touches their domain:
 - `references/source-hierarchy.md` — step 4 (data discovery)
 - `references/freshness-and-caveats.md` — step 4 (data discovery)
 
+Consult these question-specific pattern references when the research question matches:
+
+- `references/cohort-patterns.md` — steps 4-5 (cohort definition and validation)
+- `references/retention-patterns.md` — steps 6, 9 (retention-focused hypotheses and testing)
+- `references/experiment-design-patterns.md` — steps 2, 6, 9 (experiment design and execution)
+
 ## Grounding Rules
 
 - the notebook is the live research medium, not just a reporting surface
