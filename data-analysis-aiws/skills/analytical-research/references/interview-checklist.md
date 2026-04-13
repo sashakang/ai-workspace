@@ -11,7 +11,7 @@ Questions to resolve before analysis starts.
 
 - Who will consume this?
 - What is their analytical sophistication?
-- What format do they expect?
+- What deliverable format do they expect? (notebook only, notebook + presentation package, other)
 
 ## Prior beliefs
 
