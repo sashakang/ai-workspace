@@ -1,10 +1,8 @@
-# Universal Standard Operating Procedure (SOP)
+# Standard Operating Procedure (SOP)
 
 This is the canonical ai-workspace SOP for `core-aiws`.
 
-All work follows this procedure unless explicitly exempted. Skills reference this protocol and override only domain-specific details. **SOP is the abstract protocol; skills are concrete implementations.** Skill instructions take precedence for execution details; SOP phase structure and gate requirements MUST be followed.
-
-**Exemptions**: `/slack-watch` (lightweight reactive loop, not task-based).
+This is the default process. Skills may follow it as-is, override specific phases, or replace it with their own workflow entirely. **SOP defines the default phase structure and gate requirements; skills define the concrete implementation.** When a skill defines its own workflow, the skill's SKILL.md is authoritative.
 
 ---
 
@@ -94,9 +92,11 @@ Call `ExitPlanMode`. The plan file should be labeled: **"Draft plan — proceedi
 
 ### 2.4 Gate 1: Design Consensus (sub-agent only, no user approval needed)
 
-**HARD GATE: Do NOT proceed to Phase 3 until Gate 1 passes.**
+**HARD GATE: Do NOT proceed to Phase 3 until Gate 1 passes.** Skills that define their own gate structure follow their skill workflow instead.
 
 The Representative NEVER approves their own plan. Independent reviewers must validate.
+
+Default reviewers by task type. Skills with custom gate reviewers override this table.
 
 Spawn reviewers IN PARALLEL based on task type:
 
@@ -158,7 +158,7 @@ or if a gate was skipped (lightweight task):
 - **User approves**: Proceed to Phase 4 (Execution)
 - **User rejects or requests changes**: Loop back to Phase 2 — re-enter plan mode (`EnterPlanMode`), revise the plan based on user feedback, `ExitPlanMode`, re-run Gate 1, then return to Phase 3 for user approval again
 
-**HARD GATE: Do NOT proceed to Phase 4 until the user explicitly approves the plan.**
+**HARD GATE: Do NOT proceed to Phase 4 until the user explicitly approves the plan.** Skills that define their own gate structure follow their skill workflow instead.
 
 **Exit**: User has approved the plan. Record the approval in the active evidence surface if one is in use. Proceed to Phase 4.
 
@@ -224,11 +224,13 @@ If multiple specialists are needed for independent subtasks, launch them in para
 
 **[SOP] Entering Phase 5: Validation**
 
-**HARD GATE: Do NOT proceed to Phase 6 until Gate 2 passes.**
+**HARD GATE: Do NOT proceed to Phase 6 until Gate 2 passes.** Skills that define their own gate structure follow their skill workflow instead.
 
 All output must be independently reviewed before delivery.
 
 ### 5.1 Gate 2: Output Consensus
+
+Default reviewers by task type. Skills with custom gate reviewers override this table.
 
 Spawn reviewers IN PARALLEL based on task type:
 
@@ -249,7 +251,7 @@ Spawn reviewers IN PARALLEL based on task type:
 
 **Consensus rules:** Same as Gate 1 -- all must APPROVE, max 3 iterations, then escalate.
 
-**Gate 2 applies to ALL changes**: additions, modifications, AND deletions. Removing code can have cascading effects.
+**Gate 2 applies to ALL changes in the default SOP workflow**: additions, modifications, AND deletions. Removing code can have cascading effects. Skills that define their own gate structure follow their skill workflow instead.
 
 **Fake consensus guard**: Same as Gate 1. Actual sub-agent outputs required. No fabricated approvals.
 
@@ -350,7 +352,7 @@ or:
 
 ## Phase 9: SELF-IMPROVEMENT
 
-**MANDATORY. This phase runs after every non-lightweight task. Skipping Phase 9 is a protocol violation.**
+**In the default SOP workflow, this phase runs after every non-lightweight task.** Skills may define their own self-improvement triggers.
 
 **Lightweight** = single-question lookups, config reads, or tasks with no decision-making or agent delegation. These skip Phase 9.
 
@@ -428,16 +430,16 @@ Quick reference:
 
 ## Skill-Specific Overrides
 
-Each skill maps its domain-specific phases into this universal framework. **SOP phase structure and gate requirements are mandatory; skills override only execution details.**
+Skills override SOP phases in their own SKILL.md. The SOP provides defaults; each skill's SKILL.md is authoritative for its execution details.
 
-| Skill | SOP Mapping / Overrides |
-|-------|------------------------|
-| `/dev` | Phase 2 adds DEV_LOG, test generation, multi-repo check, pre-flight checklists. Phase 4 maps to specialist implementation. Gates map to Gate 1 / Gate 2. |
-| `/analytical-research` | Phase 1 adds interview + decision framing. Phase 2 adds data discovery, EDA, hypothesis formulation, and user approval (brief). Gate 1 uses domain-specific reviewers (data quality, EDA, hypothesis). Phase 3 adds user approval (test plan). Phase 4 is hypothesis testing + deep analysis. Phase 5 is peer challenge (validity, readability, decision-readiness). Gate 3 adds stakeholder comprehension review (4 customer-rep reviewers: language/clarity, assumption transparency, actionability, caveat completeness). Phase 8 adds user approval (deliverable). |
-| `/data-analysis` | Phase 2 adds data-source-specific patterns, cache-first access. Phase 4 is SQL + Python execution. Phase 8 adds notebook structure. |
-| `/data-extraction` | Phase 1 adds request clarification. Phase 2 adds data exploration. Phase 4 is extraction + transformation. |
-| `/deploy` | Phase 4 adds CI/CD monitoring. Phase 6 adds namespace verification, health checks. |
-| `/slack-watch` | **EXEMPT** -- lightweight reactive loop, not a task-based workflow |
+Currently registered skills with SOP overrides:
+
+| Skill | Plugin | Override summary |
+|-------|--------|-----------------|
+| `/analytical-research` | `data-analysis-aiws` | Custom interview (Phase 1), domain-specific gates (1-3), stakeholder comprehension gate |
+| `/data-analyst-forecast` | `data-analysis-aiws` | Custom gates with domain reviewers |
+
+Skills not listed here follow SOP defaults.
 
 ---
 
@@ -454,7 +456,7 @@ Each skill maps its domain-specific phases into this universal framework. **SOP 
 
 ## Completion Checklist
 
-**MANDATORY. Run this checklist before declaring any non-lightweight task complete.**
+**Run this checklist for tasks following the default SOP workflow.**
 
 - [ ] All output came from specialist sub-agents (not self-implemented)
 - [ ] Gate 1 passed with actual sub-agent consensus (if applicable)
@@ -472,9 +474,9 @@ Each skill maps its domain-specific phases into this universal framework. **SOP 
 | Forbidden | Why | Instead |
 |-----------|-----|---------|
 | Representative writes implementation code | Bypasses specialist expertise + review | Delegate to specialist (Phase 4) |
-| Skip Gate 1 (plan review) | Unvalidated approach -> wasted work | Always get consensus before executing |
-| Skip Gate 2 (output review) | Unvalidated output -> errors in delivery | Always get consensus before delivering |
-| Skip Phase 9 (self-improvement) | Misses improvement opportunities | ALWAYS run, even if session was smooth |
+| Skip Gate 1 (plan review) | Unvalidated approach -> wasted work (in default SOP workflow) | Always get consensus before executing |
+| Skip Gate 2 (output review) | Unvalidated output -> errors in delivery (in default SOP workflow) | Always get consensus before delivering |
+| Skip Phase 9 (self-improvement) | Misses improvement opportunities (in default SOP workflow) | Run after every non-lightweight task |
 | Commit without user approval | User controls git | Present results, wait for instruction |
 | Continue past halt condition | Infinite loops waste time | Escalate to user |
 | Self-approve your own plan | Confirmation bias | Independent reviewers validate |
