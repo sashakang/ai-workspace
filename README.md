@@ -104,7 +104,7 @@ In Claude Code:
 Then install the host helper once:
 
 ```bash
-pipx install aiws-host-memory
+pipx install "aiws-host-memory @ git+https://github.com/sashakang/ai-workspace.git@master#subdirectory=aiws-host-memory"
 aiws-host-memory bootstrap
 aiws-host-memory doctor
 ```
@@ -162,7 +162,7 @@ claude \
 The helper can be tested locally from this repo with:
 
 ```bash
-pipx install ./aiws-host-memory
+pipx install "aiws-host-memory @ git+https://github.com/sashakang/ai-workspace.git@master#subdirectory=aiws-host-memory"
 aiws-host-memory bootstrap
 ```
 

@@ -74,7 +74,7 @@ It provides:
 Example:
 
 ```bash
-pipx install aiws-host-memory
+pipx install "aiws-host-memory @ git+https://github.com/sashakang/ai-workspace.git@master#subdirectory=aiws-host-memory"
 aiws-host-memory bootstrap
 aiws-host-memory doctor
 ```

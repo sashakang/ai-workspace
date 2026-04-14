@@ -14,7 +14,7 @@ Install the three marketplace plugins, then install and run the helper:
 /plugin install core-aiws@ai-workspace
 /plugin install memory-aiws@ai-workspace
 /plugin install data-analysis-aiws@ai-workspace
-pipx install aiws-host-memory
+pipx install "aiws-host-memory @ git+https://github.com/sashakang/ai-workspace.git@master#subdirectory=aiws-host-memory"
 aiws-host-memory bootstrap
 aiws-host-memory doctor
 ```
