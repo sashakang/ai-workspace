@@ -228,6 +228,14 @@ Capture:
 - any data-quality issues that should be flagged for future runs
 - reusable patterns (e.g., holiday calendars, imputation defaults) worth persisting to shared memory
 
+### 13. Shared-memory staging
+
+After delivery, if the task produced reusable cross-project learnings, stage one candidate event per learning with the plugin-local staging utility into `${CLAUDE_PLUGIN_DATA}/shared-memory/outbox/`.
+
+If `aiws-host-memory` is not bootstrapped yet and the outbox path is unavailable, skip shared-memory staging and continue. Do not block delivery on helper setup.
+
+Capture to shared memory only when the learning is reusable across projects, stable enough to keep, and relevant beyond the current forecast. Keep project-specific notes, one-off debugging details, and dataset-specific quirks in project memory instead.
+
 ## Safety Rules
 
 - never invent forecast outputs or fabricate model diagnostics

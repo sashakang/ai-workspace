@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Shared Claude Code plugins for process, memory, and analyst workflows.",
-    "version": "0.1.0"
+    "version": "0.3.0"
   },
   "plugins": [
     {
       "name": "core-aiws",
       "source": "./core-aiws",
-      "description": "Shared SOP, self-improvement, and process protocols for the AI workspace.",
-      "version": "0.1.0",
+      "description": "REQUIRED: Shared SOP, self-improvement, and process protocols for the AI workspace.",
+      "version": "0.3.0",
       "author": {
         "name": "Sasha Kang"
       }
@@ -20,8 +20,8 @@
     {
       "name": "memory-aiws",
       "source": "./memory-aiws",
-      "description": "Shared cross-project and cross-plugin memory layer for the platform.",
-      "version": "0.1.0",
+      "description": "REQUIRED: Shared cross-project and cross-plugin memory layer for the platform.",
+      "version": "0.3.0",
       "author": {
         "name": "Sasha Kang"
       }
@@ -30,7 +30,7 @@
       "name": "data-analysis-aiws",
       "source": "./data-analysis-aiws",
       "description": "Domain plugin for analytical research, forecasting, and stakeholder-ready reporting.",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "author": {
         "name": "Sasha Kang"
       }

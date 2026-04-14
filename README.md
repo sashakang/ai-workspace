@@ -101,6 +101,14 @@ In Claude Code:
 /plugin install data-analysis-aiws@ai-workspace
 ```
 
+Then install the host helper once:
+
+```bash
+pipx install aiws-host-memory
+aiws-host-memory bootstrap
+aiws-host-memory doctor
+```
+
 Then restart Claude Code if prompted.
 
 If you already installed the marketplace earlier and want the latest plugin state, refresh and reinstall the relevant plugin.
@@ -114,6 +122,7 @@ What is real today:
 - shared process foundation
 - shared memory contract layer
 - one example domain plugin for data analysts
+- one host-side helper for registry bootstrap, hook setup, and shared-memory refresh
 
 What that means in practice:
 
@@ -126,6 +135,7 @@ What that means in practice:
 
 ```text
 ai-workspace/
+├── aiws-host-memory/
 ├── core-aiws/
 ├── memory-aiws/
 ├── data-analysis-aiws/
@@ -147,6 +157,13 @@ claude \
   --plugin-dir ~/Documents/ai-workspace/core-aiws \
   --plugin-dir ~/Documents/ai-workspace/memory-aiws \
   --plugin-dir ~/Documents/ai-workspace/data-analysis-aiws
+```
+
+The helper can be tested locally from this repo with:
+
+```bash
+pipx install ./aiws-host-memory
+aiws-host-memory bootstrap
 ```
 
 End users should install through the marketplace, not by cloning or symlinking the repo.

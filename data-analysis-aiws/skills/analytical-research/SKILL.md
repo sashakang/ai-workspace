@@ -417,6 +417,14 @@ Domain-specific dimensions to review:
 - what pattern of Gate 3 failures should refine Gate 2 Challenger B prompts
 - what should change in the workflow next time
 
+## Shared-Memory Staging
+
+After delivery, if the task produced reusable cross-project learnings, stage one candidate event per learning with the plugin-local staging utility into `${CLAUDE_PLUGIN_DATA}/shared-memory/outbox/`.
+
+If `aiws-host-memory` is not bootstrapped yet and the outbox path is unavailable, skip shared-memory staging and continue. Do not block delivery on helper setup.
+
+Use shared memory for durable analyst heuristics, recurring tool quirks, and workflow patterns that should help future projects. Keep project-specific findings, dataset-specific notes, and transient debugging state in project memory instead.
+
 ## Safety Rules
 
 - never invent data, findings, or statistical results

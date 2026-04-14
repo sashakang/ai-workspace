@@ -3,6 +3,23 @@
 Use this plugin with:
 - `core-aiws`
 - `memory-aiws`
+- `aiws-host-memory`
+
+## Marketplace install
+
+Install the three marketplace plugins, then install and run the helper:
+
+```bash
+/plugin marketplace add sashakang/ai-workspace
+/plugin install core-aiws@ai-workspace
+/plugin install memory-aiws@ai-workspace
+/plugin install data-analysis-aiws@ai-workspace
+pipx install aiws-host-memory
+aiws-host-memory bootstrap
+aiws-host-memory doctor
+```
+
+If `aiws-host-memory` is not configured yet, the analyst skills still work, but shared-memory capture and imported shared-memory reads are unavailable.
 
 ## Local development
 
@@ -28,6 +45,7 @@ Verify that:
 - `memory-aiws@inline` loads
 - `data-analysis-aiws@inline` loads
 - the `data-analyst-forecast` skill is visible in a session
+- `aiws-host-memory bootstrap` completes successfully for the local plugin/data paths you are using
 
 ## Security rule
 

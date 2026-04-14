@@ -1,6 +1,6 @@
 {
   "plugin_id": "memory-aiws",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "public_skills": [],
   "public_agents": [],
   "dependencies": [

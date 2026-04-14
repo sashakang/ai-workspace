@@ -11,6 +11,7 @@ It depends on:
 
 - `core-aiws`
 - `memory-aiws`
+- `aiws-host-memory` for shared-memory refresh, registry bootstrap, and automatic hook setup
 
 It does not own:
 
@@ -39,3 +40,4 @@ Implemented now:
 Runtime note:
 
 - mutable runtime state should resolve to `${CLAUDE_PLUGIN_DATA}` rather than being written into the source tree during development
+- without `aiws-host-memory bootstrap`, analyst workflows still run, but shared-memory capture/import is disabled

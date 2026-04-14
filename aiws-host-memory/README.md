@@ -1,0 +1,32 @@
+# aiws-host-memory
+
+`aiws-host-memory` is the host-side helper for the `ai-workspace` Claude plugin family.
+
+It owns:
+
+- plugin install mapping/config
+- `core-aiws` registry bootstrap
+- automatic global `Stop` hook setup
+- shared-memory refresh orchestration
+- consumer snapshot fan-out
+
+It does not own:
+
+- canonical shared-memory content
+- producer-side candidate authoring
+- plugin-local workflow behavior
+
+## Install
+
+```bash
+pipx install aiws-host-memory
+aiws-host-memory bootstrap
+aiws-host-memory doctor
+```
+
+## Commands
+
+- `bootstrap` — discover or confirm plugin installs, write helper config, populate the registry, bootstrap canonical memory, and upsert the managed `Stop` hook
+- `refresh-shared` — run the host-side shared-memory refresh
+- `doctor` — report setup problems and repair guidance
+- `status` — show current config and last refresh status
