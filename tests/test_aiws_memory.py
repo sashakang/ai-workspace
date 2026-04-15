@@ -12,6 +12,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HELPER_PYTHONPATH = str(REPO_ROOT / "aiws-host-memory")
+MANAGED_HOOK_EVENT = "SessionEnd"
+MANAGED_HOOK_COMMAND = "aiws-host-memory refresh-shared"
 
 
 class HostMemoryTests(unittest.TestCase):
@@ -107,13 +109,13 @@ class HostMemoryTests(unittest.TestCase):
     def load_settings(self) -> dict[str, object]:
         return json.loads(self.settings_path.read_text())
 
-    def managed_stop_groups(self) -> list[dict[str, object]]:
+    def managed_hook_groups(self) -> list[dict[str, object]]:
         settings = self.load_settings()
-        stop_groups = settings.get("hooks", {}).get("Stop", [])
+        event_groups = settings.get("hooks", {}).get(MANAGED_HOOK_EVENT, [])
         return [
             group
-            for group in stop_groups
-            if any(hook.get("command") == "aiws-host-memory refresh-shared" for hook in group.get("hooks", []))
+            for group in event_groups
+            if any(hook.get("command") == MANAGED_HOOK_COMMAND for hook in group.get("hooks", []))
         ]
 
     def test_bootstrap_preserves_existing_settings_and_is_idempotent(self) -> None:
@@ -162,27 +164,30 @@ class HostMemoryTests(unittest.TestCase):
         settings = self.load_settings()
         self.assertEqual(settings["theme"], "dark")
         self.assertEqual(len(settings["hooks"]["PreToolUse"]), 1)
-        self.assertEqual(len(settings["hooks"]["Stop"]), 2)
-        self.assertEqual(len(self.managed_stop_groups()), 1)
+        self.assertEqual(len(settings["hooks"]["Stop"]), 1)
+        self.assertEqual(len(settings["hooks"][MANAGED_HOOK_EVENT]), 1)
+        self.assertEqual(len(self.managed_hook_groups()), 1)
 
         second = self.helper_json(*self.bootstrap_args())
         self.assertEqual(second["status"], "ok")
-        self.assertEqual(len(self.load_settings()["hooks"]["Stop"]), 2)
-        self.assertEqual(len(self.managed_stop_groups()), 1)
+        settings = self.load_settings()
+        self.assertEqual(len(settings["hooks"]["Stop"]), 1)
+        self.assertEqual(len(settings["hooks"][MANAGED_HOOK_EVENT]), 1)
+        self.assertEqual(len(self.managed_hook_groups()), 1)
 
     def test_bootstrap_repairs_drifted_hook(self) -> None:
         self.helper_json(*self.bootstrap_args())
         settings = self.load_settings()
-        for group in settings["hooks"]["Stop"]:
+        for group in settings["hooks"][MANAGED_HOOK_EVENT]:
             for hook in group.get("hooks", []):
-                if hook.get("command") == "aiws-host-memory refresh-shared":
+                if hook.get("command") == MANAGED_HOOK_COMMAND:
                     hook["timeout"] = 5
                     hook["async"] = False
         self.settings_path.write_text(json.dumps(settings))
 
         self.helper_json(*self.bootstrap_args())
 
-        managed = self.managed_stop_groups()
+        managed = self.managed_hook_groups()
         self.assertEqual(len(managed), 1)
         self.assertEqual(
             managed[0],
@@ -190,13 +195,88 @@ class HostMemoryTests(unittest.TestCase):
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "aiws-host-memory refresh-shared",
+                        "command": MANAGED_HOOK_COMMAND,
                         "async": True,
                         "timeout": 120,
                     }
                 ]
             },
         )
+
+    def test_bootstrap_migrates_managed_hook_from_stop_to_session_end(self) -> None:
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        self.settings_path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Write",
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": MANAGED_HOOK_COMMAND,
+                                    }
+                                ],
+                            }
+                        ],
+                        "Stop": [
+                            {
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": MANAGED_HOOK_COMMAND,
+                                        "async": True,
+                                        "timeout": 120,
+                                    }
+                                ]
+                            },
+                            {
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": "echo unrelated",
+                                    }
+                                ]
+                            },
+                        ]
+                    }
+                }
+            )
+        )
+
+        self.helper_json(*self.bootstrap_args())
+
+        settings = self.load_settings()
+        self.assertEqual(len(settings["hooks"]["Stop"]), 1)
+        self.assertEqual(settings["hooks"]["Stop"][0]["hooks"][0]["command"], "echo unrelated")
+        self.assertEqual(len(settings["hooks"]["PreToolUse"]), 1)
+        self.assertEqual(settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"], MANAGED_HOOK_COMMAND)
+        self.assertEqual(len(settings["hooks"][MANAGED_HOOK_EVENT]), 1)
+        self.assertEqual(len(self.managed_hook_groups()), 1)
+
+    def test_bootstrap_rejects_malformed_legacy_stop_hooks(self) -> None:
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        self.settings_path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "Stop": {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": MANAGED_HOOK_COMMAND,
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+        )
+
+        failed = self.run_helper(*self.bootstrap_args(), expect_success=False)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("`hooks.Stop` must be a JSON array", failed.stdout)
 
     def test_partial_bootstrap_reports_error_then_recovers(self) -> None:
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -216,7 +296,7 @@ class HostMemoryTests(unittest.TestCase):
         self.assertNotEqual(doctor.returncode, 0)
         doctor_payload = json.loads(doctor.stdout)
         self.assertEqual(doctor_payload["status"], "error")
-        self.assertTrue(any("Managed Stop hook" in issue or "Settings file is invalid JSON" in issue for issue in doctor_payload["issues"]))
+        self.assertTrue(any("Managed SessionEnd hook" in issue or "Settings file is invalid JSON" in issue for issue in doctor_payload["issues"]))
 
         self.settings_path.write_text(json.dumps({"hooks": {}}))
         self.helper_json(*self.bootstrap_args())
@@ -269,12 +349,12 @@ class HostMemoryTests(unittest.TestCase):
     def test_doctor_reports_duplicate_managed_hook(self) -> None:
         self.helper_json(*self.bootstrap_args())
         settings = self.load_settings()
-        settings["hooks"]["Stop"].append(
+        settings["hooks"][MANAGED_HOOK_EVENT].append(
             {
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "aiws-host-memory refresh-shared",
+                        "command": MANAGED_HOOK_COMMAND,
                         "async": True,
                         "timeout": 120,
                     }

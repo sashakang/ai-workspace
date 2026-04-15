@@ -110,6 +110,7 @@ aiws-host-memory doctor
 ```
 
 Then restart Claude Code if prompted.
+If you already installed an older helper build, reinstall it and rerun `bootstrap` so the managed hook is migrated from `Stop` to `SessionEnd`.
 
 If you already installed the marketplace earlier and want the latest plugin state, refresh and reinstall the relevant plugin.
 
@@ -122,7 +123,7 @@ What is real today:
 - shared process foundation
 - shared memory contract layer
 - one example domain plugin for data analysts
-- one host-side helper for registry bootstrap, hook setup, and shared-memory refresh
+- one host-side helper for registry bootstrap, `SessionEnd` hook setup, and shared-memory refresh
 
 What that means in practice:
 

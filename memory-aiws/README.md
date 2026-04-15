@@ -67,7 +67,7 @@ The host-side bridge is now packaged as the separate `aiws-host-memory` helper.
 
 It provides:
 
-- `bootstrap` — write helper config, populate the plugin-contract registry, bootstrap canonical memory, and install the managed global `Stop` hook
+- `bootstrap` — write helper config, populate the plugin-contract registry, bootstrap canonical memory, and install the managed global `SessionEnd` hook
 - `refresh-shared` — process producer outboxes, publish canonical shared memory, and refresh consumer imports
 - `doctor` / `status` — show setup health and repair guidance
 
@@ -80,5 +80,6 @@ aiws-host-memory doctor
 ```
 
 Run `aiws-host-memory bootstrap` before the first `refresh-shared`. The refresh command depends on the helper config, the registry snapshot, and the canonical runtime all being in place.
+If you already installed an older helper release, reinstall it and rerun `bootstrap` once so the managed hook moves from `Stop` to `SessionEnd`.
 
 Producer-side candidate staging stays inside the producer plugin. For `data-analysis-aiws`, use [stage_shared_memory_candidate.py](../data-analysis-aiws/scripts/stage_shared_memory_candidate.py) through the plugin-local wrapper, not through repo-root bridge code.

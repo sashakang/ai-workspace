@@ -6,7 +6,7 @@ It owns:
 
 - plugin install mapping/config
 - `core-aiws` registry bootstrap
-- automatic global `Stop` hook setup
+- automatic global `SessionEnd` hook setup
 - shared-memory refresh orchestration
 - consumer snapshot fan-out
 
@@ -24,9 +24,11 @@ aiws-host-memory bootstrap
 aiws-host-memory doctor
 ```
 
+If you already have an older helper installed, reinstall it and rerun `aiws-host-memory bootstrap`. That migrates the managed hook from `Stop` to `SessionEnd`.
+
 ## Commands
 
-- `bootstrap` — discover or confirm plugin installs, write helper config, populate the registry, bootstrap canonical memory, and upsert the managed `Stop` hook
+- `bootstrap` — discover or confirm plugin installs, write helper config, populate the registry, bootstrap canonical memory, and upsert the managed `SessionEnd` hook
 - `refresh-shared` — run the host-side shared-memory refresh
 - `doctor` — report setup problems and repair guidance
 - `status` — show current config and last refresh status

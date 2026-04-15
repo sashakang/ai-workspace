@@ -17,7 +17,8 @@ from typing import Any
 
 REQUIRED_PLUGIN_IDS = ("core-aiws", "memory-aiws", "data-analysis-aiws")
 MANAGED_HOOK_COMMAND = "aiws-host-memory refresh-shared"
-MANAGED_STOP_GROUP = {
+MANAGED_HOOK_EVENT = "SessionEnd"
+MANAGED_HOOK_GROUP = {
     "hooks": [
         {
             "type": "command",
@@ -82,7 +83,6 @@ def atomic_symlink(link_path: Path, target_path: Path) -> None:
     relative_target = os.path.relpath(target_path, start=link_path.parent)
     os.symlink(relative_target, temp_link)
     os.replace(temp_link, link_path)
-
 
 @dataclass
 class PluginInstall:
@@ -673,11 +673,11 @@ def refresh_shared_memory(paths: HelperPaths, installs: dict[str, PluginInstall]
 
 
 def canonical_hook_group() -> dict[str, Any]:
-    return json.loads(json.dumps(MANAGED_STOP_GROUP))
+    return json.loads(json.dumps(MANAGED_HOOK_GROUP))
 
 
 def hook_group_status(group: dict[str, Any]) -> str:
-    if group == MANAGED_STOP_GROUP:
+    if group == MANAGED_HOOK_GROUP:
         return "healthy"
     return "drifted"
 
@@ -698,11 +698,11 @@ def read_settings_object(settings_path: Path) -> dict[str, Any]:
     return payload
 
 
-def managed_stop_groups(settings_payload: dict[str, Any]) -> list[dict[str, Any]]:
+def managed_hook_groups(settings_payload: dict[str, Any]) -> list[dict[str, Any]]:
     hooks = settings_payload.get("hooks", {})
-    stop_groups = hooks.get("Stop", [])
+    event_groups = hooks.get(MANAGED_HOOK_EVENT, [])
     managed = []
-    for group in stop_groups:
+    for group in event_groups:
         if not isinstance(group, dict):
             continue
         for hook in group.get("hooks", []):
@@ -716,25 +716,29 @@ def hook_health(settings_path: Path) -> dict[str, Any]:
     if not settings_path.exists():
         return {"status": "missing", "details": "settings.json does not exist"}
     payload = read_settings_object(settings_path)
-    managed = managed_stop_groups(payload)
+    managed = managed_hook_groups(payload)
     if not managed:
-        return {"status": "missing", "details": "managed Stop hook is not present"}
+        return {"status": "missing", "details": f"managed {MANAGED_HOOK_EVENT} hook is not present"}
     if len(managed) > 1:
-        return {"status": "duplicate", "details": f"found {len(managed)} managed Stop hook groups"}
+        return {"status": "duplicate", "details": f"found {len(managed)} managed {MANAGED_HOOK_EVENT} hook groups"}
     status = hook_group_status(managed[0])
-    details = "managed Stop hook matches the canonical config" if status == "healthy" else "managed Stop hook exists but drifted from the canonical config"
+    details = (
+        f"managed {MANAGED_HOOK_EVENT} hook matches the canonical config"
+        if status == "healthy"
+        else f"managed {MANAGED_HOOK_EVENT} hook exists but drifted from the canonical config"
+    )
     return {"status": status, "details": details}
 
 
-def upsert_managed_stop_hook(paths: HelperPaths) -> dict[str, Any]:
+def upsert_managed_hook(paths: HelperPaths) -> dict[str, Any]:
     payload = read_settings_object(paths.settings_path)
     hooks = payload.setdefault("hooks", {})
-    stop_groups = hooks.setdefault("Stop", [])
-    if not isinstance(stop_groups, list):
-        raise BootstrapError("`hooks.Stop` must be a JSON array in settings.json.")
+    event_groups = hooks.setdefault(MANAGED_HOOK_EVENT, [])
+    if not isinstance(event_groups, list):
+        raise BootstrapError(f"`hooks.{MANAGED_HOOK_EVENT}` must be a JSON array in settings.json.")
 
     unmanaged: list[Any] = []
-    for group in stop_groups:
+    for group in event_groups:
         is_managed = False
         if isinstance(group, dict):
             for hook in group.get("hooks", []):
@@ -744,7 +748,22 @@ def upsert_managed_stop_hook(paths: HelperPaths) -> dict[str, Any]:
         if not is_managed:
             unmanaged.append(group)
 
-    hooks["Stop"] = unmanaged + [canonical_hook_group()]
+    hooks[MANAGED_HOOK_EVENT] = unmanaged + [canonical_hook_group()]
+    legacy_stop_groups = hooks.get("Stop", [])
+    if not isinstance(legacy_stop_groups, list):
+        raise BootstrapError("`hooks.Stop` must be a JSON array in settings.json.")
+    unmanaged_stop_groups: list[Any] = []
+    for group in legacy_stop_groups:
+        is_managed = False
+        if isinstance(group, dict):
+            for hook in group.get("hooks", []):
+                if hook.get("command") == MANAGED_HOOK_COMMAND:
+                    is_managed = True
+                    break
+        if not is_managed:
+            unmanaged_stop_groups.append(group)
+    hooks["Stop"] = unmanaged_stop_groups
+
     write_json_atomic(paths.settings_path, payload)
     return hook_health(paths.settings_path)
 
@@ -789,7 +808,7 @@ def bootstrap(paths: HelperPaths, args: argparse.Namespace) -> dict[str, Any]:
             if contract.get("shared_memory_write_scope"):
                 stable_outbox_root(installs[plugin_id].plugin_data)
 
-        hook = upsert_managed_stop_hook(paths)
+        hook = upsert_managed_hook(paths)
         phases["hook_upserted"] = True
         result = {
             "status": "ok",
@@ -804,7 +823,7 @@ def bootstrap(paths: HelperPaths, args: argparse.Namespace) -> dict[str, Any]:
             "canonical_bootstrap": bootstrap_result,
             "hook": hook,
             "phases": phases,
-            "verification": "Run `/hooks` if Claude does not pick up the new Stop hook until restart/reload.",
+            "verification": f"Run `/hooks` if Claude does not pick up the new {MANAGED_HOOK_EVENT} hook until restart/reload.",
         }
         update_state(
             paths,
@@ -867,7 +886,7 @@ def doctor(paths: HelperPaths) -> tuple[dict[str, Any], int]:
         try:
             details["hook"] = hook_health(paths.settings_path)
             if details["hook"]["status"] != "healthy":
-                issues.append("Managed Stop hook is not healthy. Re-run `aiws-host-memory bootstrap`.")
+                issues.append(f"Managed {MANAGED_HOOK_EVENT} hook is not healthy. Re-run `aiws-host-memory bootstrap`.")
         except BootstrapError as exc:
             details["hook"] = {"status": "error", "details": str(exc)}
             issues.append(str(exc))
