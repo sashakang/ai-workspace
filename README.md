@@ -4,11 +4,11 @@ This repository is a small AI workspace for Claude Code.
 
 It is built around one idea: useful Claude workflows should be packaged as installable plugins, not left as personal setup, scattered prompts, or one-off local habits.
 
-The platform currently gives teams three reusable layers:
+The platform currently gives teams:
 
 - `core-aiws` for shared process and improvement workflows
 - `memory-aiws` for shared cross-project memory contracts
-- `data-analysis-aiws` for analyst-specific workflows
+- `data-analysis-aiws` as the first domain plugin
 
 ## What It Is For
 
@@ -21,7 +21,7 @@ It is meant for teams that want:
 - memory boundaries between project memory, shared memory, and runtime state
 - a path to ship more domain plugins over time
 
-In practice, this means you can install a common foundation once, then add domain plugins on top of it.
+In practice, this means you install the shared foundation once, then add only the domain plugins you actually want.
 
 ## How The Platform Is Structured
 
@@ -48,9 +48,9 @@ It defines:
 - automatic candidate capture and consolidation rules
 - the boundary between authoritative docs and advisory shared memory
 
-### `data-analysis-aiws`
+### Domain plugins
 
-The first real domain plugin.
+The first real domain plugin today is `data-analysis-aiws`.
 
 It currently provides:
 
@@ -92,12 +92,17 @@ It should only contribute:
 
 ## Install
 
-In Claude Code:
+In Claude Code, install the infrastructure plugins first:
 
 ```text
 /plugin marketplace add sashakang/ai-workspace
 /plugin install core-aiws@ai-workspace
 /plugin install memory-aiws@ai-workspace
+```
+
+Then install whichever domain plugins you want:
+
+```text
 /plugin install data-analysis-aiws@ai-workspace
 ```
 
@@ -113,6 +118,7 @@ Then restart Claude Code if prompted.
 If you already installed an older helper build, reinstall it and rerun `bootstrap` so the managed hook is migrated from `Stop` to `SessionEnd`.
 
 If you already installed the marketplace earlier and want the latest plugin state, refresh and reinstall the relevant plugin.
+The helper now bootstraps with only `core-aiws` and `memory-aiws`; optional domain plugins are discovered dynamically when they are installed.
 
 ## Current State
 
@@ -130,7 +136,7 @@ What that means in practice:
 - the architecture is real
 - the install path is real
 - the analyst workflows are real
-- the platform is still early and intended to expand with more plugins over time
+- the platform is still early and intended to expand with more opt-in domain plugins over time
 
 ## Repository Layout
 

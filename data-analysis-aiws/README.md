@@ -13,6 +13,8 @@ It depends on:
 - `memory-aiws`
 - `aiws-host-memory` for shared-memory refresh, registry bootstrap, and automatic hook setup
 
+This is an optional domain plugin. Users should install it only if they want analyst workflows on top of the shared infrastructure.
+
 It does not own:
 
 - shared process behavior such as SOP and `/aiws-improve`

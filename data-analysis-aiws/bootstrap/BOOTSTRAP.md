@@ -7,7 +7,7 @@ Use this plugin with:
 
 ## Marketplace install
 
-Install the three marketplace plugins, then install and run the helper:
+Install the infrastructure plugins first, then add this domain plugin and run the helper:
 
 ```bash
 /plugin marketplace add sashakang/ai-workspace

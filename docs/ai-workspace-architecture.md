@@ -35,6 +35,31 @@ During local development, run Claude with explicit `--plugin-dir` arguments poin
 
 For users, installation happens through the marketplace, not through git clone or symlinks.
 
+## Install Model
+
+The workspace install model is:
+
+- mandatory infrastructure plugins:
+  - `core-aiws`
+  - `memory-aiws`
+- optional domain plugins:
+  - `data-analysis-aiws`
+  - future domain plugins such as `lawyer-aiws`, `marketologist-aiws`, and `product-manager-aiws`
+
+Users should not be forced to install every domain plugin just because they share the same workspace marketplace. Domain plugins are opt-in and should be installed only when the user wants that domain behavior.
+
+## Host compatibility
+
+Claude Code remains the reference runtime and the current automatic refresh host.
+
+Design target for same-machine multi-host use:
+
+- Claude Code keeps owning the canonical `memory-aiws` shared-memory store
+- any additional host such as Cowork should read from and write through that same canonical store
+- each host should keep its own imported local snapshot for runtime reads
+
+This preserves one canonical owner and many host-local imported snapshots.
+
 ## SOP Governance
 
 This platform architecture is governed by the Universal SOP packaged in [`core-aiws/protocols/sop.md`](../core-aiws/protocols/sop.md).
@@ -189,6 +214,7 @@ Important distinction:
 - in `memory-aiws`, `${CLAUDE_PLUGIN_DATA}/shared-memory/` is the canonical durable store
 - in dependent plugins, `${CLAUDE_PLUGIN_DATA}/shared-memory/` is only an imported local snapshot for reads
 - marketplace checkout paths and plugin cache paths are code-distribution surfaces, not the durable shared-memory home
+- same-machine Cowork compatibility should attach to the same canonical `memory-aiws` store rather than creating a second canonical memory root
 
 ## Shared Process Layer
 
@@ -330,6 +356,12 @@ Domain plugins own:
 - MCP integration and bootstrap docs
 - domain-specific operational state
 - dependency on `core-aiws`
+
+Install model:
+
+- infrastructure plugins are mandatory
+- domain plugins are manual opt-in
+- helper bootstrap must succeed even when no domain plugins are installed
 
 Domain plugins do not own:
 

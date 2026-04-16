@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 HELPER_PYTHONPATH = str(REPO_ROOT / "aiws-host-memory")
 MANAGED_HOOK_EVENT = "SessionEnd"
 MANAGED_HOOK_COMMAND = "aiws-host-memory refresh-shared"
+INFRA_PLUGIN_IDS = ("core-aiws", "memory-aiws")
 
 
 class HostMemoryTests(unittest.TestCase):
@@ -47,6 +48,23 @@ class HostMemoryTests(unittest.TestCase):
         env["PYTHONPATH"] = HELPER_PYTHONPATH
         return env
 
+    def write_installed_plugins(self, plugin_ids: tuple[str, ...] | list[str]) -> None:
+        plugins: dict[str, list[dict[str, str]]] = {}
+        for plugin_id in plugin_ids:
+            plugins[f"{plugin_id}@ai-workspace"] = [
+                {
+                    "scope": "user",
+                    "installPath": str(self.installs[plugin_id]["root"]),
+                    "version": "0.3.0",
+                    "installedAt": "2026-04-16T00:00:00Z",
+                    "lastUpdated": "2026-04-16T00:00:00Z",
+                    "gitCommitSha": "test",
+                }
+            ]
+        installed_path = self.claude_home / "plugins" / "installed_plugins.json"
+        installed_path.parent.mkdir(parents=True, exist_ok=True)
+        installed_path.write_text(json.dumps({"plugins": plugins}))
+
     def run_helper(self, *args: str, expect_success: bool = True) -> subprocess.CompletedProcess[str]:
         command = [
             sys.executable,
@@ -74,8 +92,13 @@ class HostMemoryTests(unittest.TestCase):
         result = self.run_helper(*args, expect_success=expect_success)
         return json.loads(result.stdout)
 
-    def bootstrap_args(self) -> list[str]:
-        return [
+    def bootstrap_args(
+        self,
+        *,
+        include_data_analysis: bool = True,
+        extra_plugins: dict[str, dict[str, Path]] | None = None,
+    ) -> list[str]:
+        args = [
             "bootstrap",
             "--core-plugin-root",
             str(self.installs["core-aiws"]["root"]),
@@ -85,11 +108,21 @@ class HostMemoryTests(unittest.TestCase):
             str(self.installs["memory-aiws"]["root"]),
             "--memory-plugin-data",
             str(self.installs["memory-aiws"]["data"]),
-            "--data-analysis-plugin-root",
-            str(self.installs["data-analysis-aiws"]["root"]),
-            "--data-analysis-plugin-data",
-            str(self.installs["data-analysis-aiws"]["data"]),
         ]
+        if include_data_analysis:
+            args.extend(
+                [
+                    "--data-analysis-plugin-root",
+                    str(self.installs["data-analysis-aiws"]["root"]),
+                    "--data-analysis-plugin-data",
+                    str(self.installs["data-analysis-aiws"]["data"]),
+                ]
+            )
+        if extra_plugins:
+            for plugin_id, payload in extra_plugins.items():
+                args.extend(["--plugin-root", f"{plugin_id}={payload['root']}"])
+                args.extend(["--plugin-data", f"{plugin_id}={payload['data']}"])
+        return args
 
     def run_stage_candidate(self, *extra: str) -> dict[str, object]:
         result = subprocess.run(
@@ -153,6 +186,7 @@ class HostMemoryTests(unittest.TestCase):
 
         first = self.helper_json(*self.bootstrap_args())
         self.assertEqual(first["status"], "ok")
+        self.assertEqual(first["skipped_plugins"], {})
         registry = self.installs["core-aiws"]["data"] / "registry" / "plugins"
         self.assertTrue((registry / "core-aiws.json").exists())
         self.assertTrue((registry / "memory-aiws.json").exists())
@@ -174,6 +208,62 @@ class HostMemoryTests(unittest.TestCase):
         self.assertEqual(len(settings["hooks"]["Stop"]), 1)
         self.assertEqual(len(settings["hooks"][MANAGED_HOOK_EVENT]), 1)
         self.assertEqual(len(self.managed_hook_groups()), 1)
+
+    def test_bootstrap_succeeds_with_infrastructure_only(self) -> None:
+        payload = self.helper_json(*self.bootstrap_args(include_data_analysis=False))
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["registered_plugins"], ["core-aiws", "memory-aiws"])
+        self.assertEqual(payload["skipped_plugins"], {})
+        registry = self.installs["core-aiws"]["data"] / "registry" / "plugins"
+        self.assertTrue((registry / "core-aiws.json").exists())
+        self.assertTrue((registry / "memory-aiws.json").exists())
+        self.assertFalse((registry / "data-analysis-aiws.json").exists())
+        self.assertTrue((self.installs["core-aiws"]["data"] / "shared-memory").is_symlink())
+        self.assertFalse(self.installs["data-analysis-aiws"]["data"].exists())
+
+    def test_bootstrap_detects_optional_domain_plugins_from_installed_plugin_metadata(self) -> None:
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"))
+
+        payload = self.helper_json("bootstrap")
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(
+            payload["registered_plugins"],
+            ["core-aiws", "data-analysis-aiws", "memory-aiws"],
+        )
+        self.assertEqual(payload["skipped_plugins"], {})
+        registry = self.installs["core-aiws"]["data"] / "registry" / "plugins"
+        self.assertTrue((registry / "data-analysis-aiws.json").exists())
+        self.assertTrue((self.installs["data-analysis-aiws"]["data"] / "shared-memory").is_symlink())
+
+    def test_bootstrap_skips_optional_domain_with_missing_dependency(self) -> None:
+        ghost_root = self.installs_root / "ghost-domain-aiws"
+        shutil.copytree(self.installs["data-analysis-aiws"]["root"], ghost_root)
+        contract = json.loads((ghost_root / "contracts" / "data-analysis-aiws.contract.json").read_text())
+        contract["plugin_id"] = "ghost-domain-aiws"
+        contract["dependencies"] = ["core-aiws", "memory-aiws", "missing-domain-aiws"]
+        contract_path = ghost_root / "contracts" / "ghost-domain-aiws.contract.json"
+        contract_path.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n")
+
+        payload = self.helper_json(
+            *self.bootstrap_args(
+                include_data_analysis=False,
+                extra_plugins={
+                    "ghost-domain-aiws": {
+                        "root": ghost_root,
+                        "data": self.plugin_data_root / "ghost-domain-aiws-ai-workspace",
+                    }
+                },
+            )
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["registered_plugins"], ["core-aiws", "memory-aiws"])
+        self.assertEqual(
+            payload["skipped_plugins"],
+            {"ghost-domain-aiws": "missing dependencies: missing-domain-aiws"},
+        )
 
     def test_bootstrap_repairs_drifted_hook(self) -> None:
         self.helper_json(*self.bootstrap_args())
@@ -302,6 +392,7 @@ class HostMemoryTests(unittest.TestCase):
         self.helper_json(*self.bootstrap_args())
         doctor_ok = self.helper_json("doctor")
         self.assertEqual(doctor_ok["status"], "ok")
+        self.assertEqual(doctor_ok["skipped_plugins"], {})
 
     def test_runtime_flow_updates_canonical_and_consumer_snapshots(self) -> None:
         self.helper_json(*self.bootstrap_args())

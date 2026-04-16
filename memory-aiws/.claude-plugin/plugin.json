@@ -1,7 +1,7 @@
 {
   "name": "memory-aiws",
   "description": "REQUIRED: Shared memory plugin for the AI workspace.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": {
     "name": "Sasha Kang"
   }

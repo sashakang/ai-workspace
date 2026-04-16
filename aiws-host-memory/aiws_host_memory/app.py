@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Any
 
 
-REQUIRED_PLUGIN_IDS = ("core-aiws", "memory-aiws", "data-analysis-aiws")
+INFRASTRUCTURE_PLUGIN_IDS = ("core-aiws", "memory-aiws")
+DEFAULT_MARKETPLACE = "ai-workspace"
 MANAGED_HOOK_COMMAND = "aiws-host-memory refresh-shared"
 MANAGED_HOOK_EVENT = "SessionEnd"
 MANAGED_HOOK_GROUP = {
@@ -132,6 +133,15 @@ def default_contract_path(plugin_root: Path, plugin_id: str) -> Path:
     return plugin_root / "contracts" / f"{plugin_id}.contract.json"
 
 
+def parse_plugin_assignment(raw: str, *, field_name: str) -> tuple[str, Path]:
+    plugin_id, sep, value = raw.partition("=")
+    if not sep or not plugin_id or not value:
+        raise BootstrapError(
+            f"{field_name} must use the form <plugin_id>=<path>."
+        )
+    return plugin_id, Path(value)
+
+
 def parse_install_from_payload(plugin_id: str, payload: dict[str, Any]) -> PluginInstall:
     return PluginInstall(
         plugin_id=plugin_id,
@@ -173,10 +183,11 @@ def load_installs_from_config(paths: HelperPaths) -> dict[str, PluginInstall]:
         plugin_id: parse_install_from_payload(plugin_id, plugin_payload)
         for plugin_id, plugin_payload in installs_payload.items()
     }
-    missing = [plugin_id for plugin_id in REQUIRED_PLUGIN_IDS if plugin_id not in installs]
+    missing = [plugin_id for plugin_id in INFRASTRUCTURE_PLUGIN_IDS if plugin_id not in installs]
     if missing:
         raise BootstrapError(
-            "Helper config is incomplete. Missing plugin installs for: " + ", ".join(sorted(missing))
+            "Helper config is incomplete. Missing infrastructure plugin installs for: "
+            + ", ".join(sorted(missing))
         )
     return installs
 
@@ -195,7 +206,7 @@ def validate_contract(install: PluginInstall) -> dict[str, Any]:
 
 
 def guess_marketplace_data_dir(plugin_id: str, marketplace: str | None, data_root: Path) -> Path:
-    suffix = marketplace or "ai-workspace"
+    suffix = marketplace or DEFAULT_MARKETPLACE
     return data_root / f"{plugin_id}-{suffix}"
 
 
@@ -205,22 +216,25 @@ def detect_installs(paths: HelperPaths) -> dict[str, PluginInstall]:
     detected: dict[str, PluginInstall] = {}
     for key, installs in plugins.items():
         plugin_name, _, marketplace = key.partition("@")
-        if plugin_name not in REQUIRED_PLUGIN_IDS or not installs:
+        if marketplace and marketplace != DEFAULT_MARKETPLACE:
+            continue
+        if not installs:
             continue
         install_root = Path(installs[0]["installPath"])
+        contract_path = default_contract_path(install_root, plugin_name)
+        if not contract_path.exists():
+            continue
         plugin_data = guess_marketplace_data_dir(plugin_name, marketplace or None, paths.plugin_data_root)
         detected[plugin_name] = PluginInstall(
             plugin_id=plugin_name,
             plugin_root=install_root,
             plugin_data=plugin_data,
-            contract_path=default_contract_path(install_root, plugin_name),
+            contract_path=contract_path,
         )
     return detected
 
 
-def resolve_installs(args: argparse.Namespace, paths: HelperPaths) -> dict[str, PluginInstall]:
-    detected = detect_installs(paths)
-    installs: dict[str, PluginInstall] = {}
+def explicit_install_overrides(args: argparse.Namespace) -> dict[str, dict[str, Path | None]]:
     explicit: dict[str, dict[str, Path | None]] = {
         "core-aiws": {
             "root": getattr(args, "core_plugin_root", None),
@@ -235,11 +249,24 @@ def resolve_installs(args: argparse.Namespace, paths: HelperPaths) -> dict[str, 
             "data": getattr(args, "data_analysis_plugin_data", None),
         },
     }
+    for raw in getattr(args, "plugin_root", []) or []:
+        plugin_id, path = parse_plugin_assignment(raw, field_name="--plugin-root")
+        explicit.setdefault(plugin_id, {"root": None, "data": None})["root"] = path
+    for raw in getattr(args, "plugin_data", []) or []:
+        plugin_id, path = parse_plugin_assignment(raw, field_name="--plugin-data")
+        explicit.setdefault(plugin_id, {"root": None, "data": None})["data"] = path
+    return explicit
 
-    for plugin_id in REQUIRED_PLUGIN_IDS:
+
+def resolve_installs(args: argparse.Namespace, paths: HelperPaths) -> dict[str, PluginInstall]:
+    detected = detect_installs(paths)
+    explicit = explicit_install_overrides(args)
+    installs: dict[str, PluginInstall] = {}
+
+    for plugin_id in sorted(set(detected) | set(explicit)):
         candidate = detected.get(plugin_id)
-        root = explicit[plugin_id]["root"] or (candidate.plugin_root if candidate else None)
-        data = explicit[plugin_id]["data"] or (candidate.plugin_data if candidate else None)
+        root = explicit.get(plugin_id, {}).get("root") or (candidate.plugin_root if candidate else None)
+        data = explicit.get(plugin_id, {}).get("data") or (candidate.plugin_data if candidate else None)
         if root and data:
             installs[plugin_id] = PluginInstall(
                 plugin_id=plugin_id,
@@ -248,14 +275,46 @@ def resolve_installs(args: argparse.Namespace, paths: HelperPaths) -> dict[str, 
                 contract_path=default_contract_path(root, plugin_id),
             )
 
-    missing = [plugin_id for plugin_id in REQUIRED_PLUGIN_IDS if plugin_id not in installs]
+    missing = [plugin_id for plugin_id in INFRASTRUCTURE_PLUGIN_IDS if plugin_id not in installs]
     if missing:
         raise BootstrapError(
-            "Could not resolve plugin installs for: "
+            "Could not resolve infrastructure plugin installs for: "
             + ", ".join(missing)
-            + ". Re-run bootstrap with explicit --*-plugin-root and --*-plugin-data flags."
+            + ". Re-run bootstrap with explicit --*-plugin-root/--*-plugin-data flags or "
+            + "--plugin-root/--plugin-data assignments."
         )
     return installs
+
+
+def resolved_contracts(installs: dict[str, PluginInstall]) -> tuple[dict[str, PluginInstall], dict[str, dict[str, Any]], dict[str, str]]:
+    contracts = {
+        plugin_id: validate_contract(install)
+        for plugin_id, install in installs.items()
+    }
+    active = dict(installs)
+    skipped: dict[str, str] = {}
+
+    changed = True
+    while changed:
+        changed = False
+        for plugin_id in sorted(list(active)):
+            missing = sorted(
+                dependency
+                for dependency in contracts[plugin_id].get("dependencies", [])
+                if dependency not in active
+            )
+            if not missing:
+                continue
+            if plugin_id in INFRASTRUCTURE_PLUGIN_IDS:
+                raise BootstrapError(
+                    f"{plugin_id} is missing required dependencies: {', '.join(missing)}"
+                )
+            skipped[plugin_id] = "missing dependencies: " + ", ".join(missing)
+            del active[plugin_id]
+            changed = True
+
+    active_contracts = {plugin_id: contracts[plugin_id] for plugin_id in active}
+    return active, active_contracts, skipped
 
 
 def helper_state(paths: HelperPaths) -> dict[str, Any]:
@@ -775,8 +834,7 @@ def bootstrap(paths: HelperPaths, args: argparse.Namespace) -> dict[str, Any]:
         "canonical_bootstrapped": False,
         "hook_upserted": False,
     }
-    installs = resolve_installs(args, paths)
-    contracts = {plugin_id: validate_contract(install) for plugin_id, install in installs.items()}
+    installs, contracts, skipped_plugins = resolved_contracts(resolve_installs(args, paths))
 
     try:
         config = config_payload(paths, installs)
@@ -815,6 +873,7 @@ def bootstrap(paths: HelperPaths, args: argparse.Namespace) -> dict[str, Any]:
             "config_path": str(paths.config_path),
             "settings_path": str(paths.settings_path),
             "registered_plugins": registered,
+            "skipped_plugins": skipped_plugins,
             "contracts": {
                 plugin_id: compute_contract_digest(install.contract_path)
                 for plugin_id, install in installs.items()
@@ -862,13 +921,13 @@ def doctor(paths: HelperPaths) -> tuple[dict[str, Any], int]:
     installs: dict[str, PluginInstall] = {}
 
     try:
-        installs = load_installs_from_config(paths)
+        configured_installs = load_installs_from_config(paths)
+        installs, _, skipped_plugins = resolved_contracts(configured_installs)
         details["plugins"] = {
             plugin_id: install.to_payload()
             for plugin_id, install in installs.items()
         }
-        for install in installs.values():
-            validate_contract(install)
+        details["skipped_plugins"] = skipped_plugins
     except Exception as exc:
         issues.append(str(exc))
 
@@ -876,7 +935,7 @@ def doctor(paths: HelperPaths) -> tuple[dict[str, Any], int]:
         registry = registry_root(installs)
         registry_files = sorted(path.name for path in registry.glob("*.json")) if registry.exists() else []
         details["registry_files"] = registry_files
-        missing_registry = [plugin_id for plugin_id in REQUIRED_PLUGIN_IDS if f"{plugin_id}.json" not in registry_files]
+        missing_registry = [plugin_id for plugin_id in installs if f"{plugin_id}.json" not in registry_files]
         if missing_registry:
             issues.append("Registry is missing entries for: " + ", ".join(missing_registry))
 
@@ -934,6 +993,18 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap_cmd.add_argument("--memory-plugin-data", type=Path)
     bootstrap_cmd.add_argument("--data-analysis-plugin-root", type=Path)
     bootstrap_cmd.add_argument("--data-analysis-plugin-data", type=Path)
+    bootstrap_cmd.add_argument(
+        "--plugin-root",
+        action="append",
+        default=[],
+        help="Optional plugin root override in the form <plugin_id>=<path>.",
+    )
+    bootstrap_cmd.add_argument(
+        "--plugin-data",
+        action="append",
+        default=[],
+        help="Optional plugin data override in the form <plugin_id>=<path>.",
+    )
 
     subparsers.add_parser("refresh-shared")
     subparsers.add_parser("doctor")

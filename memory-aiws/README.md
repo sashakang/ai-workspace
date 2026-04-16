@@ -67,7 +67,7 @@ The host-side bridge is now packaged as the separate `aiws-host-memory` helper.
 
 It provides:
 
-- `bootstrap` — write helper config, populate the plugin-contract registry, bootstrap canonical memory, and install the managed global `SessionEnd` hook
+- `bootstrap` — write helper config, bootstrap canonical memory, populate the plugin-contract registry for the infrastructure plugins plus any installed optional domain plugins, and install the managed global `SessionEnd` hook
 - `refresh-shared` — process producer outboxes, publish canonical shared memory, and refresh consumer imports
 - `doctor` / `status` — show setup health and repair guidance
 
