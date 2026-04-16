@@ -23,10 +23,20 @@ class HostMemoryTests(unittest.TestCase):
         self.workspace = Path(self.tempdir.name)
         self.installs_root = self.workspace / "installs"
         self.claude_home = self.workspace / "claude-home"
+        self.cowork_home = self.workspace / "cowork-home"
         self.plugin_data_root = self.claude_home / "plugins" / "data"
         self.helper_home = self.claude_home / "aiws-host-memory"
+        self.cowork_plugin_data_root = self.cowork_home / "plugins" / "data"
+        self.cowork_helper_home = self.cowork_home / "aiws-host-memory"
         self.settings_path = self.claude_home / "settings.json"
         self.installs = self._copy_plugins()
+        self.cowork_installs = {
+            plugin_id: {
+                "root": payload["root"],
+                "data": self.cowork_plugin_data_root / f"{plugin_id}-ai-workspace",
+            }
+            for plugin_id, payload in self.installs.items()
+        }
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
@@ -48,20 +58,27 @@ class HostMemoryTests(unittest.TestCase):
         env["PYTHONPATH"] = HELPER_PYTHONPATH
         return env
 
-    def write_installed_plugins(self, plugin_ids: tuple[str, ...] | list[str]) -> None:
+    def write_installed_plugins(
+        self,
+        plugin_ids: tuple[str, ...] | list[str],
+        *,
+        host: str = "claude",
+    ) -> None:
+        install_map = self.installs if host == "claude" else self.cowork_installs
+        host_root = self.claude_home if host == "claude" else self.cowork_home
         plugins: dict[str, list[dict[str, str]]] = {}
         for plugin_id in plugin_ids:
             plugins[f"{plugin_id}@ai-workspace"] = [
                 {
                     "scope": "user",
-                    "installPath": str(self.installs[plugin_id]["root"]),
+                    "installPath": str(install_map[plugin_id]["root"]),
                     "version": "0.3.0",
                     "installedAt": "2026-04-16T00:00:00Z",
                     "lastUpdated": "2026-04-16T00:00:00Z",
                     "gitCommitSha": "test",
                 }
             ]
-        installed_path = self.claude_home / "plugins" / "installed_plugins.json"
+        installed_path = host_root / "plugins" / "installed_plugins.json"
         installed_path.parent.mkdir(parents=True, exist_ok=True)
         installed_path.write_text(json.dumps({"plugins": plugins}))
 
@@ -88,8 +105,35 @@ class HostMemoryTests(unittest.TestCase):
             self.fail(result.stdout + "\n" + result.stderr)
         return result
 
+    def run_cowork_helper(self, *args: str, expect_success: bool = True) -> subprocess.CompletedProcess[str]:
+        command = [
+            sys.executable,
+            "-m",
+            "aiws_host_memory",
+            "--helper-home",
+            str(self.cowork_helper_home),
+            "--cowork-home",
+            str(self.cowork_home),
+            "--claude-home",
+            str(self.claude_home),
+            *args,
+        ]
+        result = subprocess.run(
+            command,
+            text=True,
+            capture_output=True,
+            env=self.helper_env(),
+        )
+        if expect_success and result.returncode != 0:
+            self.fail(result.stdout + "\n" + result.stderr)
+        return result
+
     def helper_json(self, *args: str, expect_success: bool = True) -> dict[str, object]:
         result = self.run_helper(*args, expect_success=expect_success)
+        return json.loads(result.stdout)
+
+    def cowork_helper_json(self, *args: str, expect_success: bool = True) -> dict[str, object]:
+        result = self.run_cowork_helper(*args, expect_success=expect_success)
         return json.loads(result.stdout)
 
     def bootstrap_args(
@@ -125,12 +169,16 @@ class HostMemoryTests(unittest.TestCase):
         return args
 
     def run_stage_candidate(self, *extra: str) -> dict[str, object]:
+        return self.run_stage_candidate_for_host("claude", *extra)
+
+    def run_stage_candidate_for_host(self, host: str, *extra: str) -> dict[str, object]:
+        install_map = self.installs if host == "claude" else self.cowork_installs
         result = subprocess.run(
             [
                 sys.executable,
                 str(self.installs["data-analysis-aiws"]["root"] / "scripts" / "stage_shared_memory_candidate.py"),
                 "--plugin-data",
-                str(self.installs["data-analysis-aiws"]["data"]),
+                str(install_map["data-analysis-aiws"]["data"]),
                 *extra,
             ],
             text=True,
@@ -458,6 +506,159 @@ class HostMemoryTests(unittest.TestCase):
         self.assertNotEqual(doctor.returncode, 0)
         payload = json.loads(doctor.stdout)
         self.assertEqual(payload["hook"]["status"], "duplicate")
+
+    def test_bootstrap_cowork_requires_bootstrapped_claude_canonical_store(self) -> None:
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="claude")
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="cowork")
+
+        failed = self.run_cowork_helper("bootstrap-cowork", expect_success=False)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("Run `aiws-host-memory bootstrap` first", failed.stdout)
+        self.assertFalse((self.cowork_helper_home / "config.json").exists())
+
+    def test_bootstrap_cowork_uses_separate_state_and_imports(self) -> None:
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="claude")
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="cowork")
+
+        self.helper_json(*self.bootstrap_args())
+        payload = self.cowork_helper_json("bootstrap-cowork")
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(
+            payload["registered_plugins"],
+            ["core-aiws", "data-analysis-aiws", "memory-aiws"],
+        )
+        self.assertEqual(
+            payload["canonical_owner"]["claude_home"],
+            str(self.claude_home),
+        )
+        self.assertTrue((self.cowork_helper_home / "config.json").exists())
+        self.assertTrue((self.cowork_helper_home / "state.json").exists())
+        self.assertTrue((self.cowork_installs["data-analysis-aiws"]["data"] / "shared-memory").is_symlink())
+        self.assertTrue((self.cowork_installs["core-aiws"]["data"] / "registry" / "plugins" / "memory-aiws.json").exists())
+        self.assertEqual(len(self.managed_hook_groups()), 1)
+
+    def test_bootstrap_cowork_uses_claude_helper_config_when_install_metadata_is_missing(self) -> None:
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="cowork")
+
+        self.helper_json(*self.bootstrap_args())
+        payload = self.cowork_helper_json("bootstrap-cowork")
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["canonical_owner"]["memory_plugin_data"], str(self.installs["memory-aiws"]["data"]))
+
+    def test_refresh_cowork_updates_cowork_imports_only(self) -> None:
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="claude")
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="cowork")
+
+        self.helper_json(*self.bootstrap_args())
+        self.cowork_helper_json("bootstrap-cowork")
+
+        stage = self.run_stage_candidate_for_host(
+            "cowork",
+            "--category",
+            "workflow-pattern",
+            "--scope",
+            "domains.data-analyst",
+            "--summary",
+            "Cowork-specific entry.",
+            "--evidence",
+            "Captured from the Cowork host.",
+            "--confidence",
+            "0.4",
+        )
+        outbox_file = Path(stage["outbox_file"])
+        self.assertTrue(outbox_file.exists())
+
+        refresh = self.cowork_helper_json("refresh-cowork")
+        self.assertEqual(refresh["accepted_candidates"], 1)
+        self.assertFalse(outbox_file.exists())
+
+        cowork_readme = (
+            self.cowork_installs["data-analysis-aiws"]["data"]
+            / "shared-memory"
+            / "domains"
+            / "data-analyst"
+            / "README.md"
+        ).read_text()
+        self.assertIn("Cowork-specific entry.", cowork_readme)
+
+        claude_readme = (
+            self.installs["data-analysis-aiws"]["data"]
+            / "shared-memory"
+            / "domains"
+            / "data-analyst"
+            / "README.md"
+        ).read_text()
+        self.assertNotIn("Cowork-specific entry.", claude_readme)
+
+        self.helper_json("refresh-shared")
+        claude_readme = (
+            self.installs["data-analysis-aiws"]["data"]
+            / "shared-memory"
+            / "domains"
+            / "data-analyst"
+            / "README.md"
+        ).read_text()
+        self.assertIn("Cowork-specific entry.", claude_readme)
+
+    def test_refresh_cowork_imports_latest_claude_entries(self) -> None:
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="claude")
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="cowork")
+
+        self.helper_json(*self.bootstrap_args())
+        self.cowork_helper_json("bootstrap-cowork")
+
+        self.run_stage_candidate(
+            "--category",
+            "workflow-pattern",
+            "--scope",
+            "domains.data-analyst",
+            "--summary",
+            "Claude-origin entry.",
+            "--evidence",
+            "Captured from Claude.",
+            "--confidence",
+            "0.6",
+        )
+        self.helper_json("refresh-shared")
+
+        self.cowork_helper_json("refresh-cowork")
+        cowork_readme = (
+            self.cowork_installs["data-analysis-aiws"]["data"]
+            / "shared-memory"
+            / "domains"
+            / "data-analyst"
+            / "README.md"
+        ).read_text()
+        self.assertIn("Claude-origin entry.", cowork_readme)
+
+    def test_bootstrap_cowork_rejects_missing_snapshot_version(self) -> None:
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="claude")
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="cowork")
+
+        self.helper_json(*self.bootstrap_args())
+        metadata_path = self.installs["memory-aiws"]["data"] / "exports" / "latest" / "metadata.json"
+        metadata_path.write_text(json.dumps({"generated_ts": "2026-04-16T00:00:00Z"}))
+
+        failed = self.run_cowork_helper("bootstrap-cowork", expect_success=False)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("snapshot_version", failed.stdout)
+
+    def test_doctor_cowork_reports_stale_canonical_root(self) -> None:
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="claude")
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"), host="cowork")
+
+        self.helper_json(*self.bootstrap_args())
+        self.cowork_helper_json("bootstrap-cowork")
+        shutil.rmtree(self.installs["memory-aiws"]["data"] / "shared-memory-versions")
+        (self.installs["memory-aiws"]["data"] / "shared-memory").unlink()
+
+        doctor = self.run_cowork_helper("doctor-cowork", expect_success=False)
+        self.assertNotEqual(doctor.returncode, 0)
+        payload = json.loads(doctor.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertTrue(any("Stored Claude canonical root is missing" in issue for issue in payload["issues"]))
 
 
 if __name__ == "__main__":

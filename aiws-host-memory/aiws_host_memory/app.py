@@ -102,13 +102,22 @@ class PluginInstall:
 
 @dataclass
 class HelperPaths:
+    host_kind: str
     claude_home: Path
     helper_home: Path
     config_path: Path
     state_path: Path
-    settings_path: Path
+    settings_path: Path | None
     installed_plugins_path: Path
     plugin_data_root: Path
+
+    @property
+    def bootstrap_command(self) -> str:
+        return "aiws-host-memory bootstrap-cowork" if self.host_kind == "cowork" else "aiws-host-memory bootstrap"
+
+    @property
+    def refresh_command(self) -> str:
+        return "aiws-host-memory refresh-cowork" if self.host_kind == "cowork" else "aiws-host-memory refresh-shared"
 
 
 def helper_paths(
@@ -119,6 +128,7 @@ def helper_paths(
     claude_root = claude_home or Path(os.environ.get("CLAUDE_HOME", Path.home() / ".claude"))
     helper_root = helper_home or Path(os.environ.get("AIWS_HOST_MEMORY_HOME", claude_root / "aiws-host-memory"))
     return HelperPaths(
+        host_kind="claude",
         claude_home=claude_root,
         helper_home=helper_root,
         config_path=helper_root / "config.json",
@@ -126,6 +136,26 @@ def helper_paths(
         settings_path=settings_path or Path(os.environ.get("AIWS_HOST_MEMORY_SETTINGS_PATH", claude_root / "settings.json")),
         installed_plugins_path=claude_root / "plugins" / "installed_plugins.json",
         plugin_data_root=claude_root / "plugins" / "data",
+    )
+
+
+def cowork_helper_paths(
+    helper_home: Path | None = None,
+    cowork_home: Path | None = None,
+    claude_home: Path | None = None,
+) -> HelperPaths:
+    cowork_root = cowork_home or Path(os.environ.get("COWORK_HOME", Path.home() / ".cowork"))
+    helper_root = helper_home or Path(os.environ.get("AIWS_HOST_MEMORY_COWORK_HOME", cowork_root / "aiws-host-memory"))
+    resolved_claude_home = claude_home or Path(os.environ.get("CLAUDE_HOME", Path.home() / ".claude"))
+    return HelperPaths(
+        host_kind="cowork",
+        claude_home=resolved_claude_home,
+        helper_home=helper_root,
+        config_path=helper_root / "config.json",
+        state_path=helper_root / "state.json",
+        settings_path=None,
+        installed_plugins_path=cowork_root / "plugins" / "installed_plugins.json",
+        plugin_data_root=cowork_root / "plugins" / "data",
     )
 
 
@@ -155,23 +185,26 @@ def config_payload(paths: HelperPaths, installs: dict[str, PluginInstall]) -> di
     now = utc_now_iso()
     existing = load_json(paths.config_path, {})
     created_ts = existing.get("created_ts", now)
-    return {
+    payload = {
         "version": 1,
+        "host_kind": paths.host_kind,
         "created_ts": created_ts,
         "updated_ts": now,
-        "settings_path": str(paths.settings_path),
         "plugins": {
             plugin_id: install.to_payload()
             for plugin_id, install in installs.items()
         },
     }
+    if paths.settings_path is not None:
+        payload["settings_path"] = str(paths.settings_path)
+    return payload
 
 
 def load_config(paths: HelperPaths) -> dict[str, Any]:
     payload = load_json(paths.config_path, {})
     if not payload:
         raise BootstrapError(
-            f"Helper config not found at {paths.config_path}. Run `aiws-host-memory bootstrap` first."
+            f"Helper config not found at {paths.config_path}. Run `{paths.bootstrap_command}` first."
         )
     return payload
 
@@ -190,6 +223,100 @@ def load_installs_from_config(paths: HelperPaths) -> dict[str, PluginInstall]:
             + ", ".join(sorted(missing))
         )
     return installs
+
+
+def canonical_owner_payload(owner: CanonicalOwner) -> dict[str, str]:
+    return {
+        "claude_home": str(owner.claude_paths.claude_home),
+        "memory_plugin_root": str(owner.memory_install.plugin_root),
+        "memory_plugin_data": str(owner.memory_install.plugin_data),
+        "canonical_root": str(owner.canonical_root),
+        "export_root": str(owner.export_root),
+        "lock_path": str(owner.lock_path),
+        "processed_ids_path": str(owner.processed_ids_path),
+    }
+
+
+def cowork_config_payload(
+    paths: HelperPaths,
+    installs: dict[str, PluginInstall],
+    owner: CanonicalOwner,
+) -> dict[str, Any]:
+    payload = config_payload(paths, installs)
+    payload["claude_owner"] = canonical_owner_payload(owner)
+    return payload
+
+
+def canonical_owner_identity(owner_payload: dict[str, str]) -> dict[str, str]:
+    return {
+        "claude_home": owner_payload["claude_home"],
+        "memory_plugin_root": owner_payload["memory_plugin_root"],
+        "memory_plugin_data": owner_payload["memory_plugin_data"],
+        "canonical_root": owner_payload["canonical_root"],
+        "lock_path": owner_payload["lock_path"],
+        "processed_ids_path": owner_payload["processed_ids_path"],
+    }
+
+
+def canonical_owner_from_cowork_config(paths: HelperPaths) -> CanonicalOwner:
+    payload = load_config(paths)
+    owner_payload = payload.get("claude_owner", {})
+    required = {
+        "claude_home",
+        "memory_plugin_root",
+        "memory_plugin_data",
+        "canonical_root",
+        "export_root",
+        "lock_path",
+        "processed_ids_path",
+    }
+    missing = sorted(required - owner_payload.keys())
+    if missing:
+        raise BootstrapError(
+            "Cowork helper config is incomplete. Missing Claude canonical owner fields: "
+            + ", ".join(missing)
+        )
+
+    claude_paths = helper_paths(claude_home=Path(owner_payload["claude_home"]))
+    owner = CanonicalOwner(
+        claude_paths=claude_paths,
+        memory_install=PluginInstall(
+            plugin_id="memory-aiws",
+            plugin_root=Path(owner_payload["memory_plugin_root"]),
+            plugin_data=Path(owner_payload["memory_plugin_data"]),
+            contract_path=default_contract_path(Path(owner_payload["memory_plugin_root"]), "memory-aiws"),
+        ),
+        export_root=Path(owner_payload["export_root"]),
+        lock_path=Path(owner_payload["lock_path"]),
+        processed_ids_path=Path(owner_payload["processed_ids_path"]),
+    )
+    if not owner.canonical_root.exists():
+        raise BootstrapError(
+            f"Stored Claude canonical root is missing: {owner.canonical_root}. "
+            f"Re-run `{paths.bootstrap_command}` and pass --claude-home if Claude moved."
+        )
+    if not owner.export_root.exists():
+        raise BootstrapError(
+            f"Stored Claude canonical export is missing: {owner.export_root}. "
+            f"Re-run `{paths.bootstrap_command}` and pass --claude-home if Claude moved."
+        )
+    if not owner.processed_ids_path.exists():
+        raise BootstrapError(
+            f"Stored Claude processed-candidate ledger is missing: {owner.processed_ids_path}. "
+            f"Re-run `{paths.bootstrap_command}` and pass --claude-home if Claude moved."
+        )
+    return owner
+
+
+def assert_canonical_owner_matches(paths: HelperPaths, stored_owner: CanonicalOwner, live_owner: CanonicalOwner) -> None:
+    stored_identity = canonical_owner_identity(canonical_owner_payload(stored_owner))
+    live_identity = canonical_owner_identity(canonical_owner_payload(live_owner))
+    if stored_identity == live_identity:
+        return
+    raise BootstrapError(
+        "Stored Claude canonical owner no longer matches the live Claude memory-aiws install. "
+        f"Re-run `{paths.bootstrap_command}` and pass --claude-home if Claude moved."
+    )
 
 
 def validate_contract(install: PluginInstall) -> dict[str, Any]:
@@ -256,6 +383,47 @@ def explicit_install_overrides(args: argparse.Namespace) -> dict[str, dict[str, 
         plugin_id, path = parse_plugin_assignment(raw, field_name="--plugin-data")
         explicit.setdefault(plugin_id, {"root": None, "data": None})["data"] = path
     return explicit
+
+
+def resolve_claude_memory_install(args: argparse.Namespace) -> tuple[HelperPaths, PluginInstall]:
+    claude_paths = helper_paths(claude_home=args.claude_home)
+    explicit = explicit_install_overrides(args).get("memory-aiws", {})
+    explicit_root = explicit.get("root")
+    explicit_data = explicit.get("data")
+
+    if explicit_root or explicit_data:
+        if not (explicit_root and explicit_data):
+            raise BootstrapError(
+                "Cowork Claude memory-aiws overrides require both --memory-plugin-root and --memory-plugin-data."
+            )
+        install = PluginInstall(
+            plugin_id="memory-aiws",
+            plugin_root=explicit_root,
+            plugin_data=explicit_data,
+            contract_path=default_contract_path(explicit_root, "memory-aiws"),
+        )
+        validate_contract(install)
+        return claude_paths, install
+
+    if claude_paths.config_path.exists():
+        try:
+            configured = load_installs_from_config(claude_paths)
+            install = configured.get("memory-aiws")
+            if install is not None:
+                validate_contract(install)
+                return claude_paths, install
+        except BootstrapError:
+            pass
+
+    detected = detect_installs(claude_paths)
+    install = detected.get("memory-aiws")
+    if install is None:
+        raise BootstrapError(
+            f"Claude memory-aiws install could not be resolved from {claude_paths.installed_plugins_path} "
+            f"or {claude_paths.config_path}. Bootstrap Claude first, or point Cowork at the right Claude home with --claude-home."
+        )
+    validate_contract(install)
+    return claude_paths, install
 
 
 def resolve_installs(args: argparse.Namespace, paths: HelperPaths) -> dict[str, PluginInstall]:
@@ -476,8 +644,24 @@ def bootstrap_canonical_runtime(installs: dict[str, PluginInstall]) -> dict[str,
     )
 
 
-def consolidate_with_memory_plugin(installs: dict[str, PluginInstall], candidates: list[dict[str, Any]]) -> dict[str, Any]:
-    memory_install = installs["memory-aiws"]
+def load_snapshot_version(export_root: Path, *, command_hint: str) -> str:
+    metadata = load_json(export_root / "metadata.json", {})
+    snapshot_version = metadata.get("snapshot_version")
+    if not isinstance(snapshot_version, str) or not snapshot_version:
+        raise BootstrapError(
+            f"Canonical export metadata at {export_root / 'metadata.json'} is missing a valid snapshot_version. "
+            f"Re-run `{command_hint}`."
+        )
+    return snapshot_version
+
+
+def consolidate_with_memory_runtime(
+    *,
+    script_path: Path,
+    plugin_data: Path,
+    seed_root: Path,
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
     with tempfile.NamedTemporaryFile("w", delete=False) as handle:
         temp_path = Path(handle.name)
         for candidate in candidates:
@@ -486,18 +670,28 @@ def consolidate_with_memory_plugin(installs: dict[str, PluginInstall], candidate
         return run_command(
             [
                 sys.executable,
-                str(memory_script(installs)),
+                str(script_path),
                 "consolidate",
                 "--plugin-data",
-                str(memory_install.plugin_data),
+                str(plugin_data),
                 "--seed-root",
-                str(memory_install.plugin_root / "memory"),
+                str(seed_root),
                 "--candidates-file",
                 str(temp_path),
             ]
         )
     finally:
         temp_path.unlink(missing_ok=True)
+
+
+def consolidate_with_memory_plugin(installs: dict[str, PluginInstall], candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    memory_install = installs["memory-aiws"]
+    return consolidate_with_memory_runtime(
+        script_path=memory_script(installs),
+        plugin_data=memory_install.plugin_data,
+        seed_root=memory_install.plugin_root / "memory",
+        candidates=candidates,
+    )
 
 
 def parse_ts(value: str) -> datetime:
@@ -514,6 +708,50 @@ def quarantine_candidate(memory_plugin_data: Path, outbox_file: Path, reason: st
     }
     name = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}.json"
     write_json_atomic(quarantine_dir / name, payload)
+
+
+def remove_path(path: Path) -> None:
+    if not path.exists() and not path.is_symlink():
+        return
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+        return
+    shutil.rmtree(path)
+
+
+def backup_plugin_data_roots(installs: dict[str, PluginInstall]) -> tuple[Path, dict[Path, Path | None]]:
+    backup_root = Path(tempfile.mkdtemp(prefix="cowork-bootstrap.", dir=Path(tempfile.gettempdir())))
+    backups: dict[Path, Path | None] = {}
+    for plugin_data in sorted({install.plugin_data for install in installs.values()}, key=str):
+        if plugin_data.exists():
+            backup_path = backup_root / f"{plugin_data.name}-{uuid.uuid4().hex[:8]}"
+            shutil.copytree(plugin_data, backup_path, symlinks=True)
+            backups[plugin_data] = backup_path
+        else:
+            backups[plugin_data] = None
+    return backup_root, backups
+
+
+def restore_plugin_data_roots(backups: dict[Path, Path | None]) -> None:
+    for plugin_data, backup_path in backups.items():
+        remove_path(plugin_data)
+        if backup_path is not None:
+            ensure_dir(plugin_data.parent)
+            shutil.copytree(backup_path, plugin_data, symlinks=True)
+
+
+def owner_resolution_args(claude_home: Path) -> argparse.Namespace:
+    return argparse.Namespace(
+        claude_home=claude_home,
+        core_plugin_root=None,
+        core_plugin_data=None,
+        memory_plugin_root=None,
+        memory_plugin_data=None,
+        data_analysis_plugin_root=None,
+        data_analysis_plugin_data=None,
+        plugin_root=[],
+        plugin_data=[],
+    )
 
 
 def validate_candidate(
@@ -602,6 +840,50 @@ class Lease:
                 self.lock_path.unlink()
 
 
+@dataclass
+class CanonicalOwner:
+    claude_paths: HelperPaths
+    memory_install: PluginInstall
+    export_root: Path
+    lock_path: Path
+    processed_ids_path: Path
+
+    @property
+    def canonical_root(self) -> Path:
+        return self.memory_install.plugin_data / "shared-memory"
+
+
+def resolve_claude_owner(args: argparse.Namespace) -> CanonicalOwner:
+    claude_paths, memory_install = resolve_claude_memory_install(args)
+
+    export_root = (memory_install.plugin_data / "exports" / "latest")
+    lock_path = memory_install.plugin_data / "state" / "refresh.lock"
+    processed_ids_path = memory_install.plugin_data / "state" / "processed-candidate-ids.jsonl"
+
+    if not memory_install.plugin_data.exists() or not (memory_install.plugin_data / "shared-memory").exists():
+        raise BootstrapError(
+            "Claude memory-aiws is installed but canonical shared memory has not been bootstrapped yet. "
+            "Run `aiws-host-memory bootstrap` first."
+        )
+    if not export_root.exists():
+        raise BootstrapError(
+            "Claude memory-aiws canonical export is missing. Run `aiws-host-memory bootstrap` first."
+        )
+    if not processed_ids_path.exists():
+        raise BootstrapError(
+            f"Claude processed-candidate ledger is missing or unreadable: {processed_ids_path}. "
+            "Re-run `aiws-host-memory bootstrap`."
+        )
+
+    return CanonicalOwner(
+        claude_paths=claude_paths,
+        memory_install=memory_install,
+        export_root=export_root.resolve(),
+        lock_path=lock_path,
+        processed_ids_path=processed_ids_path,
+    )
+
+
 def acquire_lease(lock_path: Path, stale_after_seconds: int = 60) -> Lease:
     ensure_dir(lock_path.parent)
     owner_id = uuid.uuid4().hex
@@ -685,6 +967,186 @@ def refresh_shared_memory(paths: HelperPaths, installs: dict[str, PluginInstall]
 
         export_root = (memory_install.plugin_data / "exports" / "latest").resolve()
         snapshot_version = load_json(export_root / "metadata.json", {}).get("snapshot_version")
+
+        for plugin_id, contract in contracts.items():
+            if plugin_id == "memory-aiws":
+                continue
+            if contract.get("shared_memory_read_scope"):
+                lease.assert_owned()
+                write_consumer_snapshot(installs[plugin_id], contract, export_root, snapshot_version)
+            lease.heartbeat()
+
+        lease.assert_owned()
+        for path in files_to_remove:
+            path.unlink(missing_ok=True)
+
+        result = {
+            "accepted_candidates": consolidate_result["accepted_candidates"],
+            "duplicate_candidates": duplicate_count,
+            "quarantined_candidates": quarantine_count,
+            "snapshot_version": snapshot_version,
+        }
+        update_state(
+            paths,
+            "last_refresh",
+            {
+                "started_ts": refresh_state["started_ts"],
+                "completed_ts": utc_now_iso(),
+                "status": "ok",
+                **result,
+            },
+        )
+        return result
+    except Exception as exc:
+        update_state(
+            paths,
+            "last_refresh",
+            {
+                "started_ts": refresh_state["started_ts"],
+                "completed_ts": utc_now_iso(),
+                "status": "error",
+                "error": str(exc),
+            },
+        )
+        raise
+    finally:
+        lease.release()
+
+
+def bootstrap_cowork(paths: HelperPaths, args: argparse.Namespace) -> dict[str, Any]:
+    phases = {
+        "claude_owner_resolved": False,
+        "registry_populated": False,
+        "imports_written": False,
+        "config_written": False,
+    }
+    installs, contracts, skipped_plugins = resolved_contracts(resolve_installs(args, paths))
+    owner = resolve_claude_owner(args)
+    phases["claude_owner_resolved"] = True
+    backup_root, backups = backup_plugin_data_roots(installs)
+
+    update_state(
+        paths,
+        "last_bootstrap",
+        {
+            "attempted_ts": utc_now_iso(),
+            "status": "running",
+            "phases": phases.copy(),
+        },
+    )
+
+    try:
+        registered = populate_registry(installs)
+        phases["registry_populated"] = True
+
+        snapshot_version = load_snapshot_version(
+            owner.export_root,
+            command_hint="aiws-host-memory bootstrap",
+        )
+        for plugin_id, contract in contracts.items():
+            if plugin_id == "memory-aiws":
+                continue
+            if contract.get("shared_memory_read_scope"):
+                write_consumer_snapshot(installs[plugin_id], contract, owner.export_root, snapshot_version)
+            if contract.get("shared_memory_write_scope"):
+                stable_outbox_root(installs[plugin_id].plugin_data)
+        phases["imports_written"] = True
+
+        ensure_dir(paths.helper_home)
+        write_json_atomic(paths.config_path, cowork_config_payload(paths, installs, owner))
+        phases["config_written"] = True
+
+        result = {
+            "status": "ok",
+            "config_path": str(paths.config_path),
+            "registered_plugins": registered,
+            "skipped_plugins": skipped_plugins,
+            "contracts": {
+                plugin_id: compute_contract_digest(install.contract_path)
+                for plugin_id, install in installs.items()
+            },
+            "snapshot_version": snapshot_version,
+            "canonical_owner": canonical_owner_payload(owner),
+            "phases": phases,
+        }
+        update_state(
+            paths,
+            "last_bootstrap",
+            {
+                "attempted_ts": utc_now_iso(),
+                "completed_ts": utc_now_iso(),
+                "status": "ok",
+                "phases": phases,
+            },
+        )
+        shutil.rmtree(backup_root, ignore_errors=True)
+        return result
+    except Exception as exc:
+        restore_plugin_data_roots(backups)
+        shutil.rmtree(backup_root, ignore_errors=True)
+        update_state(
+            paths,
+            "last_bootstrap",
+            {
+                "attempted_ts": utc_now_iso(),
+                "completed_ts": utc_now_iso(),
+                "status": "error",
+                "error": str(exc),
+                "phases": phases,
+            },
+        )
+        raise
+
+
+def refresh_cowork_shared_memory(paths: HelperPaths, installs: dict[str, PluginInstall], owner: CanonicalOwner) -> dict[str, Any]:
+    live_owner = resolve_claude_owner(owner_resolution_args(paths.claude_home))
+    assert_canonical_owner_matches(paths, owner, live_owner)
+    owner = live_owner
+    contracts = load_registry_contracts(installs)
+    lease = acquire_lease(owner.lock_path)
+    files_to_remove: list[Path] = []
+    refresh_state = {
+        "started_ts": utc_now_iso(),
+        "status": "running",
+    }
+    update_state(paths, "last_refresh", refresh_state)
+    try:
+        gathered = gather_outbox_files(installs, contracts)
+        lease.assert_owned()
+        processed_rows = read_jsonl(owner.processed_ids_path)
+        processed_ids = {row["candidate_id"] for row in processed_rows}
+        valid_candidates: list[dict[str, Any]] = []
+        quarantine_count = 0
+        duplicate_count = 0
+
+        for candidate, outbox_file, _, reason in gathered:
+            raw_content = outbox_file.read_text()
+            if reason:
+                quarantine_candidate(owner.memory_install.plugin_data, outbox_file, reason, raw_content)
+                quarantine_count += 1
+                files_to_remove.append(outbox_file)
+                continue
+            if candidate["candidate_id"] in processed_ids:
+                duplicate_count += 1
+                files_to_remove.append(outbox_file)
+                continue
+            valid_candidates.append(candidate)
+            files_to_remove.append(outbox_file)
+
+        lease.heartbeat()
+        consolidate_result = consolidate_with_memory_runtime(
+            script_path=owner.memory_install.plugin_root / "scripts" / "aiws_memory_canonical.py",
+            plugin_data=owner.memory_install.plugin_data,
+            seed_root=owner.memory_install.plugin_root / "memory",
+            candidates=valid_candidates,
+        )
+        lease.assert_owned()
+
+        export_root = (owner.memory_install.plugin_data / "exports" / "latest").resolve()
+        snapshot_version = load_snapshot_version(
+            export_root,
+            command_hint="aiws-host-memory refresh-shared",
+        )
 
         for plugin_id, contract in contracts.items():
             if plugin_id == "memory-aiws":
@@ -964,16 +1426,70 @@ def doctor(paths: HelperPaths) -> tuple[dict[str, Any], int]:
     return details, 0 if not issues else 1
 
 
+def doctor_cowork(paths: HelperPaths) -> tuple[dict[str, Any], int]:
+    issues: list[str] = []
+    details: dict[str, Any] = {
+        "config_path": str(paths.config_path),
+        "state": helper_state(paths),
+    }
+    installs: dict[str, PluginInstall] = {}
+
+    try:
+        configured_installs = load_installs_from_config(paths)
+        installs, _, skipped_plugins = resolved_contracts(configured_installs)
+        details["plugins"] = {
+            plugin_id: install.to_payload()
+            for plugin_id, install in installs.items()
+        }
+        details["skipped_plugins"] = skipped_plugins
+    except Exception as exc:
+        issues.append(str(exc))
+
+    try:
+        owner = canonical_owner_from_cowork_config(paths)
+        details["canonical_owner"] = canonical_owner_payload(owner)
+    except Exception as exc:
+        issues.append(str(exc))
+        owner = None
+
+    if owner is not None:
+        try:
+            live_owner = resolve_claude_owner(owner_resolution_args(paths.claude_home))
+            assert_canonical_owner_matches(paths, owner, live_owner)
+            details["live_canonical_owner"] = canonical_owner_payload(live_owner)
+        except Exception as exc:
+            issues.append(str(exc))
+
+    if installs:
+        registry = registry_root(installs)
+        registry_files = sorted(path.name for path in registry.glob("*.json")) if registry.exists() else []
+        details["registry_files"] = registry_files
+        missing_registry = [plugin_id for plugin_id in installs if f"{plugin_id}.json" not in registry_files]
+        if missing_registry:
+            issues.append("Registry is missing entries for: " + ", ".join(missing_registry))
+
+    if owner is not None and not owner.export_root.joinpath("metadata.json").exists():
+        issues.append(
+            f"Stored Claude canonical export metadata is missing: {owner.export_root / 'metadata.json'}. "
+            f"Re-run `{paths.bootstrap_command}`."
+        )
+
+    details["issues"] = issues
+    details["status"] = "ok" if not issues else "error"
+    return details, 0 if not issues else 1
+
+
 def status(paths: HelperPaths) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "config_path": str(paths.config_path),
-        "settings_path": str(paths.settings_path),
         "state": helper_state(paths),
     }
-    try:
-        payload["hook"] = hook_health(paths.settings_path)
-    except BootstrapError as exc:
-        payload["hook"] = {"status": "error", "details": str(exc)}
+    if paths.settings_path is not None:
+        payload["settings_path"] = str(paths.settings_path)
+        try:
+            payload["hook"] = hook_health(paths.settings_path)
+        except BootstrapError as exc:
+            payload["hook"] = {"status": "error", "details": str(exc)}
     if paths.config_path.exists():
         payload["config"] = load_json(paths.config_path, {})
     return payload
@@ -984,53 +1500,87 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--helper-home", type=Path)
     parser.add_argument("--settings-path", type=Path)
     parser.add_argument("--claude-home", type=Path)
+    parser.add_argument("--cowork-home", type=Path)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    def add_bootstrap_overrides(command: argparse.ArgumentParser) -> None:
+        command.add_argument("--core-plugin-root", type=Path)
+        command.add_argument("--core-plugin-data", type=Path)
+        command.add_argument("--memory-plugin-root", type=Path)
+        command.add_argument("--memory-plugin-data", type=Path)
+        command.add_argument("--data-analysis-plugin-root", type=Path)
+        command.add_argument("--data-analysis-plugin-data", type=Path)
+        command.add_argument(
+            "--plugin-root",
+            action="append",
+            default=[],
+            help="Optional plugin root override in the form <plugin_id>=<path>.",
+        )
+        command.add_argument(
+            "--plugin-data",
+            action="append",
+            default=[],
+            help="Optional plugin data override in the form <plugin_id>=<path>.",
+        )
+
     bootstrap_cmd = subparsers.add_parser("bootstrap")
-    bootstrap_cmd.add_argument("--core-plugin-root", type=Path)
-    bootstrap_cmd.add_argument("--core-plugin-data", type=Path)
-    bootstrap_cmd.add_argument("--memory-plugin-root", type=Path)
-    bootstrap_cmd.add_argument("--memory-plugin-data", type=Path)
-    bootstrap_cmd.add_argument("--data-analysis-plugin-root", type=Path)
-    bootstrap_cmd.add_argument("--data-analysis-plugin-data", type=Path)
-    bootstrap_cmd.add_argument(
-        "--plugin-root",
-        action="append",
-        default=[],
-        help="Optional plugin root override in the form <plugin_id>=<path>.",
-    )
-    bootstrap_cmd.add_argument(
-        "--plugin-data",
-        action="append",
-        default=[],
-        help="Optional plugin data override in the form <plugin_id>=<path>.",
-    )
+    add_bootstrap_overrides(bootstrap_cmd)
+    bootstrap_cowork_cmd = subparsers.add_parser("bootstrap-cowork")
+    add_bootstrap_overrides(bootstrap_cowork_cmd)
 
     subparsers.add_parser("refresh-shared")
+    subparsers.add_parser("refresh-cowork")
     subparsers.add_parser("doctor")
+    subparsers.add_parser("doctor-cowork")
     subparsers.add_parser("status")
+    subparsers.add_parser("status-cowork")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    paths = helper_paths(helper_home=args.helper_home, settings_path=args.settings_path, claude_home=args.claude_home)
 
     try:
         if args.command == "bootstrap":
+            paths = helper_paths(helper_home=args.helper_home, settings_path=args.settings_path, claude_home=args.claude_home)
             result = bootstrap(paths, args)
             print(json.dumps(result, indent=2, sort_keys=True))
             return 0
+        if args.command == "bootstrap-cowork":
+            paths = cowork_helper_paths(helper_home=args.helper_home, cowork_home=args.cowork_home, claude_home=args.claude_home)
+            result = bootstrap_cowork(paths, args)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
         if args.command == "refresh-shared":
+            paths = helper_paths(helper_home=args.helper_home, settings_path=args.settings_path, claude_home=args.claude_home)
             installs = load_installs_from_config(paths)
             result = refresh_shared_memory(paths, installs)
             print(json.dumps(result, indent=2, sort_keys=True))
             return 0
+        if args.command == "refresh-cowork":
+            paths = cowork_helper_paths(helper_home=args.helper_home, cowork_home=args.cowork_home, claude_home=args.claude_home)
+            installs = load_installs_from_config(paths)
+            owner = canonical_owner_from_cowork_config(paths)
+            result = refresh_cowork_shared_memory(paths, installs, owner)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
         if args.command == "doctor":
+            paths = helper_paths(helper_home=args.helper_home, settings_path=args.settings_path, claude_home=args.claude_home)
             result, exit_code = doctor(paths)
             print(json.dumps(result, indent=2, sort_keys=True))
             return exit_code
+        if args.command == "doctor-cowork":
+            paths = cowork_helper_paths(helper_home=args.helper_home, cowork_home=args.cowork_home, claude_home=args.claude_home)
+            result, exit_code = doctor_cowork(paths)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return exit_code
+        if args.command == "status":
+            paths = helper_paths(helper_home=args.helper_home, settings_path=args.settings_path, claude_home=args.claude_home)
+            result = status(paths)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
+        paths = cowork_helper_paths(helper_home=args.helper_home, cowork_home=args.cowork_home, claude_home=args.claude_home)
         result = status(paths)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0

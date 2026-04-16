@@ -129,7 +129,7 @@ What is real today:
 - shared process foundation
 - shared memory contract layer
 - one example domain plugin for data analysts
-- one host-side helper for registry bootstrap, `SessionEnd` hook setup, and shared-memory refresh
+- one host-side helper for Claude bootstrap, `SessionEnd` hook setup, shared-memory refresh, and Cowork same-machine imports
 
 What that means in practice:
 
@@ -172,6 +172,8 @@ The helper can be tested locally from this repo with:
 pipx install "aiws-host-memory @ git+https://github.com/sashakang/ai-workspace.git@master#subdirectory=aiws-host-memory"
 aiws-host-memory bootstrap
 ```
+
+Cowork v1 uses the same canonical shared memory that Claude owns under `memory-aiws`. It does not create a second canonical store. `bootstrap-cowork` and `refresh-cowork` attach a Cowork runtime to that Claude-owned memory on the same machine, and `refresh-cowork` rebuilds Cowork imports only.
 
 End users should install through the marketplace, not by cloning or symlinking the repo.
 

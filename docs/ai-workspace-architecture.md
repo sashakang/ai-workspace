@@ -320,6 +320,14 @@ V1 contract:
 - runtime reads happen only against the dependent plugin's local imported snapshot
 - direct sibling-plugin filesystem reads are not part of the supported runtime contract
 
+Same-machine dual-host v1:
+
+- Claude Code remains the canonical owner of shared memory
+- Cowork does not create a second canonical store
+- Cowork reads from its own imported local snapshots under `~/.cowork/plugins/data/<plugin-id>/shared-memory/`
+- Cowork writes stage local candidates and relies on `aiws-host-memory refresh-cowork` to consolidate them into the Claude-owned canonical store
+- cross-host visibility is eventual: `refresh-cowork` rebuilds Cowork imports only, and Claude sees Cowork-written memory after Claude's normal refresh path runs
+
 ### Plugin metadata contract
 
 Every plugin must publish a machine-readable contract in addition to its normal plugin manifest.
