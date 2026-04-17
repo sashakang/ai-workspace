@@ -15,6 +15,7 @@ HELPER_PYTHONPATH = str(REPO_ROOT / "aiws-host-memory")
 MANAGED_HOOK_EVENT = "SessionEnd"
 MANAGED_HOOK_COMMAND = "aiws-host-memory refresh-shared"
 INFRA_PLUGIN_IDS = ("core-aiws", "memory-aiws")
+OPTIONAL_PLUGIN_IDS = ("data-analysis-aiws", "software-engineer-aiws")
 
 
 class HostMemoryTests(unittest.TestCase):
@@ -43,7 +44,7 @@ class HostMemoryTests(unittest.TestCase):
 
     def _copy_plugins(self) -> dict[str, dict[str, Path]]:
         installs: dict[str, dict[str, Path]] = {}
-        for plugin_id in ("core-aiws", "memory-aiws", "data-analysis-aiws"):
+        for plugin_id in INFRA_PLUGIN_IDS + OPTIONAL_PLUGIN_IDS:
             source = REPO_ROOT / plugin_id
             target = self.installs_root / plugin_id
             shutil.copytree(source, target)
@@ -271,19 +272,21 @@ class HostMemoryTests(unittest.TestCase):
         self.assertFalse(self.installs["data-analysis-aiws"]["data"].exists())
 
     def test_bootstrap_detects_optional_domain_plugins_from_installed_plugin_metadata(self) -> None:
-        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws"))
+        self.write_installed_plugins(("core-aiws", "memory-aiws", "data-analysis-aiws", "software-engineer-aiws"))
 
         payload = self.helper_json("bootstrap")
 
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(
             payload["registered_plugins"],
-            ["core-aiws", "data-analysis-aiws", "memory-aiws"],
+            ["core-aiws", "data-analysis-aiws", "memory-aiws", "software-engineer-aiws"],
         )
         self.assertEqual(payload["skipped_plugins"], {})
         registry = self.installs["core-aiws"]["data"] / "registry" / "plugins"
         self.assertTrue((registry / "data-analysis-aiws.json").exists())
+        self.assertTrue((registry / "software-engineer-aiws.json").exists())
         self.assertTrue((self.installs["data-analysis-aiws"]["data"] / "shared-memory").is_symlink())
+        self.assertFalse((self.installs["software-engineer-aiws"]["data"] / "shared-memory").exists())
 
     def test_bootstrap_skips_optional_domain_with_missing_dependency(self) -> None:
         ghost_root = self.installs_root / "ghost-domain-aiws"

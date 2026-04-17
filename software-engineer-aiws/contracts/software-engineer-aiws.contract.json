@@ -1,0 +1,30 @@
+{
+  "plugin_id": "software-engineer-aiws",
+  "version": "0.3.2",
+  "public_skills": [
+    "dev"
+  ],
+  "public_agents": [
+    "backend-python-engineer",
+    "code-debugger",
+    "code-tester",
+    "code-reviewer",
+    "code-simplifier",
+    "architecture-simplifier",
+    "technical-writer"
+  ],
+  "dependencies": [
+    "core-aiws"
+  ],
+  "project_memory_read_scope": [],
+  "project_memory_write_scope": [],
+  "shared_memory_read_scope": [],
+  "shared_memory_write_scope": [],
+  "improve_targets": [
+    "skills/*/SKILL.md",
+    "agents/**/*.md",
+    "contracts/*.json",
+    ".claude-plugin/plugin.json",
+    "README.md"
+  ]
+}

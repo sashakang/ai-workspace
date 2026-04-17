@@ -1,6 +1,6 @@
 # AI Workspace Architecture
 
-Updated: 2026-03-26
+Updated: 2026-04-17
 
 ## Purpose
 
@@ -44,6 +44,7 @@ The workspace install model is:
   - `memory-aiws`
 - optional domain plugins:
   - `data-analysis-aiws`
+  - `software-engineer-aiws`
   - future domain plugins such as `lawyer-aiws`, `marketologist-aiws`, and `product-manager-aiws`
 
 Users should not be forced to install every domain plugin just because they share the same workspace marketplace. Domain plugins are opt-in and should be installed only when the user wants that domain behavior.
@@ -212,7 +213,8 @@ This memory is not owned by the analyst plugin. It is shared infrastructure for 
 Important distinction:
 
 - in `memory-aiws`, `${CLAUDE_PLUGIN_DATA}/shared-memory/` is the canonical durable store
-- in dependent plugins, `${CLAUDE_PLUGIN_DATA}/shared-memory/` is only an imported local snapshot for reads
+- in dependent plugins that declare shared-memory read scopes, `${CLAUDE_PLUGIN_DATA}/shared-memory/` is only an imported local snapshot for reads
+- plugins with empty shared-memory scopes do not receive a `shared-memory` import
 - marketplace checkout paths and plugin cache paths are code-distribution surfaces, not the durable shared-memory home
 - same-machine Cowork compatibility should attach to the same canonical `memory-aiws` store rather than creating a second canonical memory root
 
@@ -352,6 +354,7 @@ Required fields:
 Examples:
 
 - `data-analysis-aiws`
+- `software-engineer-aiws`
 - `lawyer-aiws`
 - `marketologist-aiws`
 - `product-manager-aiws`
@@ -533,6 +536,7 @@ Package ids:
 - `core-aiws`
 - `memory-aiws`
 - `data-analysis-aiws`
+- `software-engineer-aiws`
 - future examples: `lawyer-aiws`, `marketologist-aiws`, `product-manager-aiws`
 
 Public analyst skill prefix:

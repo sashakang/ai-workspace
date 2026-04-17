@@ -8,7 +8,8 @@ The platform currently gives teams:
 
 - `core-aiws` for shared process and improvement workflows
 - `memory-aiws` for shared cross-project memory contracts
-- `data-analysis-aiws` as the first domain plugin
+- `data-analysis-aiws` for analyst workflows
+- `software-engineer-aiws` for SOP-governed Python engineering work
 
 ## What It Is For
 
@@ -50,14 +51,15 @@ It defines:
 
 ### Domain plugins
 
-The first real domain plugin today is `data-analysis-aiws`.
+The domain plugins today are `data-analysis-aiws` and `software-engineer-aiws`.
 
-It currently provides:
+They currently provide:
 
 - `data-analyst-forecast` (time-series forecasting)
 - `analytical-research` (hypothesis-driven research with dual-gate review)
+- `/dev` (thin SOP adapter for Python engineering work)
 
-This plugin is intentionally **primed**, not blank-slate: it ships domain references and workflow structure so users get useful behavior on day one.
+Some domain plugins are intentionally primed with references and bootstrap guidance. Others, like `software-engineer-aiws`, stay deliberately thin and rely on the shared SOP plus a small agent surface.
 
 ## Why This Is Extensible
 
@@ -67,7 +69,7 @@ The extensibility model is:
 
 - `core-aiws` stays the shared process foundation
 - `memory-aiws` stays the shared memory foundation
-- each new domain plugin adds its own skills, agents, references, and bootstrap docs
+- each new domain plugin adds only the domain surfaces it actually needs
 
 That means future plugins can follow the same pattern without reinventing the platform:
 
@@ -87,8 +89,8 @@ It should only contribute:
 
 - domain workflows
 - domain agents
-- domain references
-- domain-specific bootstrap and integration guidance
+- domain references when needed
+- domain-specific bootstrap and integration guidance when needed
 
 ## Install
 
@@ -104,6 +106,7 @@ Then install whichever domain plugins you want:
 
 ```text
 /plugin install data-analysis-aiws@ai-workspace
+/plugin install software-engineer-aiws@ai-workspace
 ```
 
 Then install the host helper once:
@@ -128,14 +131,14 @@ What is real today:
 
 - shared process foundation
 - shared memory contract layer
-- one example domain plugin for data analysts
+- opt-in analyst and software-engineering domain plugins
 - one host-side helper for Claude bootstrap, `SessionEnd` hook setup, shared-memory refresh, and Cowork same-machine imports
 
 What that means in practice:
 
 - the architecture is real
 - the install path is real
-- the analyst workflows are real
+- the analyst and engineering workflows are real
 - the platform is still early and intended to expand with more opt-in domain plugins over time
 
 ## Repository Layout
@@ -146,6 +149,7 @@ ai-workspace/
 ├── core-aiws/
 ├── memory-aiws/
 ├── data-analysis-aiws/
+├── software-engineer-aiws/
 └── docs/
 ```
 
@@ -163,7 +167,8 @@ Local runtime testing:
 claude \
   --plugin-dir ~/Documents/ai-workspace/core-aiws \
   --plugin-dir ~/Documents/ai-workspace/memory-aiws \
-  --plugin-dir ~/Documents/ai-workspace/data-analysis-aiws
+  --plugin-dir ~/Documents/ai-workspace/data-analysis-aiws \
+  --plugin-dir ~/Documents/ai-workspace/software-engineer-aiws
 ```
 
 The helper can be tested locally from this repo with:

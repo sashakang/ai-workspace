@@ -4,8 +4,8 @@
     "name": "Sasha Kang"
   },
   "metadata": {
-    "description": "Shared Claude Code plugins for process, memory, and analyst workflows.",
-    "version": "0.3.0"
+    "description": "Shared Claude Code plugins for process, memory, and opt-in domain workflows.",
+    "version": "0.3.1"
   },
   "plugins": [
     {
@@ -31,6 +31,15 @@
       "source": "./data-analysis-aiws",
       "description": "Domain plugin for analytical research, forecasting, and stakeholder-ready reporting.",
       "version": "0.3.0",
+      "author": {
+        "name": "Sasha Kang"
+      }
+    },
+    {
+      "name": "software-engineer-aiws",
+      "source": "./software-engineer-aiws",
+      "description": "Domain plugin for SOP-governed Python engineering work in the AI workspace.",
+      "version": "0.3.2",
       "author": {
         "name": "Sasha Kang"
       }
