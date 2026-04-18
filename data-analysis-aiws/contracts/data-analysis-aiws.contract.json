@@ -1,6 +1,6 @@
 {
   "plugin_id": "data-analysis-aiws",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "public_skills": [
     "data-analyst-forecast",
     "analytical-research"

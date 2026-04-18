@@ -111,8 +111,6 @@ Spawn reviewers IN PARALLEL based on task type:
 
 *`prompt-engineer` participates only when the change involves prompts, skills, or protocol files. Skips for pure code changes.
 
-For this repository's protocol and skill changes, add `ai-engineer` to the Gate 1 review commission in addition to the default Prompt/Protocol reviewers.
-
 For mixed tasks (e.g., code + prompt changes), include reviewers from all applicable task type rows.
 
 **Consensus rules:**
@@ -300,8 +298,6 @@ Spawn reviewers IN PARALLEL based on task type:
 - [ ] No unused imports or dead code
 - [ ] No trivial wrapper functions
 - [ ] Output answers the original question
-
-For this repository's protocol and skill changes, add `ai-engineer` to the Gate 2 review commission in addition to the default Prompt/Protocol reviewers.
 
 **Consensus rules:** Same as Gate 1 -- all must APPROVE, max 3 iterations, then escalate.
 

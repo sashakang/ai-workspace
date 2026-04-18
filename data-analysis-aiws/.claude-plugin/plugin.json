@@ -1,7 +1,7 @@
 {
   "name": "data-analysis-aiws",
   "description": "Domain plugin for analytical research, forecasting, and stakeholder-ready reporting.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": {
     "name": "Sasha Kang"
   }
