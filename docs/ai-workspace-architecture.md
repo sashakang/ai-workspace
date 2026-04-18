@@ -100,6 +100,8 @@ If code or runtime mechanics are involved, add:
 - `code-reviewer`
 - `backend-python-engineer`
 
+For protocol and skill review changes that produce contradictory reviewer recommendations on the same element, run one bounded per-element contradiction-resolution step before escalation. The enforcement details live in the SOP and skill protocols, not here.
+
 ### Session logging
 
 Structured plugin-managed session logging is a deferred `core-aiws` capability, not part of v1.

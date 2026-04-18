@@ -111,6 +111,8 @@ Spawn reviewers IN PARALLEL based on task type:
 
 *`prompt-engineer` participates only when the change involves prompts, skills, or protocol files. Skips for pure code changes.
 
+For this repository's protocol and skill changes, add `ai-engineer` to the Gate 1 review commission in addition to the default Prompt/Protocol reviewers.
+
 For mixed tasks (e.g., code + prompt changes), include reviewers from all applicable task type rows.
 
 **Consensus rules:**
@@ -119,7 +121,57 @@ For mixed tasks (e.g., code + prompt changes), include reviewers from all applic
 - Maximum 3 iterations per gate
 - After 3 failures -> escalate to user (see [Escalation Protocol](./escalation.md))
 
-**Reviewer disagreement**: When reviewers disagree, use a formal agent team (TeamCreate) so they can discuss via SendMessage and converge on a shared recommendation. The Representative does not pick sides.
+**Contradiction trigger**: Run contradiction resolution only when reviewer slots address the same frozen `element_id` in the current gate pass and either:
+- their normalized `next_action` values cannot all be satisfied by one immediate disposition in the current gate pass without violating any slot's explicit verdict constraints
+- they disagree on verdict, severity, or diagnosis in a way that produces no single immediate disposition that satisfies all involved slots
+
+Compatible differences do not trigger contradiction resolution.
+
+**Representative-side normalization**: `next_action` is a Representative-side normalization field unless a skill already emits it explicitly. Reviewers keep their existing verdict labels. The Representative derives `next_action` from each slot's verdict and rationale using a closed vocabulary:
+- SOP gates: `accept | revise_plan | revise_output | escalate`
+- `pass/revise/block` gates: `accept | revise_section | fix_foundation | escalate`
+- `pass/flag/block` gates: `accept | disclose_caveat | fix_before_release | escalate`
+
+`next_action` must represent the minimal viable immediate action path implied by that slot's position, not a broader rewrite.
+
+**Contradiction record**: When contradiction resolution is required, the Representative creates one per-element record with:
+- `element_id`
+- `element_scope`
+- `question`
+- `conflicting_actions`
+- `participating_slots`
+- `conference_summary`
+- `conference_result`
+- `slot_verdicts_after_conference`
+- `notes`
+
+Use the canonical format `<artifact>::<section_or_step>::<issue_slug>` for `element_id`.
+
+Derivation order:
+1. `artifact`: the concrete file, skill, or deliverable under review
+2. `section_or_step`: the smallest named section, gate step, or object where the contradiction exists
+3. `issue_slug`: stable kebab-case label taken from the first recorded contradiction on that element in this gate iteration
+
+Freeze the resulting `element_id` for the rest of that gate iteration. If a narrower sub-dispute appears during the conference, absorb it into the same `element_id`; do not create a nested conference.
+
+**Required active slots**: Only the reviewer slots currently in contradiction on that `element_id` in the current gate pass, plus any fallback slot that formally replaces one of them. Uninvolved gate reviewers do not need refreshed verdicts.
+
+**Contradiction-resolution wrapper**: Run one bounded conference wrapper per `element_id` per gate iteration.
+- one conference round only
+- only required active slots participate
+- no nested wrappers
+- no reopening the wrapper after fallback
+- no new evidence scope beyond the recorded contradiction and supporting rationale already in the record
+- mandatory close at the end of the round with exactly one of: `converged`, `strategically_unresolved`, `slot_unavailable`
+
+The wrapper sits inside the current gate iteration and creates no extra retry or iteration budget by itself. Any later revision-and-resubmission still counts toward the existing gate budget.
+
+**Conference result rules**:
+- `converged`: every required active slot returns an updated explicit verdict and the Representative-normalized `next_action` values are all satisfiable by one immediate disposition in the current gate pass
+- `strategically_unresolved`: every required active slot returns an updated explicit verdict but no single immediate disposition in the current gate pass can satisfy all normalized `next_action` values
+- `slot_unavailable`: a required active slot fails to return an updated verdict after normal retry/fallback is exhausted
+
+The Representative owns `element_id` assignment, `next_action` normalization, and final `conference_result`, but must follow these rules.
 
 **Fake consensus guard**: Consensus means actual sub-agent outputs with explicit votes. The main agent reporting approval without spawning reviewers is fabricated consensus and a protocol violation.
 
@@ -249,7 +301,11 @@ Spawn reviewers IN PARALLEL based on task type:
 - [ ] No trivial wrapper functions
 - [ ] Output answers the original question
 
+For this repository's protocol and skill changes, add `ai-engineer` to the Gate 2 review commission in addition to the default Prompt/Protocol reviewers.
+
 **Consensus rules:** Same as Gate 1 -- all must APPROVE, max 3 iterations, then escalate.
+
+**Contradiction-resolution protocol**: Apply the same contradiction trigger, contradiction record, Representative-side `next_action` normalization, required-slot rule, bounded conference wrapper, and conference-result rules used in Gate 1. The Gate 2 contradiction step stays inside the current iteration and does not replace explicit reviewer verdicts.
 
 **Gate 2 applies to ALL changes in the default SOP workflow**: additions, modifications, AND deletions. Removing code can have cascading effects. Skills that define their own gate structure follow their skill workflow instead.
 

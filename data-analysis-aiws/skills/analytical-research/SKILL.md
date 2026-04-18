@@ -221,6 +221,8 @@ Each reviewer returns a structured verdict:
 - **revise** — specific change to the notebook that should be made before proceeding
 - **block** — fundamental flaw that must be resolved
 
+If reviewers contradict each other on the same frozen `element_id`, apply the SOP contradiction-resolution step before choosing the next fix path. The Representative owns the contradiction record and any required `next_action` normalization. Only the contradictory reviewer slots for that `element_id` need refreshed post-conference verdicts.
+
 Resolution: block → delegate fix to a new `data-analyst` sub-agent with the blocker feedback, then re-run the blocking reviewer with fresh context. Revise → incorporate change, proceed. Final round: all 3 must return pass. Iteration limits per escalation protocol.
 
 **Exit:** All 3 reviewers pass. Proceed to step 8.
@@ -283,6 +285,8 @@ Each challenger returns a structured verdict:
 - **pass** — no material issue found in their domain
 - **flag** — concern that should be disclosed in the narrative but does not block delivery
 - **block** — material flaw that must be resolved before the research ships
+
+If challengers contradict each other on the same frozen `element_id`, apply the SOP contradiction-resolution step before choosing the next fix path. The Representative owns the contradiction record and any required `next_action` normalization. Only the contradictory challenger slots for that `element_id` need refreshed post-conference verdicts.
 
 Resolution: block → delegate fix to a new `data-analyst` sub-agent with blocker feedback, then re-run the blocking challenger with fresh context. Flag → incorporate caveat into narrative, proceed. Final round: all 3 must return pass. Iteration limits per escalation protocol.
 
@@ -384,7 +388,7 @@ Final round: all 4 must return pass.
 
 Each reviewer that blocks gets independent fix-and-recheck cycles, up to 3 per reviewer per escalation protocol. Gates 1, 2, and 3 have independent iteration budgets — "gate iterations: 3" from the escalation protocol applies per gate, not across all gates combined. If any reviewer remains blocked after 3 attempts, escalate to user.
 
-If two or more reviewers issue conflicting feedback on the same element and prescribe mutually exclusive fixes, escalate with both feedback vectors to the user before attempting fix.
+If two or more reviewers issue conflicting feedback on the same frozen `element_id` and prescribe mutually exclusive fixes, run the SOP contradiction-resolution step first inside the existing reviewer-specific recheck flow. If the contradiction record ends `converged`, continue with the existing case-based fix/recheck path using the updated reviewer verdicts. If it ends `strategically_unresolved` or `slot_unavailable`, escalate to the user.
 
 **Relationship to Gate 2 Challenger B:** Gate 2 Challenger B validates that a non-analyst *could* understand (checked by an analyst). Gate 3 validates that a non-analyst *does* understand (checked by a simulated non-analyst). Complementary, not redundant.
 

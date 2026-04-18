@@ -130,6 +130,8 @@ Each reviewer returns a structured verdict:
 - **revise** — specific change to the plan that should be made before presenting to the user
 - **block** — fundamental flaw (e.g., insufficient data for any defensible forecast) that must be resolved or disclosed prominently
 
+If reviewers contradict each other on the same frozen `element_id`, apply the SOP contradiction-resolution step before choosing the next fix path. The Representative owns the contradiction record and any required `next_action` normalization. Only the contradictory reviewer slots for that `element_id` need refreshed post-conference verdicts.
+
 Resolution rules:
 - If any reviewer returns **block**, address the issue — which may mean narrowing scope, coarsening granularity, or recommending against forecasting entirely — and re-run the blocking reviewer.
 - If a reviewer returns **revise**, incorporate the change into the plan and proceed.
@@ -201,6 +203,8 @@ Each challenger returns a structured verdict:
 - **pass** — no material issue found in their domain
 - **flag** — concern that should be disclosed in the narrative but does not block delivery
 - **block** — material flaw that must be resolved before the forecast ships
+
+If challengers contradict each other on the same frozen `element_id`, apply the SOP contradiction-resolution step before choosing the next fix path. The Representative owns the contradiction record and any required `next_action` normalization. Only the contradictory challenger slots for that `element_id` need refreshed post-conference verdicts.
 
 Resolution rules:
 - If any challenger returns **block**, address the issue and re-run the blocked challenger (not all three) before proceeding.

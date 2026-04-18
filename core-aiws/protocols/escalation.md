@@ -8,11 +8,13 @@ Escalate when any of the following is true:
 
 - a consensus gate fails after 3 iterations
 - the required data cannot answer the question
-- reviewer feedback remains contradictory after structured rework
+- a contradiction-resolution record ends `strategically_unresolved` or `slot_unavailable`
 - scope has materially expanded beyond the approved plan
 - an external blocker prevents progress
 - ambiguity cannot be resolved from code, docs, or context
 - execution iterations reach the configured limit
+
+Contradiction alone is not an escalation trigger. The bounded contradiction-resolution step must run first when SOP or skill rules require it.
 
 ## Levels
 
