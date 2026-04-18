@@ -12,10 +12,10 @@ Before entering the SOP, classify the task. This determines which phases to run.
 
 | Signal | Classification | Path |
 |--------|---------------|------|
-| Config value, typo fix, simple reply, quick lookup | **Lightweight** | Fast Path: Phase 4 + Phase 8. No gates. |
-| New feature, multi-file change, analysis, debugging | **Standard** | Full SOP (all 8 phases) |
-| Architecture change, multi-service, system design | **Complex** | Full SOP + signal high complexity to all agents |
-| Novel algorithm, cross-cutting architectural decision, performance-critical | **Maximum** | Full SOP + maximum reasoning depth for all agents |
+| Config value, typo fix, simple reply, quick lookup | **Lightweight** | Fast Path: Phase 5 + Phase 9. No gates. |
+| New feature, multi-file change, analysis, debugging | **Standard** | Full SOP (10 phases, with conditional Phase 4) |
+| Architecture change, multi-service, system design | **Complex** | Full SOP (10 phases, with conditional Phase 4) + signal high complexity to all agents |
+| Novel algorithm, cross-cutting architectural decision, performance-critical | **Maximum** | Full SOP (10 phases, with conditional Phase 4) + maximum reasoning depth for all agents |
 
 **Canonical complexity enum**: `lightweight | standard | complex | maximum` (use these exact values everywhere: session logs, delegation signals, complexity fields).
 
@@ -203,7 +203,7 @@ or if a gate was skipped (lightweight task):
 
 ### 3.2 User Decision
 
-- **User approves**: Proceed to Phase 4 (Execution)
+- **User approves**: Proceed to Phase 4 (Test Specification)
 - **User rejects or requests changes**: Loop back to Phase 2 — re-enter plan mode (`EnterPlanMode`), revise the plan based on user feedback, `ExitPlanMode`, re-run Gate 1, then return to Phase 3 for user approval again
 
 **HARD GATE: Do NOT proceed to Phase 4 until the user explicitly approves the plan.** Skills that define their own gate structure follow their skill workflow instead.
@@ -212,17 +212,67 @@ or if a gate was skipped (lightweight task):
 
 ---
 
-## Phase 4: EXECUTION
+## Phase 4: TEST SPECIFICATION
 
-**[SOP] Entering Phase 4: Execution**
+**[SOP] Entering Phase 4: Test Specification**
+
+When applicable, write failing tests from the approved plan **before** implementation begins. This is the TDD contract for executable code work with a viable automated test surface: tests define the expected behavior, implementation makes them pass.
+
+### 4.1 Applicability
+
+| Task Type | Test Specification? |
+|-----------|-------------------|
+| Code | **Conditional** — required only for non-lightweight code tasks with a viable automated test surface |
+| Data analysis | No — validate via Phase 7 cross-checks or skill-specific workflow |
+| Data extraction | No — validate via Phase 7 sanity checks or skill-specific workflow |
+| Infrastructure | No — health checks are verified post-deploy in Phase 7 |
+| Prompt/Protocol | No — validated by Gate 2 review |
+| Documentation | No |
+
+Skip this phase for **lightweight** tasks and for tasks without a viable automated test surface.
+
+**Viable automated test surface** means an existing or directly addable automated test path that can verify the requested behavior without introducing a new framework or building a disproportionate harness first.
+
+### 4.2 Test Generation
+
+For applicable code tasks, delegate to `code-tester` with:
+- The Gate-1-approved plan (success criteria, expected behavior)
+- Relevant existing test files and patterns (from Phase 2 research)
+- Complexity signal
+
+The `code-tester` writes tests that:
+- **Cover the success criteria** from the approved plan
+- **Follow existing test conventions** in the repo (framework, structure, naming)
+- **Are minimal** — test behavior, not implementation details
+- **Fail when run** — no implementation exists yet, so they must fail or error
+
+### 4.3 Test Verification
+
+Run the targeted tests to confirm the new tests **fail** (red phase of red-green-refactor). If any new test passes before implementation, it's either testing the wrong thing or the behavior already exists — investigate before proceeding.
+
+### 4.4 Scope Guard
+
+Test specification covers the **planned change only**. Do not write tests for unrelated code, speculative future features, or edge cases not in the plan. The plan is the contract.
+
+If this phase is skipped, record the reason in the plan or execution notes before proceeding.
+
+**Exit**: If applicable, failing tests are committed to the working tree (not git-committed). Otherwise the phase is explicitly skipped with a stated reason. Proceed to Phase 5.
+
+---
+
+## Phase 5: EXECUTION
+
+**[SOP] Entering Phase 5: Execution**
 
 > **CRITICAL**: The Representative NEVER implements directly. All work is delegated to specialist agents. If you are about to write implementation code, SQL, analysis, or any substantive output yourself -- STOP. Delegate to a specialist.
 
-### 4.1 Implementation Source Enforcement
+### 5.1 Implementation Source Enforcement
 
 Before proceeding past this phase, verify: **Did the output come from a specialist sub-agent?** If NO, HALT. Re-delegate to the appropriate specialist.
 
-### 4.2 Specialist Selection
+For tasks with Phase 4 tests, the execution specialist is responsible for making those targeted tests pass before Gate 2 review begins.
+
+### 5.2 Specialist Selection
 
 | Task Type | Execution Specialists |
 |-----------|----------------------|
@@ -237,10 +287,10 @@ Before proceeding past this phase, verify: **Did the output come from a speciali
 | General / other | `general-purpose` |
 
 **Support specialists** (invoked during or after execution, not as primary executors):
-- `code-tester` -- test generation, after implementation
+- `code-tester` -- test generation (Phase 4 pre-implementation, and post-implementation if needed)
 - `technical-writer` -- documentation updates, after validation
 
-### 4.3 Delegation
+### 5.3 Delegation
 
 When delegating to a specialist, provide:
 - **Task description** -- what to do and why
@@ -248,7 +298,7 @@ When delegating to a specialist, provide:
 - **Success criteria** -- what the output must satisfy
 - **Complexity signal** -- lightweight | standard | complex | maximum
 
-### 4.4 Model Selection
+### 5.4 Model Selection
 
 Specialists can use downgraded models for efficiency:
 
@@ -258,23 +308,23 @@ Specialists can use downgraded models for efficiency:
 | Standard (implementation, analysis) | `sonnet` |
 | Complex / Maximum (architecture, novel problems) | `opus` (default) |
 
-### 4.5 Parallel Execution
+### 5.5 Parallel Execution
 
 If multiple specialists are needed for independent subtasks, launch them in parallel via agent teams (TeamCreate).
 
-**Exit**: Implementation complete. Proceed to Phase 5.
+**Exit**: Implementation complete. Proceed to Phase 6.
 
 ---
 
-## Phase 5: VALIDATION (Gate 2)
+## Phase 6: VALIDATION (Gate 2)
 
-**[SOP] Entering Phase 5: Validation**
+**[SOP] Entering Phase 6: Validation**
 
-**HARD GATE: Do NOT proceed to Phase 6 until Gate 2 passes.** Skills that define their own gate structure follow their skill workflow instead.
+**HARD GATE: Do NOT proceed to Phase 7 until Gate 2 passes.** Skills that define their own gate structure follow their skill workflow instead.
 
 All output must be independently reviewed before delivery.
 
-### 5.1 Gate 2: Output Consensus
+### 6.1 Gate 2: Output Consensus
 
 Default reviewers by task type. Skills with custom gate reviewers override this table.
 
@@ -294,6 +344,7 @@ Spawn reviewers IN PARALLEL based on task type:
 - [ ] No unused imports or dead code
 - [ ] No trivial wrapper functions
 - [ ] Output answers the original question
+- [ ] For code tasks with Phase 4 tests, green-test evidence for those targeted tests is included in the review package
 
 **Consensus rules:** Same as Gate 1 -- all must APPROVE, max 3 iterations, then escalate.
 
@@ -303,20 +354,20 @@ Spawn reviewers IN PARALLEL based on task type:
 
 **Fake consensus guard**: Same as Gate 1. Actual sub-agent outputs required. No fabricated approvals.
 
-**Exit**: All reviewers APPROVE. Proceed to Phase 6.
+**Exit**: All reviewers APPROVE. Proceed to Phase 7.
 
 ---
 
-## Phase 6: TESTING
+## Phase 7: TESTING
 
-**[SOP] Entering Phase 6: Testing**
+**[SOP] Entering Phase 7: Testing**
 
 Verify the output works. Testing varies by task type:
 
 
 | Task Type | Testing Approach |
 |-----------|-----------------|
-| Code | Run test suite (`pytest`), run linter (`ruff`), verify no regressions |
+| Code | Run the broader regression suite and lint checks; any targeted Phase 4 tests should already be green before Gate 2 |
 | Data analysis | Cross-check key findings via independent query or alternative approach |
 | Data extraction | Sanity checks: row counts, null rates, date ranges, known benchmarks |
 | Infrastructure | Health check endpoint, verify correct version running |
@@ -325,22 +376,23 @@ Verify the output works. Testing varies by task type:
 
 **If tests fail:**
 1. Diagnose: test issue or implementation issue?
-2. Loop back to Phase 4 (fix via specialist) -> Phase 5 (re-review) -> Phase 6 (re-test)
-3. Maximum 3 fix iterations before escalating
+2. If the targeted Phase 4 tests regress after Gate 2, or if broader regression/lint checks fail, loop back to Phase 5 (fix via specialist) -> Phase 6 (re-review if code changed) -> Phase 7 (re-test)
+3. Reuse the same loop for any other testing failures discovered here
+4. Maximum 3 fix iterations before escalating
 
-**Exit**: Tests pass. Proceed to Phase 7.
+**Exit**: Tests pass (including all Phase 4 TDD tests). Proceed to Phase 8.
 
 ---
 
-## Phase 7: DOCUMENTATION
+## Phase 8: DOCUMENTATION
 
-**[SOP] Entering Phase 7: Documentation**
+**[SOP] Entering Phase 8: Documentation**
 
 **Owner**: Representative delegates to `technical-writer`
 
 If the work changed behavior, patterns, or architecture, update relevant documentation.
 
-### 7.1 What to Update
+### 8.1 What to Update
 
 | Task Type | Documentation Target |
 |-----------|---------------------|
@@ -350,23 +402,23 @@ If the work changed behavior, patterns, or architecture, update relevant documen
 | Infrastructure | Deployment docs, runbooks |
 | Prompt/Protocol | Referenced protocol files, skill descriptions |
 
-### 7.2 How to Update
+### 8.2 How to Update
 
 - Spawn `technical-writer` to identify and update relevant docs
 - Only update existing files (do not create new docs unless explicitly required)
 - Documentation changes do NOT require Gate 2 re-review (they were validated during Gate 2)
 
-**Exit**: Documentation updated. Proceed to Phase 8.
+**Exit**: Documentation updated. Proceed to Phase 9.
 
 ---
 
-## Phase 8: DELIVERY
+## Phase 9: DELIVERY
 
-**[SOP] Entering Phase 8: Delivery**
+**[SOP] Entering Phase 9: Delivery**
 
 **Owner**: Representative (main agent)
 
-### 8.1 Artifact Delivery
+### 9.1 Artifact Delivery
 
 | Task Type | Primary Deliverable |
 |-----------|-------------------|
@@ -377,7 +429,7 @@ If the work changed behavior, patterns, or architecture, update relevant documen
 | Documentation | Updated doc files |
 | Prompt/Protocol | File path + purpose + key design decisions + review feedback addressed |
 
-### 8.2 Delivery Note
+### 9.2 Delivery Note
 
 Gate 2 is fully automatic — once all reviewers APPROVE, proceed through testing and documentation without pausing for user approval.
 
@@ -387,7 +439,7 @@ Gate 2 is fully automatic — once all reviewers APPROVE, proceed through testin
 ```
 or:
 ```
-[GATE 2: SKIPPED — lightweight task / documentation only]
+[GATE 2: SKIPPED — lightweight task]
 ```
 
 **Do NOT commit, push, or deploy without explicit user instruction.**
@@ -396,13 +448,13 @@ or:
 
 ---
 
-## Phase 9: SELF-IMPROVEMENT
+## Phase 10: SELF-IMPROVEMENT
 
 **In the default SOP workflow, this phase runs after every non-lightweight task.** Skills may define their own self-improvement triggers.
 
-**Lightweight** = single-question lookups, config reads, or tasks with no decision-making or agent delegation. These skip Phase 9.
+**Lightweight** = single-question lookups, config reads, or tasks with no decision-making or agent delegation. These skip Phase 10.
 
-**[SOP] Entering Phase 9: Self-Improvement**
+**[SOP] Entering Phase 10: Self-Improvement**
 
 Follow the [Self-Improvement Protocol](./self-improvement.md) in realtime mode with current session evidence.
 
@@ -467,9 +519,9 @@ Quick reference:
 
 | Role | Agent Type | When |
 |------|-----------|------|
-| Test writer | `code-tester` | After implementation, before Gate 2 |
-| Technical writer | `technical-writer` | Phase 7 documentation updates |
-| Prompt engineer | `prompt-engineer` | Phase 9 self-improvement |
+| Test writer | `code-tester` | Phase 4 (TDD test spec) and after implementation |
+| Technical writer | `technical-writer` | Phase 8 documentation updates |
+| Prompt engineer | `prompt-engineer` | Phase 10 self-improvement |
 | Explorer | `Explore` | Phase 2 research |
 
 ---
@@ -493,7 +545,7 @@ Skills not listed here follow SOP defaults.
 
 | Trigger | Behavior |
 |---------|----------|
-| User says "just do it" | Skip Phase 1 probing, fast-track to Phase 4 |
+| User says "just do it" | Skip Phase 1 probing and keep planning/output presentation minimal; if Phase 4 applies, it still runs before implementation |
 | Active Loop Mode | Skip verbose presentations, go diagnosis -> action -> next |
 | Lightweight classification | Fast Path (see Complexity Classification) |
 | User overrides a gate | Log the override, proceed as instructed |
@@ -507,10 +559,11 @@ Skills not listed here follow SOP defaults.
 - [ ] All output came from specialist sub-agents (not self-implemented)
 - [ ] Gate 1 passed with actual sub-agent consensus (if applicable)
 - [ ] User approved the Gate-1-approved plan (Phase 3) before execution began
+- [ ] Phase 4 TDD tests written and confirmed failing before implementation (if applicable)
 - [ ] Gate 2 passed with actual sub-agent consensus (automatic — no user approval needed)
-- [ ] Tests pass (if applicable)
+- [ ] Tests pass — including Phase 4 TDD tests (if applicable)
 - [ ] Required evidence surfaces were updated
-- [ ] Phase 9 self-improvement completed (issues reviewed, improvements proposed)
+- [ ] Phase 10 self-improvement completed (issues reviewed, improvements proposed)
 - [ ] Auto-capture protocol executed
 
 ---
@@ -519,10 +572,10 @@ Skills not listed here follow SOP defaults.
 
 | Forbidden | Why | Instead |
 |-----------|-----|---------|
-| Representative writes implementation code | Bypasses specialist expertise + review | Delegate to specialist (Phase 4) |
+| Representative writes implementation code | Bypasses specialist expertise + review | Delegate to specialist (Phase 5) |
 | Skip Gate 1 (plan review) | Unvalidated approach -> wasted work (in default SOP workflow) | Always get consensus before executing |
 | Skip Gate 2 (output review) | Unvalidated output -> errors in delivery (in default SOP workflow) | Always get consensus before delivering |
-| Skip Phase 9 (self-improvement) | Misses improvement opportunities (in default SOP workflow) | Run after every non-lightweight task |
+| Skip Phase 10 (self-improvement) | Misses improvement opportunities (in default SOP workflow) | Run after every non-lightweight task |
 | Commit without user approval | User controls git | Present results, wait for instruction |
 | Continue past halt condition | Infinite loops waste time | Escalate to user |
 | Self-approve your own plan | Confirmation bias | Independent reviewers validate |
