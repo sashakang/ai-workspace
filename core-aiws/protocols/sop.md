@@ -173,8 +173,6 @@ The Representative owns `element_id` assignment, `next_action` normalization, an
 
 **Fake consensus guard**: Consensus means actual sub-agent outputs with explicit votes. The main agent reporting approval without spawning reviewers is fabricated consensus and a protocol violation.
 
-**Cursor option**: Gate 1 reviewers (read-only reasoning) can be routed to Cursor CLI per the [Cursor Delegation Protocol](./cursor-delegation.md). Fallback to Claude sub-agents if Cursor fails.
-
 **Exit**: Plan approved by Gate 1 consensus. Record the outcome in the active evidence surface if one is in use. Proceed to Phase 3 for user approval.
 
 ---
@@ -260,8 +258,6 @@ Specialists can use downgraded models for efficiency:
 | Standard (implementation, analysis) | `sonnet` |
 | Complex / Maximum (architecture, novel problems) | `opus` (default) |
 
-**Cursor delegation**: For read-only tasks (reviews, exploration, peer challenge), consider routing to Cursor CLI instead of Claude sub-agents to conserve API quota. See [Cursor Delegation Protocol](./cursor-delegation.md).
-
 ### 4.5 Parallel Execution
 
 If multiple specialists are needed for independent subtasks, launch them in parallel via agent teams (TeamCreate).
@@ -306,8 +302,6 @@ Spawn reviewers IN PARALLEL based on task type:
 **Gate 2 applies to ALL changes in the default SOP workflow**: additions, modifications, AND deletions. Removing code can have cascading effects. Skills that define their own gate structure follow their skill workflow instead.
 
 **Fake consensus guard**: Same as Gate 1. Actual sub-agent outputs required. No fabricated approvals.
-
-**Cursor option**: Gate 2 reviewers can be routed to Cursor CLI per the [Cursor Delegation Protocol](./cursor-delegation.md). Highest token savings opportunity.
 
 **Exit**: All reviewers APPROVE. Proceed to Phase 6.
 
