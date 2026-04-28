@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiws-mcp"
+version = "0.1.0"
+description = "Local MCP control plane for AIWS skills."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Sasha Kang" }
+]
+dependencies = [
+  "mcp>=1.0.0"
+]
+
+[project.scripts]
+aiws-mcp = "aiws_mcp.cli:main"
+
+[tool.setuptools]
+packages = ["aiws_mcp"]

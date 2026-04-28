@@ -27,7 +27,7 @@ The registry is the discovery surface for:
 It allows `core-aiws` to answer:
 
 - which plugins are installed
-- which public skills and agents they expose
+- which plugin-exposed skills and agents they expose
 - what memory surfaces they read and write
 - which files are valid `/aiws-improve` targets
 
@@ -44,6 +44,9 @@ V1 assumption:
 - one contract file per plugin
 - filename should match `plugin_id`, for example `data-analysis-aiws.json`
 - the contract payload remains authoritative; filename is only a convenience
+- `plugin_id` is the logical capability identity inside one local AIWS installation
+- the same `plugin_id` may move between marketplaces over time and keep its local runtime lineage
+- if the same `plugin_id` is concurrently installed from more than one trusted marketplace, bootstrap must fail until only one active copy remains
 
 ## Minimum v1 behavior
 

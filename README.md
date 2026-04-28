@@ -109,6 +109,8 @@ Then install whichever domain plugins you want:
 /plugin install software-engineer-aiws@ai-workspace
 ```
 
+You can also add additional Claude marketplaces for company, unit, or personal plugin repos. In v1, AIWS trusts marketplaces by the exact identifier Claude records for them. Installed plugins stay in the same local AIWS ecosystem, and plugins that declare shared-memory scopes read from or write to the same canonical `memory-aiws` store.
+
 Then install the host helper once:
 
 ```bash
@@ -122,6 +124,7 @@ If you already installed an older helper build, reinstall it and rerun `bootstra
 
 If you already installed the marketplace earlier and want the latest plugin state, refresh and reinstall the relevant plugin.
 The helper now bootstraps with only `core-aiws` and `memory-aiws`; optional domain plugins are discovered dynamically when they are installed.
+If you use additional marketplaces, pass them to the helper with repeated `--trusted-marketplace <identifier>` flags so those installed plugins are included in registry bootstrap and any shared-memory imports or outboxes they declare.
 
 ## Current State
 
@@ -181,6 +184,13 @@ aiws-host-memory bootstrap
 Cowork v1 uses the same canonical shared memory that Claude owns under `memory-aiws`. It does not create a second canonical store. `bootstrap-cowork` and `refresh-cowork` attach a Cowork runtime to that Claude-owned memory on the same machine, and `refresh-cowork` rebuilds Cowork imports only.
 
 End users should install through the marketplace, not by cloning or symlinking the repo.
+
+## Multi-marketplace rules
+
+- `plugin_id` is the logical capability identity inside one local AIWS installation
+- the same `plugin_id` may move between marketplaces over time and AIWS will migrate the runtime state it owns for that logical plugin
+- if the same `plugin_id` is concurrently installed from more than one trusted marketplace, bootstrap fails until only one active copy remains
+- `memory-aiws` remains one canonical local store in v1, and plugins participate in it only through their declared shared-memory scopes
 
 ## Read More
 

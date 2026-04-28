@@ -27,6 +27,7 @@
     },
     "public_skills": {
       "type": "array",
+      "description": "Plugin-exposed skills. In v1 this field name is retained for compatibility and does not imply internet-public visibility.",
       "items": {
         "type": "string",
         "minLength": 1
@@ -34,6 +35,7 @@
     },
     "public_agents": {
       "type": "array",
+      "description": "Plugin-exposed agents. In v1 this field name is retained for compatibility and does not imply internet-public visibility.",
       "items": {
         "type": "string",
         "minLength": 1

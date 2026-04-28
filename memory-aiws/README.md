@@ -29,6 +29,7 @@ Runtime note:
 - canonical durable shared memory lives under `${CLAUDE_PLUGIN_DATA}/shared-memory/` when `memory-aiws` is running
 - for `memory-aiws@ai-workspace`, that would resolve to `~/.claude/plugins/data/memory-aiws-ai-workspace/shared-memory/`
 - `memory-aiws` defines the consolidation and export logic, but a host-side shared-memory bridge executes refresh and consumer import updates
+- in v1, public, company, unit, and personal marketplaces still converge into this same canonical local shared-memory store
 
 ## Reference Runtime
 
@@ -81,5 +82,7 @@ aiws-host-memory doctor
 
 Run `aiws-host-memory bootstrap` before the first `refresh-shared`. The refresh command depends on the helper config, the registry snapshot, and the canonical runtime all being in place.
 If you already installed an older helper release, reinstall it and rerun `bootstrap` once so the managed hook moves from `Stop` to `SessionEnd`.
+
+Multi-marketplace support in v1 keeps one canonical store and one local runtime root per logical `plugin_id`. It does not introduce marketplace-specific memory stores, visibility fields, or `company.*` / `unit.*` scope taxonomies.
 
 Producer-side candidate staging stays inside the producer plugin. For `data-analysis-aiws`, use [stage_shared_memory_candidate.py](../data-analysis-aiws/scripts/stage_shared_memory_candidate.py) through the plugin-local wrapper, not through repo-root bridge code.

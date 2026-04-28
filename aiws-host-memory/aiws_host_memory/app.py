@@ -91,13 +91,20 @@ class PluginInstall:
     plugin_root: Path
     plugin_data: Path
     contract_path: Path
+    marketplace_id: str | None = None
+    install_key: str | None = None
 
     def to_payload(self) -> dict[str, str]:
-        return {
+        payload = {
             "plugin_root": str(self.plugin_root),
             "plugin_data": str(self.plugin_data),
             "contract_path": str(self.contract_path),
         }
+        if self.marketplace_id is not None:
+            payload["marketplace_id"] = self.marketplace_id
+        if self.install_key is not None:
+            payload["install_key"] = self.install_key
+        return payload
 
 
 @dataclass
@@ -178,10 +185,45 @@ def parse_install_from_payload(plugin_id: str, payload: dict[str, Any]) -> Plugi
         plugin_root=Path(payload["plugin_root"]),
         plugin_data=Path(payload["plugin_data"]),
         contract_path=Path(payload["contract_path"]),
+        marketplace_id=payload.get("marketplace_id"),
+        install_key=payload.get("install_key"),
     )
 
 
-def config_payload(paths: HelperPaths, installs: dict[str, PluginInstall]) -> dict[str, Any]:
+def normalize_trusted_marketplaces(values: list[str] | tuple[str, ...]) -> list[str]:
+    normalized: list[str] = []
+    for value in values:
+        candidate = value.strip()
+        if candidate and candidate not in normalized:
+            normalized.append(candidate)
+    return normalized or [DEFAULT_MARKETPLACE]
+
+
+def resolve_trusted_marketplaces(
+    paths: HelperPaths,
+    args: argparse.Namespace,
+    *,
+    fallback_paths: HelperPaths | None = None,
+) -> list[str]:
+    explicit = getattr(args, "trusted_marketplace", None) or []
+    if explicit:
+        return normalize_trusted_marketplaces(explicit)
+    existing = load_json(paths.config_path, {})
+    configured = existing.get("trusted_marketplaces", [])
+    if configured:
+        return normalize_trusted_marketplaces(configured)
+    if fallback_paths is not None:
+        fallback = load_json(fallback_paths.config_path, {})
+        if fallback.get("trusted_marketplaces"):
+            return normalize_trusted_marketplaces(fallback["trusted_marketplaces"])
+    return [DEFAULT_MARKETPLACE]
+
+
+def config_payload(
+    paths: HelperPaths,
+    installs: dict[str, PluginInstall],
+    trusted_marketplaces: list[str],
+) -> dict[str, Any]:
     now = utc_now_iso()
     existing = load_json(paths.config_path, {})
     created_ts = existing.get("created_ts", now)
@@ -194,6 +236,7 @@ def config_payload(paths: HelperPaths, installs: dict[str, PluginInstall]) -> di
             plugin_id: install.to_payload()
             for plugin_id, install in installs.items()
         },
+        "trusted_marketplaces": trusted_marketplaces,
     }
     if paths.settings_path is not None:
         payload["settings_path"] = str(paths.settings_path)
@@ -241,8 +284,9 @@ def cowork_config_payload(
     paths: HelperPaths,
     installs: dict[str, PluginInstall],
     owner: CanonicalOwner,
+    trusted_marketplaces: list[str],
 ) -> dict[str, Any]:
-    payload = config_payload(paths, installs)
+    payload = config_payload(paths, installs, trusted_marketplaces)
     payload["claude_owner"] = canonical_owner_payload(owner)
     return payload
 
@@ -332,18 +376,24 @@ def validate_contract(install: PluginInstall) -> dict[str, Any]:
     return contract
 
 
-def guess_marketplace_data_dir(plugin_id: str, marketplace: str | None, data_root: Path) -> Path:
+def marketplace_plugin_data_dir(plugin_id: str, marketplace: str | None, data_root: Path) -> Path:
     suffix = marketplace or DEFAULT_MARKETPLACE
     return data_root / f"{plugin_id}-{suffix}"
 
 
-def detect_installs(paths: HelperPaths) -> dict[str, PluginInstall]:
+def detect_installs(
+    paths: HelperPaths,
+    trusted_marketplaces: list[str],
+) -> tuple[dict[str, PluginInstall], dict[str, list[str]]]:
     payload = load_json(paths.installed_plugins_path, {})
     plugins = payload.get("plugins", {})
     detected: dict[str, PluginInstall] = {}
+    duplicates: dict[str, list[str]] = {}
+    trusted = set(trusted_marketplaces)
     for key, installs in plugins.items():
         plugin_name, _, marketplace = key.partition("@")
-        if marketplace and marketplace != DEFAULT_MARKETPLACE:
+        marketplace_id = marketplace or DEFAULT_MARKETPLACE
+        if marketplace_id not in trusted:
             continue
         if not installs:
             continue
@@ -351,14 +401,21 @@ def detect_installs(paths: HelperPaths) -> dict[str, PluginInstall]:
         contract_path = default_contract_path(install_root, plugin_name)
         if not contract_path.exists():
             continue
-        plugin_data = guess_marketplace_data_dir(plugin_name, marketplace or None, paths.plugin_data_root)
-        detected[plugin_name] = PluginInstall(
+        plugin_data = marketplace_plugin_data_dir(plugin_name, marketplace_id, paths.plugin_data_root)
+        install = PluginInstall(
             plugin_id=plugin_name,
             plugin_root=install_root,
             plugin_data=plugin_data,
             contract_path=contract_path,
+            marketplace_id=marketplace_id,
+            install_key=key,
         )
-    return detected
+        existing = detected.get(plugin_name)
+        if existing is not None and existing.install_key != key:
+            duplicates.setdefault(plugin_name, [existing.install_key]).append(key)
+            continue
+        detected[plugin_name] = install
+    return detected, duplicates
 
 
 def explicit_install_overrides(args: argparse.Namespace) -> dict[str, dict[str, Path | None]]:
@@ -387,6 +444,7 @@ def explicit_install_overrides(args: argparse.Namespace) -> dict[str, dict[str, 
 
 def resolve_claude_memory_install(args: argparse.Namespace) -> tuple[HelperPaths, PluginInstall]:
     claude_paths = helper_paths(claude_home=args.claude_home)
+    trusted_marketplaces = resolve_trusted_marketplaces(claude_paths, args)
     explicit = explicit_install_overrides(args).get("memory-aiws", {})
     explicit_root = explicit.get("root")
     explicit_data = explicit.get("data")
@@ -415,7 +473,14 @@ def resolve_claude_memory_install(args: argparse.Namespace) -> tuple[HelperPaths
         except BootstrapError:
             pass
 
-    detected = detect_installs(claude_paths)
+    detected, duplicates = detect_installs(claude_paths, trusted_marketplaces)
+    if "memory-aiws" in duplicates:
+        raise BootstrapError(
+            "Duplicate plugin_id detected across trusted marketplaces for memory-aiws: "
+            + " and ".join(duplicates["memory-aiws"])
+            + ". Keep only one active installed copy for this plugin_id or pass explicit "
+            "--memory-plugin-root/--memory-plugin-data overrides."
+        )
     install = detected.get("memory-aiws")
     if install is None:
         raise BootstrapError(
@@ -426,21 +491,42 @@ def resolve_claude_memory_install(args: argparse.Namespace) -> tuple[HelperPaths
     return claude_paths, install
 
 
-def resolve_installs(args: argparse.Namespace, paths: HelperPaths) -> dict[str, PluginInstall]:
-    detected = detect_installs(paths)
+def resolve_installs(
+    args: argparse.Namespace,
+    paths: HelperPaths,
+    trusted_marketplaces: list[str],
+) -> dict[str, PluginInstall]:
+    detected, duplicates = detect_installs(paths, trusted_marketplaces)
     explicit = explicit_install_overrides(args)
     installs: dict[str, PluginInstall] = {}
+
+    unresolved_duplicates = []
+    for plugin_id, install_keys in sorted(duplicates.items()):
+        override = explicit.get(plugin_id, {})
+        if override.get("root") and override.get("data"):
+            continue
+        unresolved_duplicates.append(f"{plugin_id}: {' and '.join(install_keys)}")
+    if unresolved_duplicates:
+        raise BootstrapError(
+            "Duplicate plugin_id detected across trusted marketplaces. "
+            "Keep only one active installed copy or pass explicit "
+            "--plugin-root/--plugin-data overrides for the affected plugin_id values: "
+            + "; ".join(unresolved_duplicates)
+        )
 
     for plugin_id in sorted(set(detected) | set(explicit)):
         candidate = detected.get(plugin_id)
         root = explicit.get(plugin_id, {}).get("root") or (candidate.plugin_root if candidate else None)
         data = explicit.get(plugin_id, {}).get("data") or (candidate.plugin_data if candidate else None)
         if root and data:
+            override_used = explicit.get(plugin_id, {}).get("root") or explicit.get(plugin_id, {}).get("data")
             installs[plugin_id] = PluginInstall(
                 plugin_id=plugin_id,
                 plugin_root=root,
                 plugin_data=data,
                 contract_path=default_contract_path(root, plugin_id),
+                marketplace_id=None if override_used else (candidate.marketplace_id if candidate else None),
+                install_key=None if override_used else (candidate.install_key if candidate else None),
             )
 
     missing = [plugin_id for plugin_id in INFRASTRUCTURE_PLUGIN_IDS if plugin_id not in installs]
@@ -452,6 +538,57 @@ def resolve_installs(args: argparse.Namespace, paths: HelperPaths) -> dict[str, 
             + "--plugin-root/--plugin-data assignments."
         )
     return installs
+
+
+def managed_runtime_paths(plugin_id: str) -> tuple[Path, ...]:
+    if plugin_id == "memory-aiws":
+        return (
+            Path("shared-memory"),
+            Path("shared-memory-versions"),
+            Path("exports"),
+            Path("state"),
+            Path("store"),
+            Path("quarantine"),
+        )
+    return (
+        Path("shared-memory"),
+        Path("imports"),
+        Path("_shared_memory_outbox"),
+    )
+
+
+def load_previous_installs(paths: HelperPaths) -> dict[str, PluginInstall]:
+    payload = load_json(paths.config_path, {})
+    installs_payload = payload.get("plugins", {})
+    return {
+        plugin_id: parse_install_from_payload(plugin_id, plugin_payload)
+        for plugin_id, plugin_payload in installs_payload.items()
+    }
+
+
+def copy_managed_path(source: Path, destination: Path) -> None:
+    ensure_dir(destination.parent)
+    if source.is_symlink():
+        os.symlink(os.readlink(source), destination)
+    elif source.is_dir():
+        shutil.copytree(source, destination, symlinks=True)
+    else:
+        shutil.copy2(source, destination)
+
+
+def migrate_managed_runtime_state(paths: HelperPaths, installs: dict[str, PluginInstall]) -> None:
+    previous_installs = load_previous_installs(paths)
+    for plugin_id, install in installs.items():
+        previous = previous_installs.get(plugin_id)
+        if previous is None or previous.plugin_data == install.plugin_data:
+            continue
+        for relative_path in managed_runtime_paths(plugin_id):
+            source = previous.plugin_data / relative_path
+            destination = install.plugin_data / relative_path
+            if not (source.exists() or source.is_symlink()) or destination.exists() or destination.is_symlink():
+                continue
+            copy_managed_path(source, destination)
+            remove_path(source)
 
 
 def resolved_contracts(installs: dict[str, PluginInstall]) -> tuple[dict[str, PluginInstall], dict[str, dict[str, Any]], dict[str, str]]:
@@ -751,6 +888,7 @@ def owner_resolution_args(claude_home: Path) -> argparse.Namespace:
         data_analysis_plugin_data=None,
         plugin_root=[],
         plugin_data=[],
+        trusted_marketplace=[],
     )
 
 
@@ -1020,7 +1158,13 @@ def bootstrap_cowork(paths: HelperPaths, args: argparse.Namespace) -> dict[str, 
         "imports_written": False,
         "config_written": False,
     }
-    installs, contracts, skipped_plugins = resolved_contracts(resolve_installs(args, paths))
+    trusted_marketplaces = resolve_trusted_marketplaces(
+        paths,
+        args,
+        fallback_paths=helper_paths(claude_home=args.claude_home),
+    )
+    installs, contracts, skipped_plugins = resolved_contracts(resolve_installs(args, paths, trusted_marketplaces))
+    migrate_managed_runtime_state(paths, installs)
     owner = resolve_claude_owner(args)
     phases["claude_owner_resolved"] = True
     backup_root, backups = backup_plugin_data_roots(installs)
@@ -1053,14 +1197,19 @@ def bootstrap_cowork(paths: HelperPaths, args: argparse.Namespace) -> dict[str, 
         phases["imports_written"] = True
 
         ensure_dir(paths.helper_home)
-        write_json_atomic(paths.config_path, cowork_config_payload(paths, installs, owner))
+        write_json_atomic(paths.config_path, cowork_config_payload(paths, installs, owner, trusted_marketplaces))
         phases["config_written"] = True
 
         result = {
             "status": "ok",
             "config_path": str(paths.config_path),
+            "trusted_marketplaces": trusted_marketplaces,
             "registered_plugins": registered,
             "skipped_plugins": skipped_plugins,
+            "plugins": {
+                plugin_id: install.to_payload()
+                for plugin_id, install in installs.items()
+            },
             "contracts": {
                 plugin_id: compute_contract_digest(install.contract_path)
                 for plugin_id, install in installs.items()
@@ -1296,10 +1445,12 @@ def bootstrap(paths: HelperPaths, args: argparse.Namespace) -> dict[str, Any]:
         "canonical_bootstrapped": False,
         "hook_upserted": False,
     }
-    installs, contracts, skipped_plugins = resolved_contracts(resolve_installs(args, paths))
+    trusted_marketplaces = resolve_trusted_marketplaces(paths, args)
+    installs, contracts, skipped_plugins = resolved_contracts(resolve_installs(args, paths, trusted_marketplaces))
+    migrate_managed_runtime_state(paths, installs)
 
     try:
-        config = config_payload(paths, installs)
+        config = config_payload(paths, installs, trusted_marketplaces)
         ensure_dir(paths.helper_home)
         write_json_atomic(paths.config_path, config)
         phases["config_written"] = True
@@ -1334,8 +1485,13 @@ def bootstrap(paths: HelperPaths, args: argparse.Namespace) -> dict[str, Any]:
             "status": "ok",
             "config_path": str(paths.config_path),
             "settings_path": str(paths.settings_path),
+            "trusted_marketplaces": trusted_marketplaces,
             "registered_plugins": registered,
             "skipped_plugins": skipped_plugins,
+            "plugins": {
+                plugin_id: install.to_payload()
+                for plugin_id, install in installs.items()
+            },
             "contracts": {
                 plugin_id: compute_contract_digest(install.contract_path)
                 for plugin_id, install in installs.items()
@@ -1521,6 +1677,12 @@ def build_parser() -> argparse.ArgumentParser:
             action="append",
             default=[],
             help="Optional plugin data override in the form <plugin_id>=<path>.",
+        )
+        command.add_argument(
+            "--trusted-marketplace",
+            action="append",
+            default=[],
+            help="Trusted marketplace identifier exactly as it appears in installed_plugins.json. Repeat to allow more than one marketplace.",
         )
 
     bootstrap_cmd = subparsers.add_parser("bootstrap")

@@ -31,7 +31,9 @@ The helper requires only the infrastructure plugins:
 - `core-aiws`
 - `memory-aiws`
 
-Domain plugins stay manual opt-in. When they are installed, the helper discovers them from the workspace marketplace metadata and includes them in the registry and shared-memory import flow automatically.
+Domain plugins stay manual opt-in. When they are installed, the helper discovers them from the workspace marketplace metadata and includes them in the registry. Plugins participate in shared-memory imports or outboxes only if their contracts declare the relevant shared-memory scopes.
+
+The helper can trust more than one Claude marketplace in v1. Trust is matched against the exact marketplace identifier recorded in `installed_plugins.json`, not against a GitHub URL. Use repeated `--trusted-marketplace <identifier>` flags on `bootstrap` or `bootstrap-cowork` when you want AIWS to discover plugins from additional company, unit, or personal marketplaces.
 
 Claude Code remains the reference host. Cowork support is same-machine only in v1 and uses explicit refresh commands. Claude owns canonical shared memory. Cowork reads from and writes through that Claude-owned canonical store, but `refresh-cowork` rebuilds Cowork imports only.
 
@@ -53,7 +55,7 @@ Cowork uses these runtime roots by default:
 - helper config: `~/.cowork/aiws-host-memory/config.json`
 - helper state: `~/.cowork/aiws-host-memory/state.json`
 - installed plugins: `~/.cowork/plugins/installed_plugins.json`
-- plugin data: `~/.cowork/plugins/data/<plugin-id>/`
+- plugin data: `~/.cowork/plugins/data/<plugin-id>-ai-workspace/`
 
 Cowork bootstrap requires a bootstrapped Claude `memory-aiws` install. If Claude lives outside the default `~/.claude`, point the helper at it explicitly:
 
@@ -79,3 +81,10 @@ aiws-host-memory bootstrap \
 For Cowork, the same flags apply, and `--memory-plugin-root` / `--memory-plugin-data` can be used to point Cowork at a non-standard Claude `memory-aiws` install when install metadata is not enough.
 
 The legacy `--data-analysis-plugin-root` and `--data-analysis-plugin-data` flags still work for compatibility.
+
+## Multi-marketplace rules
+
+- `plugin_id` is the logical capability identity inside one local AIWS installation
+- the same `plugin_id` may move between trusted marketplaces over time and keep using the same local runtime lineage
+- if the same `plugin_id` is installed from more than one trusted marketplace at the same time, bootstrap fails until only one active copy remains
+- marketplace membership affects installation and discovery only; it does not create separate shared-memory stores or marketplace-specific plugin-data roots in v1
