@@ -26,6 +26,12 @@ def build_parser() -> argparse.ArgumentParser:
     materialize.add_argument("--scope")
     materialize.add_argument("--version")
 
+    install_host = subparsers.add_parser("install-host")
+    install_host.add_argument("--host-kind", required=True)
+    install_host.add_argument("--host-id")
+    install_host.add_argument("--config-root", type=Path)
+    install_host.add_argument("--dry-run", action="store_true")
+
     subparsers.add_parser("list-local")
 
     return parser
@@ -52,6 +58,13 @@ def main(argv: list[str] | None = None) -> int:
             host_id=args.host_id,
             scope=args.scope,
             version=args.version,
+        )
+    elif args.command == "install-host":
+        result = runtime.install_host(
+            host_kind=args.host_kind,
+            host_id=args.host_id,
+            config_root=args.config_root,
+            dry_run=args.dry_run,
         )
     else:
         result = runtime.list_local_skills()

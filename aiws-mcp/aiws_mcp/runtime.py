@@ -17,6 +17,10 @@ from .builtins import BUILTIN_SKILLS, RESOURCES
 
 NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 HOST_KINDS = {"claude-code", "cowork", "codex"}
+AIWS_MANAGED_MARKER = ".aiws-managed.json"
+AIWS_MANAGED_BY = "aiws"
+AIWS_INSTALLED_BY = "aiws-mcp"
+AIWS_MANAGED_SCHEMA_VERSION = 1
 
 
 class SkillValidationError(ValueError):
@@ -166,7 +170,39 @@ def is_relative_to(path: Path, root: Path) -> bool:
         return False
 
 
+def validate_skill_id_component(skill_id: str) -> None:
+    if (
+        not skill_id
+        or skill_id in {".", ".."}
+        or skill_id.startswith(".")
+        or "/" in skill_id
+        or "\\" in skill_id
+        or Path(skill_id).is_absolute()
+        or Path(skill_id).name != skill_id
+        or not NAME_RE.fullmatch(skill_id)
+        or "--" in skill_id
+    ):
+        raise SkillValidationError(f"Invalid skill id for host install: {skill_id!r}")
+
+
+def validate_host_id_component(host_id: str) -> None:
+    if (
+        not host_id
+        or host_id in {".", ".."}
+        or host_id.startswith(".")
+        or "/" in host_id
+        or "\\" in host_id
+        or Path(host_id).is_absolute()
+        or Path(host_id).name != host_id
+    ):
+        raise ValueError(f"Invalid host_id: {host_id!r}")
+
+
 def safe_copytree(source: Path, destination: Path) -> None:
+    if source.is_symlink():
+        raise ValueError(f"Skill bundle source must not be a symlink: {source}")
+    if not source.is_dir():
+        raise ValueError(f"Skill bundle source must be a directory: {source}")
     for item in source.rglob("*"):
         if item.is_symlink():
             raise ValueError(f"Symlinks are not allowed in skill bundles: {item}")
@@ -190,6 +226,30 @@ def bundle_digest(root: Path) -> str:
     return "sha256:" + digest.hexdigest()
 
 
+def tree_digest(root: Path, *, exclude_root_marker: bool = False) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        if path.is_symlink():
+            raise ValueError(f"Symlinks are not allowed in skill bundles: {path}")
+        relative_path = path.relative_to(root).as_posix()
+        if exclude_root_marker and relative_path == AIWS_MANAGED_MARKER:
+            continue
+        relative = relative_path.encode("utf-8")
+        if path.is_dir():
+            digest.update(b"D")
+            digest.update(len(relative).to_bytes(8, "big"))
+            digest.update(relative)
+            continue
+        if path.is_file():
+            content = path.read_bytes()
+            digest.update(b"F")
+            digest.update(len(relative).to_bytes(8, "big"))
+            digest.update(relative)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+    return "sha256:" + digest.hexdigest()
+
+
 class AiwsRuntime:
     def __init__(self, root: Path | None = None, env: dict[str, str] | None = None) -> None:
         self.root = (root or Path("~/.aiws").expanduser()).resolve()
@@ -210,6 +270,8 @@ class AiwsRuntime:
     ) -> HostIdentity:
         if host_kind is not None and host_kind not in HOST_KINDS:
             raise ValueError(f"Unsupported host kind: {host_kind}")
+        if host_id is not None:
+            validate_host_id_component(host_id)
 
         if host_id is None:
             if host_kind is None:
@@ -221,6 +283,9 @@ class AiwsRuntime:
 
         if host_json.exists():
             payload = load_json(host_json, {})
+            validate_host_id_component(payload["host_id"])
+            if payload["host_id"] != host_id:
+                raise ValueError("Stored host_id conflicts with host directory.")
             existing = HostIdentity(
                 host_id=payload["host_id"],
                 host_kind=payload["host_kind"],
@@ -498,6 +563,420 @@ class AiwsRuntime:
             "adapter_path": str(adapter_root),
             "integrity_hash": integrity_hash,
         }
+
+    def install_host(
+        self,
+        *,
+        host_kind: str,
+        host_id: str | None = None,
+        config_root: Path | None = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        if host_kind != "codex":
+            raise ValueError("install-host currently supports only host_kind='codex'.")
+        if host_id is not None:
+            validate_host_id_component(host_id)
+
+        host = self._resolve_host_for_install(
+            host_kind=host_kind,
+            host_id=host_id,
+            config_root=(config_root.resolve() if config_root is not None else None),
+            dry_run=True,
+        )
+        resolved_config_root = host.config_root
+        host_root = self.root / "hosts" / host.host_id
+        hosts_root = self.root / "hosts"
+        adapter_root = host_root / "adapter"
+        adapter_skills_root = adapter_root / "skills"
+        skills_root = resolved_config_root / "skills"
+
+        result: dict[str, Any] = {
+            "status": "ok",
+            "host_id": host.host_id,
+            "codex_skills_root": str(skills_root),
+            "adapter_skills_root": str(adapter_skills_root),
+            "installed": [],
+            "unchanged": [],
+            "conflicts": [],
+            "errors": [],
+            "planned_writes": [],
+            "write_paths": [],
+            "stale_aiws_managed": [],
+            "restart_required": False,
+            "dry_run": dry_run,
+        }
+
+        if not is_relative_to(skills_root.absolute(), resolved_config_root.absolute()) or skills_root.is_symlink():
+            return {
+                **result,
+                "status": "conflict",
+                "conflicts": [
+                    {
+                        "path": str(skills_root),
+                        "reason": "Codex skills root is a symlink.",
+                    }
+                ],
+            }
+
+        if hosts_root.is_symlink() or host_root.is_symlink():
+            result["status"] = "failed"
+            result["errors"] = [
+                {
+                    "path": str(host_root),
+                    "reason": "AIWS host path must not contain symlinks.",
+                }
+            ]
+            return result
+        host_root_resolved = host_root.resolve() if host_root.exists() else host_root.absolute()
+        if host_root.exists() and not is_relative_to(host_root_resolved, self.root):
+            result["status"] = "failed"
+            result["errors"] = [
+                {
+                    "path": str(host_root),
+                    "reason": "AIWS host root escapes AIWS runtime root.",
+                }
+            ]
+            return result
+        if adapter_root.is_symlink() or adapter_skills_root.is_symlink():
+            result["status"] = "failed"
+            result["errors"] = [
+                {
+                    "path": str(adapter_skills_root),
+                    "reason": "Adapter skills path must not contain symlinks.",
+                }
+            ]
+            return result
+        if adapter_root.exists() and not is_relative_to(adapter_root.resolve(), host_root_resolved):
+            result["status"] = "failed"
+            result["errors"] = [
+                {
+                    "path": str(adapter_root),
+                    "reason": "Adapter root escapes AIWS host root.",
+                }
+            ]
+            return result
+        if adapter_skills_root.exists() and not is_relative_to(adapter_skills_root.resolve(), host_root_resolved):
+            result["status"] = "failed"
+            result["errors"] = [
+                {
+                    "path": str(adapter_skills_root),
+                    "reason": "Adapter skills root escapes AIWS host root.",
+                }
+            ]
+            return result
+
+        actions = self._codex_install_actions(
+            host=host,
+            adapter_skills_root=adapter_skills_root,
+            skills_root=skills_root,
+        )
+        result["stale_aiws_managed"] = actions["stale_aiws_managed"]
+        result["unchanged"] = actions["unchanged"]
+        result["conflicts"] = actions["conflicts"]
+        result["planned_writes"] = actions["planned_writes"]
+
+        if actions["errors"]:
+            result["status"] = "failed"
+            result["errors"] = actions["errors"]
+            return result
+        if actions["conflicts"]:
+            result["status"] = "conflict"
+            return result
+        if not actions["install"]:
+            result["status"] = "unchanged" if actions["unchanged"] else "no_skills"
+            return result
+        if dry_run:
+            result["status"] = "planned"
+            result["restart_required"] = bool(actions["install"])
+            return result
+
+        if host_id is not None:
+            validate_host_id_component(host_id)
+        host = self._resolve_host_for_install(
+            host_kind=host_kind,
+            host_id=host_id,
+            config_root=resolved_config_root,
+            dry_run=False,
+        )
+        ensure_dir(skills_root)
+        if skills_root.is_symlink() or not is_relative_to(skills_root.resolve(), resolved_config_root.resolve()):
+            result["status"] = "conflict"
+            result["conflicts"].append(
+                {
+                    "path": str(skills_root),
+                    "reason": "Codex skills root changed to an unsafe path before install.",
+                }
+            )
+            return result
+        for action in actions["install"]:
+            try:
+                self._install_codex_skill(
+                    source=Path(action["source_path"]),
+                    target=Path(action["target_path"]),
+                    marker=action["marker"],
+                )
+            except Exception as exc:  # pragma: no cover - hard to trigger without platform-specific faults
+                result["status"] = "failed"
+                result["errors"].append(
+                    {
+                        "skill_id": action["skill_id"],
+                        "path": action["target_path"],
+                        "reason": str(exc),
+                    }
+                )
+                return result
+            result["installed"].append(action["skill_id"])
+            result["write_paths"].append(action["target_path"])
+
+        result["restart_required"] = bool(result["installed"])
+        return result
+
+    def _resolve_host_for_install(
+        self,
+        *,
+        host_kind: str,
+        host_id: str | None,
+        config_root: Path | None,
+        dry_run: bool,
+    ) -> HostIdentity:
+        resolved_config_root = (config_root or default_config_root(host_kind, self.env)).resolve()
+        if host_id is None:
+            if dry_run:
+                return HostIdentity(
+                    host_id=derived_host_id(host_kind, resolved_config_root),
+                    host_kind=host_kind,
+                    config_root=resolved_config_root,
+                )
+            return self.ensure_host(host_kind=host_kind, config_root=resolved_config_root)
+
+        validate_host_id_component(host_id)
+        host_json = self.root / "hosts" / host_id / "host.json"
+        if host_json.exists():
+            payload = load_json(host_json, {})
+            validate_host_id_component(payload["host_id"])
+            if payload["host_id"] != host_id:
+                raise ValueError("Stored host_id conflicts with host directory.")
+            existing = HostIdentity(
+                host_id=payload["host_id"],
+                host_kind=payload["host_kind"],
+                config_root=Path(payload["config_root"]).resolve(),
+            )
+            if existing.host_kind != host_kind:
+                raise ValueError("Supplied host_kind conflicts with existing host.json.")
+            if config_root is not None and existing.config_root != resolved_config_root:
+                raise ValueError("Supplied config_root conflicts with existing host.json.")
+            return existing
+
+        if dry_run:
+            return HostIdentity(host_id=host_id, host_kind=host_kind, config_root=resolved_config_root)
+        return self.ensure_host(host_kind=host_kind, host_id=host_id, config_root=resolved_config_root)
+
+    def _codex_install_actions(
+        self,
+        *,
+        host: HostIdentity,
+        adapter_skills_root: Path,
+        skills_root: Path,
+    ) -> dict[str, Any]:
+        actions: dict[str, Any] = {
+            "install": [],
+            "unchanged": [],
+            "conflicts": [],
+            "errors": [],
+            "planned_writes": [],
+            "stale_aiws_managed": [],
+        }
+        source_skill_ids: set[str] = set()
+
+        adapter_root = adapter_skills_root.parent
+        manifest_path = adapter_root / "aiws-codex-export.json"
+        adapter_skills_root_resolved = adapter_skills_root.resolve() if adapter_skills_root.exists() else adapter_skills_root.absolute()
+        if manifest_path.is_symlink():
+            actions["errors"].append({"path": str(manifest_path), "reason": "Codex adapter manifest is a symlink."})
+        if manifest_path.exists() and not is_relative_to(manifest_path.resolve(), adapter_root.resolve()):
+            actions["errors"].append({"path": str(manifest_path), "reason": "Codex adapter manifest escapes adapter root."})
+        if adapter_skills_root.exists() and not adapter_skills_root.is_dir():
+            actions["errors"].append({"path": str(adapter_skills_root), "reason": "Adapter skills path is not a directory."})
+        elif manifest_path.exists() and manifest_path.is_file():
+            try:
+                manifest = load_json(manifest_path, {"skills": []})
+            except json.JSONDecodeError as exc:
+                actions["errors"].append({"path": str(manifest_path), "reason": str(exc)})
+                manifest = {"skills": []}
+            if not isinstance(manifest, dict):
+                actions["errors"].append({"path": str(manifest_path), "reason": "Codex adapter manifest must be a JSON object."})
+                manifest = {"skills": []}
+            manifest_skills = manifest.get("skills", [])
+            if not isinstance(manifest_skills, list):
+                actions["errors"].append({"path": str(manifest_path), "reason": "Codex adapter manifest skills must be a list."})
+                manifest_skills = []
+            seen_skill_ids: set[str] = set()
+            for item in manifest_skills:
+                if not isinstance(item, dict):
+                    actions["errors"].append({"path": str(manifest_path), "reason": "Codex adapter manifest skill entries must be objects."})
+                    continue
+                skill_id = item.get("skill_id", "")
+                relative_source = item.get("path", "")
+                if not isinstance(skill_id, str) or not isinstance(relative_source, str):
+                    actions["errors"].append({"path": str(manifest_path), "reason": "Codex adapter manifest skill_id and path must be strings."})
+                    continue
+                try:
+                    validate_skill_id_component(skill_id)
+                except SkillValidationError as exc:
+                    actions["errors"].append({"skill_id": skill_id, "path": str(manifest_path), "reason": str(exc)})
+                    continue
+                if skill_id in seen_skill_ids:
+                    actions["errors"].append({"skill_id": skill_id, "path": str(manifest_path), "reason": "Duplicate skill id in Codex adapter manifest."})
+                    continue
+                seen_skill_ids.add(skill_id)
+                if (
+                    not relative_source
+                    or Path(relative_source).is_absolute()
+                    or "\\" in relative_source
+                    or ".." in Path(relative_source).parts
+                    or relative_source != f"skills/{skill_id}"
+                ):
+                    actions["errors"].append({"skill_id": skill_id, "path": relative_source, "reason": "Invalid Codex adapter manifest path."})
+                    continue
+                source = adapter_root / relative_source
+                if source.is_symlink():
+                    actions["errors"].append({"skill_id": skill_id, "path": str(source), "reason": "Source skill is a symlink."})
+                    continue
+                if not source.exists() or not source.is_dir():
+                    actions["errors"].append({"skill_id": skill_id, "path": str(source), "reason": "Manifest source skill is missing."})
+                    continue
+                source_resolved = source.resolve()
+                if not is_relative_to(source_resolved, adapter_skills_root_resolved):
+                    actions["errors"].append({"skill_id": skill_id, "path": str(source), "reason": "Source path escapes adapter root."})
+                    continue
+                target = skills_root / skill_id
+                target_resolved = target.resolve() if target.exists() else target.absolute()
+                skills_root_resolved = skills_root.resolve() if skills_root.exists() else skills_root.absolute()
+                if not is_relative_to(target_resolved, skills_root_resolved):
+                    actions["errors"].append({"skill_id": skill_id, "path": str(target), "reason": "Target path escapes Codex skills root."})
+                    continue
+
+                source_skill_ids.add(skill_id)
+                try:
+                    source_digest = tree_digest(source_resolved, exclude_root_marker=True)
+                except ValueError as exc:
+                    actions["errors"].append({"skill_id": skill_id, "path": str(source), "reason": str(exc)})
+                    continue
+
+                marker = {
+                    "host_id": host.host_id,
+                    "installed_by": AIWS_INSTALLED_BY,
+                    "managed_by": AIWS_MANAGED_BY,
+                    "schema_version": AIWS_MANAGED_SCHEMA_VERSION,
+                    "skill_id": skill_id,
+                    "source_adapter_path": str(source_resolved),
+                    "source_digest": source_digest,
+                }
+                existing_marker = self._codex_target_marker(target)
+                if target.is_symlink():
+                    actions["conflicts"].append({"skill_id": skill_id, "path": str(target), "reason": "Target skill path is a symlink."})
+                    continue
+                if target.exists() and not self._valid_codex_marker(existing_marker, skill_id, host.host_id):
+                    actions["conflicts"].append({"skill_id": skill_id, "path": str(target), "reason": "Target is not AIWS-owned by this host."})
+                    continue
+                if target.exists() and existing_marker == marker:
+                    try:
+                        target_digest = tree_digest(target, exclude_root_marker=True)
+                    except ValueError as exc:
+                        actions["conflicts"].append({"skill_id": skill_id, "path": str(target), "reason": str(exc)})
+                        continue
+                    if target_digest == source_digest:
+                        actions["unchanged"].append(skill_id)
+                        continue
+
+                action = {
+                    "skill_id": skill_id,
+                    "source_path": str(source_resolved),
+                    "target_path": str(target),
+                    "marker": marker,
+                }
+                actions["install"].append(action)
+                actions["planned_writes"].append(str(target))
+
+        if skills_root.exists() and skills_root.is_dir() and not skills_root.is_symlink():
+            for target in sorted(item for item in skills_root.iterdir() if item.is_dir() and not item.is_symlink()):
+                marker = self._codex_target_marker(target)
+                skill_id = marker.get("skill_id")
+                if (
+                    marker.get("managed_by") == AIWS_MANAGED_BY
+                    and marker.get("installed_by") == AIWS_INSTALLED_BY
+                    and marker.get("schema_version") == AIWS_MANAGED_SCHEMA_VERSION
+                    and marker.get("host_id") == host.host_id
+                    and skill_id not in source_skill_ids
+                ):
+                    actions["stale_aiws_managed"].append(str(target))
+
+        return actions
+
+    def _codex_target_marker(self, target: Path) -> dict[str, Any]:
+        marker_path = target / AIWS_MANAGED_MARKER
+        if marker_path.is_symlink() or not marker_path.exists() or not marker_path.is_file():
+            return {}
+        try:
+            return load_json(marker_path, {})
+        except json.JSONDecodeError:
+            return {}
+
+    def _valid_codex_marker(self, marker: dict[str, Any], skill_id: str, host_id: str) -> bool:
+        return (
+            marker.get("managed_by") == AIWS_MANAGED_BY
+            and marker.get("installed_by") == AIWS_INSTALLED_BY
+            and marker.get("schema_version") == AIWS_MANAGED_SCHEMA_VERSION
+            and marker.get("skill_id") == skill_id
+            and marker.get("host_id") == host_id
+        )
+
+    def _install_codex_skill(self, *, source: Path, target: Path, marker: dict[str, Any]) -> None:
+        skills_root = target.parent
+        temp = skills_root / f".{target.name}.aiws-tmp-{uuid.uuid4().hex}"
+        backup = skills_root / f".{target.name}.aiws-backup-{uuid.uuid4().hex}"
+        try:
+            self._assert_safe_codex_target(target, marker)
+            safe_copytree(source, temp)
+            marker = dict(marker)
+            marker["source_digest"] = tree_digest(temp, exclude_root_marker=True)
+            write_json_atomic(temp / AIWS_MANAGED_MARKER, marker)
+            self._assert_safe_codex_target(target, marker)
+            if target.exists():
+                target.rename(backup)
+                try:
+                    temp.rename(target)
+                except Exception:
+                    if not target.exists() and backup.exists():
+                        backup.rename(target)
+                    raise
+                shutil.rmtree(backup)
+            else:
+                temp.rename(target)
+        except Exception:
+            if temp.exists() or temp.is_symlink():
+                if temp.is_dir() and not temp.is_symlink():
+                    shutil.rmtree(temp)
+                else:
+                    temp.unlink()
+            raise
+
+    def _assert_safe_codex_target(self, target: Path, marker: dict[str, Any]) -> None:
+        skills_root = target.parent
+        if skills_root.is_symlink():
+            raise ValueError("Codex skills root is a symlink.")
+        skills_root_resolved = skills_root.resolve()
+        target_resolved = target.resolve() if target.exists() else target.absolute()
+        if not is_relative_to(target_resolved, skills_root_resolved):
+            raise ValueError("Target path escapes Codex skills root.")
+        if target.is_symlink():
+            raise ValueError("Target skill path is a symlink.")
+        if target.exists() and not self._valid_codex_marker(
+            self._codex_target_marker(target),
+            marker["skill_id"],
+            marker["host_id"],
+        ):
+            raise ValueError("Target is not AIWS-owned by this host.")
 
     def _safe_scope(self, scope: str) -> str:
         return scope.replace(":", "_").replace("/", "_")
