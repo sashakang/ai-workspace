@@ -37,6 +37,29 @@ class AiwsProductivityPluginTests(unittest.TestCase):
         self.assertIn("do not perform daily planning", content.lower())
         self.assertIn("do not sync tasks", content.lower())
 
+    def test_aiws_productivity_declares_optional_slack_connector(self) -> None:
+        contract = json.loads(
+            (REPO_ROOT / "aiws-productivity" / "contracts" / "aiws-productivity.contract.json").read_text()
+        )
+        mcp_config = json.loads((REPO_ROOT / "aiws-productivity" / ".mcp.json").read_text())
+
+        slack = next(conn for conn in contract["connectors"] if conn["id"] == "slack")
+        self.assertEqual(slack["kind"], "host-managed-mcp")
+        self.assertFalse(slack["required"])
+        self.assertIn("messages.read", slack["capabilities"])
+        self.assertIn("messages.write", slack["capabilities"])
+        self.assertIn("messages.schedule", slack["capabilities"])
+        self.assertIn(".mcp.json", contract["improve_targets"])
+
+        self.assertIn("slack", mcp_config["servers"])
+        self.assertEqual(mcp_config["servers"]["slack"]["auth"], "host-managed")
+
+    def test_meeting_followup_requires_explicit_approval_for_slack_writes(self) -> None:
+        content = (REPO_ROOT / "aiws-productivity" / "skills" / "meeting-followup" / "SKILL.md").read_text()
+
+        self.assertIn("optional Slack connector", content)
+        self.assertIn("Do not send or schedule Slack messages without explicit approval.", content)
+
 
 if __name__ == "__main__":
     unittest.main()

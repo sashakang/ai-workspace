@@ -8,6 +8,22 @@
   "dependencies": [
     "core-aiws"
   ],
+  "connectors": [
+    {
+      "id": "slack",
+      "kind": "host-managed-mcp",
+      "required": false,
+      "capabilities": [
+        "messages.read",
+        "threads.read",
+        "search",
+        "canvases.read",
+        "canvases.write",
+        "messages.write",
+        "messages.schedule"
+      ]
+    }
+  ],
   "project_memory_read_scope": [],
   "project_memory_write_scope": [],
   "shared_memory_read_scope": [],
@@ -16,6 +32,7 @@
     "skills/*/SKILL.md",
     "contracts/*.json",
     ".claude-plugin/plugin.json",
+    ".mcp.json",
     "README.md"
   ]
 }

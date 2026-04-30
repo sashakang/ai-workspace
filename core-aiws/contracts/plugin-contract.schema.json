@@ -48,6 +48,40 @@
         "minLength": 1
       }
     },
+    "connectors": {
+      "type": "array",
+      "description": "Host-managed or MCP-backed external service connectors declared by the plugin.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "required",
+          "capabilities"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
     "project_memory_read_scope": {
       "type": "array",
       "items": {

@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "slack": {
+      "type": "hosted",
+      "provider": "slack",
+      "auth": "host-managed",
+      "required": false,
+      "capabilities": [
+        "messages.read",
+        "threads.read",
+        "search",
+        "canvases.read",
+        "canvases.write",
+        "messages.write",
+        "messages.schedule"
+      ]
+    }
+  }
+}
