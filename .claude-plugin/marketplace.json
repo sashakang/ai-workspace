@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Shared Claude Code plugins for process, memory, and opt-in domain workflows.",
-    "version": "0.3.4"
+    "version": "0.3.5"
   },
   "plugins": [
     {
@@ -39,7 +39,7 @@
       "name": "aiws-productivity",
       "source": "./aiws-productivity",
       "description": "Demo domain plugin for AIWS productivity workflows.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "Sasha Kang"
       }
