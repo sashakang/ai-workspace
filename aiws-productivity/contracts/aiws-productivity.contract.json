@@ -1,0 +1,21 @@
+{
+  "plugin_id": "aiws-productivity",
+  "version": "0.1.0",
+  "public_skills": [
+    "meeting-followup"
+  ],
+  "public_agents": [],
+  "dependencies": [
+    "core-aiws"
+  ],
+  "project_memory_read_scope": [],
+  "project_memory_write_scope": [],
+  "shared_memory_read_scope": [],
+  "shared_memory_write_scope": [],
+  "improve_targets": [
+    "skills/*/SKILL.md",
+    "contracts/*.json",
+    ".claude-plugin/plugin.json",
+    "README.md"
+  ]
+}

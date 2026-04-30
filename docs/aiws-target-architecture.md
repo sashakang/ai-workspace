@@ -29,7 +29,7 @@ flowchart LR
   MM[memory.*]
   CAT[catalog.*]
   GH[Public GitHub monorepo]
-  PRIV[Private corp artifact store]
+  PRIV[Private GitHub skills/plugin repos]
 
   CC --> A
   CW --> A
@@ -109,10 +109,13 @@ sequenceDiagram
   - Reads use only the last complete active snapshot and last complete active index.
 
 - Skill/catalog contract:
-  - Public GitHub monorepo is source/artifact publication only.
+  - GitHub-backed plugin marketplace repos are the source of truth for shared skill distribution.
+  - Public repos distribute public plugin variants.
+  - Company and unit/project repos are private or internal GitHub repos, for example `github.com/owner/repo`.
   - Personal skills live under `~/.aiws/personal/skills/`.
-  - Unit/company skills live in private corporate artifact storage and are exposed through `catalog.*`.
-  - Duplicate shared skill identities fail closed unless the caller pins scope explicitly.
+  - A logical skill is `plugin_id + skill_id`; a concrete variant is `(scope, marketplace_repo, plugin_id, skill_id, version_or_commit, integrity_hash)`.
+  - The same logical skill may exist in multiple scoped repos. These are scoped variants, not one shared file.
+  - Duplicate visible skill variants fail closed unless the caller or an explicit organization policy pins one variant.
   - Required manifest fields: `skill_id`, `scope`, `version`, `artifact_kind`, `entrypoint`, `supported_hosts`, `required_tools`, `artifact_ref`, `integrity_hash`.
 
 - Local skill execution contract:

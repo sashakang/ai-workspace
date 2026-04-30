@@ -69,7 +69,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         skill_ids = {item["skill_id"] for item in local["skills"]}
 
         self.assertIn("aiws-improve", skill_ids)
-        self.assertIn("meeting-followup", skill_ids)
+        self.assertNotIn("meeting-followup", skill_ids)
         sop = self.runtime.get_resource("aiws://protocols/sop")
         improve = self.runtime.get_resource("aiws://skills/aiws-improve")
 
@@ -606,7 +606,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
 
     def test_stage_change_is_immutable_and_local(self) -> None:
         proposal = self.runtime.stage_change(
-            skill_id="meeting-followup",
+            skill_id="aiws-improve",
             target_scope="company",
             summary="Separate decisions from action items.",
             rationale="Repeated corrections showed they were mixed.",
@@ -624,17 +624,6 @@ class AiwsMcpSkillTests(unittest.TestCase):
         payload = json.loads(proposal_path.read_text())
         self.assertNotIn("transcript", json.dumps(payload).lower())
         self.assertEqual(payload["target_scope"], "company")
-
-    def test_meeting_followup_scope_excludes_broad_productivity(self) -> None:
-        skill = self.runtime.get_skill("meeting-followup", include_content=True)
-        content = skill["entrypoint_content"]
-
-        self.assertIn("meeting transcript", content.lower())
-        self.assertIn("decisions", content.lower())
-        self.assertIn("action items", content.lower())
-        self.assertIn("do not create task dashboards", content.lower())
-        self.assertIn("do not perform daily planning", content.lower())
-        self.assertIn("do not sync tasks", content.lower())
 
 
 if __name__ == "__main__":

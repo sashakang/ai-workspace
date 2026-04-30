@@ -8,6 +8,7 @@ The platform currently gives teams:
 
 - `core-aiws` for shared process and improvement workflows
 - `memory-aiws` for shared cross-project memory contracts
+- `aiws-productivity` as a small demo domain plugin
 - `data-analysis-aiws` for analyst workflows
 - `software-engineer-aiws` for SOP-governed Python engineering work
 
@@ -51,10 +52,11 @@ It defines:
 
 ### Domain plugins
 
-The domain plugins today are `data-analysis-aiws` and `software-engineer-aiws`.
+The domain plugins today are `aiws-productivity`, `data-analysis-aiws`, and `software-engineer-aiws`.
 
 They currently provide:
 
+- `meeting-followup` (meeting notes to minutes, decisions, action items, and follow-up drafts)
 - `data-analyst-forecast` (time-series forecasting)
 - `analytical-research` (hypothesis-driven research with dual-gate review)
 - `/dev` (thin SOP adapter for Python engineering work)
@@ -105,6 +107,7 @@ In Claude Code, install the infrastructure plugins first:
 Then install whichever domain plugins you want:
 
 ```text
+/plugin install aiws-productivity@ai-workspace
 /plugin install data-analysis-aiws@ai-workspace
 /plugin install software-engineer-aiws@ai-workspace
 ```
@@ -151,6 +154,7 @@ ai-workspace/
 ├── aiws-host-memory/
 ├── core-aiws/
 ├── memory-aiws/
+├── aiws-productivity/
 ├── data-analysis-aiws/
 ├── software-engineer-aiws/
 └── docs/
@@ -170,6 +174,7 @@ Local runtime testing:
 claude \
   --plugin-dir ~/Documents/ai-workspace/core-aiws \
   --plugin-dir ~/Documents/ai-workspace/memory-aiws \
+  --plugin-dir ~/Documents/ai-workspace/aiws-productivity \
   --plugin-dir ~/Documents/ai-workspace/data-analysis-aiws \
   --plugin-dir ~/Documents/ai-workspace/software-engineer-aiws
 ```

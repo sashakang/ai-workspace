@@ -28,7 +28,7 @@ Gate 1 status: passed, including the later host-path simplification.
   - `aiws://skills/aiws-improve`
 - Adapt SOP/improve away from plugin-era assumptions like `CLAUDE_PLUGIN_DATA`, installed plugin registries, and helper-managed paths.
 - Use `aiws-improve` as the only canonical improve identity; generate `/aiws-improve` where the host supports slash invocation. Do not generate `/improve`.
-- Add reference skill `meeting-followup` for transcripts/notes to minutes, decisions, action items, and draft follow-up messages only.
+- Keep demo/domain skills such as `meeting-followup` outside the MCP built-ins. `meeting-followup` belongs to the separate `aiws-productivity` plugin.
 
 ## Interfaces And Runtime Behavior
 
@@ -62,7 +62,6 @@ Catalog sources:
 ```text
 ~/.aiws/personal/skills/
 bundled aiws-improve and SOP resources
-bundled meeting-followup
 already-materialized local cache entries
 contract-only remote fixture records
 ```
@@ -145,7 +144,7 @@ Adapters:
 - Duplicate skill IDs fail closed unless scope/version is pinned.
 - MCP tool handlers cover search, resolve, materialize, list, get, stage, and list-staged.
 - Claude Code, Cowork, and Codex adapter outputs are generated in the expected shape.
-- `meeting-followup` stays inside its defined scope and avoids Anthropic Productivity overlap.
+- Demo/domain skills such as `meeting-followup` are packaged in their own plugins, not in `aiws-mcp` built-ins.
 - Staged skill proposals are immutable.
 - Privacy invariant: no remote calls/uploads from personal skills or staged evidence in MVP.
 
