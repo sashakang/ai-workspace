@@ -231,7 +231,7 @@ Recommended root:
 Owned surfaces:
 
 - `core-aiws/protocols/sop.md`
-- `core-aiws/skills/improve/SKILL.md` implementing the public `/aiws-improve` surface
+- `core-aiws/skills/aiws-improve/SKILL.md` implementing the public `/aiws-improve` surface
 - future shared process conventions that apply across plugins
 
 `core-aiws` does not own:
@@ -242,7 +242,7 @@ Owned surfaces:
 
 ## `/aiws-improve` and Self-Improvement
 
-`/aiws-improve` is governed by [`core-aiws/skills/improve/SKILL.md`](../core-aiws/skills/improve/SKILL.md) and the self-improvement protocol it invokes.
+`/aiws-improve` is governed by [`core-aiws/skills/aiws-improve/SKILL.md`](../core-aiws/skills/aiws-improve/SKILL.md) and the self-improvement protocol it invokes.
 
 For this platform, `/aiws-improve` has a specific role:
 

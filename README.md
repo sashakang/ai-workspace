@@ -112,7 +112,20 @@ Then install whichever domain plugins you want:
 /plugin install software-engineer-aiws@ai-workspace
 ```
 
+For skills-only Cowork testing, install only:
+
+```text
+core-aiws
+aiws-productivity
+```
+
+Do not install `memory-aiws` for that flow. Skill install, update, edit, test, and PR upload are owned by the internal `core-aiws` skill-management bridge, with editable drafts under `~/.aiws/plugins/` and draft state under `~/.aiws/state/skill-drafts/`.
+
 You can also add additional Claude marketplaces for company, unit, or personal plugin repos. In v1, AIWS trusts marketplaces by the exact identifier Claude records for them. Installed plugins stay in the same local AIWS ecosystem, and plugins that declare shared-memory scopes read from or write to the same canonical `memory-aiws` store.
+
+## Memory Helper Setup
+
+This section is not part of the skills-only Cowork flow.
 
 Then install the host helper once:
 
@@ -136,6 +149,7 @@ This platform is installable now as an early alpha.
 What is real today:
 
 - shared process foundation
+- skills-management validation and draft registry contracts
 - shared memory contract layer
 - opt-in analyst and software-engineering domain plugins
 - one host-side helper for Claude bootstrap, `SessionEnd` hook setup, shared-memory refresh, and Cowork same-machine imports
@@ -201,3 +215,4 @@ End users should install through the marketplace, not by cloning or symlinking t
 
 - [Platform architecture](./docs/ai-workspace-architecture.md)
 - [GitHub and rollout strategy](./docs/ai-workspace-github-rollout-strategy.md)
+- [Cowork skills marketplace architecture](./docs/aiws-skills-cowork-marketplace.md)

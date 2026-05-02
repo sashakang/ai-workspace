@@ -1,5 +1,6 @@
 ---
-description: Analyze accumulated user signals and propose improvements to CLAUDE.md, agents, skills, and hooks
+name: aiws-improve
+description: Analyze accumulated user signals and propose improvements to workspace instructions, agents, skills, and hooks
 ---
 
 # Batch Self-Improvement Analysis

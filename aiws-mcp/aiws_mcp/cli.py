@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .runtime import AiwsRuntime
+from .skill_manager import validate_marketplace
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("list-local")
 
+    validate_release = subparsers.add_parser("validate-release")
+    validate_release.add_argument("--repo-root", type=Path, default=Path.cwd())
+
     return parser
 
 
@@ -48,26 +52,29 @@ def main(argv: list[str] | None = None) -> int:
         server.run()
         return 0
 
-    runtime = AiwsRuntime(root=args.root)
-    if args.command == "search":
-        result = runtime.search_skills(query=args.query, host_kind=args.host_kind, limit=args.limit)
-    elif args.command == "materialize":
-        result = runtime.materialize_skill(
-            skill_id=args.skill_id,
-            host_kind=args.host_kind,
-            host_id=args.host_id,
-            scope=args.scope,
-            version=args.version,
-        )
-    elif args.command == "install-host":
-        result = runtime.install_host(
-            host_kind=args.host_kind,
-            host_id=args.host_id,
-            config_root=args.config_root,
-            dry_run=args.dry_run,
-        )
+    if args.command == "validate-release":
+        result = validate_marketplace(args.repo_root)
     else:
-        result = runtime.list_local_skills()
+        runtime = AiwsRuntime(root=args.root)
+        if args.command == "search":
+            result = runtime.search_skills(query=args.query, host_kind=args.host_kind, limit=args.limit)
+        elif args.command == "materialize":
+            result = runtime.materialize_skill(
+                skill_id=args.skill_id,
+                host_kind=args.host_kind,
+                host_id=args.host_id,
+                scope=args.scope,
+                version=args.version,
+            )
+        elif args.command == "install-host":
+            result = runtime.install_host(
+                host_kind=args.host_kind,
+                host_id=args.host_id,
+                config_root=args.config_root,
+                dry_run=args.dry_run,
+            )
+        else:
+            result = runtime.list_local_skills()
 
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

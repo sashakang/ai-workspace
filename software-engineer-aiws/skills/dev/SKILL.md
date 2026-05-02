@@ -1,4 +1,5 @@
 ---
+name: dev
 description: Thin SOP adapter for backend Python implementation, debugging, TDD, refactors with behavior risk, and code review inside AIWS. Use when the task is substantive software engineering work and should follow the canonical SOP rather than an ad hoc coding flow.
 ---
 

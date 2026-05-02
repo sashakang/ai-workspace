@@ -1,4 +1,5 @@
 ---
+name: data-analyst-forecast
 description: Time-series forecasting workflow for analyst-grade projections, uncertainty quantification, and stakeholder-safe narratives. Use this skill when the user needs a forecast, projection, or trend extrapolation rather than a descriptive summary or a statistical test.
 ---
 

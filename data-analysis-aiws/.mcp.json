@@ -1,7 +1,7 @@
 {
-  "servers": {
+  "mcpServers": {
     "warehouse": {
-      "transport": "stdio",
+      "type": "stdio",
       "command": "env",
       "args": [
         "DATA_ANALYST_MCP_COMMAND=${DATA_ANALYST_MCP_COMMAND}",

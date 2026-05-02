@@ -1,4 +1,5 @@
 ---
+name: analytical-research
 description: Analytical research workflow for hypothesis-driven investigation, observable notebook reasoning, and stakeholder-ready reporting. Use when the task requires structured research with explicit assumptions, EDA, hypothesis testing, and gate-reviewed conclusions.
 ---
 

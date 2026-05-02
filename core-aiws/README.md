@@ -19,7 +19,7 @@ Current scaffold:
 - `.claude-plugin/plugin.json`
 - `contracts/`
 - `protocols/`
-- `skills/improve/` implementing the public `/aiws-improve` surface
+- `skills/aiws-improve/` implementing the public `/aiws-improve` surface
 
 Contract files:
 

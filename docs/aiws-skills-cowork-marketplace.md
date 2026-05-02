@@ -4,7 +4,7 @@
 
 Cowork skills distribution is plugin-marketplace based. Memory, local MCP, direct writes to `~/.cowork`, and GitHub-facing workflows for nontechnical users are out of scope for this slice.
 
-Users install plugins, and skills come with those plugins.
+Users install plugins, and skills come with those plugins. For the skills-management flow, users install `core-aiws` and whichever domain plugin they need. They do not install a separate skill-manager plugin.
 
 ## Core Identities
 
@@ -64,6 +64,30 @@ Until a later namespacing design exists, AIWS policy is not to intentionally ins
 
 Organization-managed plugins are read-only for members in Cowork. User changes to those plugins become personal drafts or proposals derived from the installed variant; they do not mutate the managed plugin in place.
 
+`core-aiws` owns the internal skill-management bridge. The bridge handles draft creation, validation, draft package build, draft activation, GitHub update, PR submission, and revert. It is an implementation detail of `core-aiws`, not a user-facing marketplace plugin.
+
+Editable draft files live under:
+
+```text
+~/.aiws/plugins/<marketplace-slug>/<plugin-id>
+```
+
+The authoritative draft registry lives under:
+
+```text
+~/.aiws/state/skill-drafts/
+```
+
+If a modified draft is active, Cowork should show one skill identity with a `Modified locally` status. The draft replaces the installed version in the UI/runtime, but the installed package remains available internally as a fallback/cache.
+
+When updating from GitHub and an active modified draft exists, AIWS fails closed and offers only:
+
+```text
+keep local modified skill active
+discard local changes and update
+submit/upload first
+```
+
 Users choose targets in product language:
 
 ```text
@@ -76,3 +100,17 @@ Public skills
 Direct escalation is allowed from any source to any target, including personal to public.
 
 AIWS backend or a GitHub App handles branches and pull requests behind the scenes. Nontechnical users see status labels such as submitted, reviewing, changes requested, approved, rejected, and published.
+
+## Validation Gates
+
+Before install, update, draft activation, or PR submission, AIWS validates:
+
+- marketplace and plugin manifests
+- plugin contracts
+- `.mcp.json` files using top-level `mcpServers`
+- skill folders using Codex `skill-creator` compatibility rules
+- version alignment across marketplace entries, plugin manifests, and contracts
+
+`.mcp.json` files with top-level `servers` fail validation.
+
+Skill folders must include `SKILL.md` with only `name` and `description` frontmatter. The skill folder name must match the frontmatter `name`.
