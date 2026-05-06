@@ -2,7 +2,8 @@
   "plugin_id": "software-engineer-aiws",
   "version": "0.3.3",
   "public_skills": [
-    "dev"
+    "dev",
+    "writing-documentation"
   ],
   "public_agents": [
     "backend-python-engineer",
@@ -22,6 +23,7 @@
   "shared_memory_write_scope": [],
   "improve_targets": [
     "skills/*/SKILL.md",
+    "skills/*/references/**/*.md",
     "agents/**/*.md",
     "contracts/*.json",
     ".claude-plugin/plugin.json",

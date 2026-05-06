@@ -10,7 +10,7 @@ The platform currently gives teams:
 - `memory-aiws` for shared cross-project memory contracts
 - `aiws-productivity` as a small demo domain plugin
 - `data-analysis-aiws` for analyst workflows
-- `software-engineer-aiws` for SOP-governed Python engineering work
+- `software-engineer-aiws` for SOP-governed Python engineering and technical documentation work
 
 ## What It Is For
 
@@ -60,6 +60,7 @@ They currently provide:
 - `data-analyst-forecast` (time-series forecasting)
 - `analytical-research` (hypothesis-driven research with dual-gate review)
 - `/dev` (thin SOP adapter for Python engineering work)
+- `writing-documentation` (AIWS-aware technical documentation, docs audits, and docs-as-code maintenance)
 
 Some domain plugins are intentionally primed with references and bootstrap guidance. Others, like `software-engineer-aiws`, stay deliberately thin and rely on the shared SOP plus a small agent surface.
 

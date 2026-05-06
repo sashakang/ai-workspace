@@ -1,10 +1,11 @@
 # software-engineer-aiws
 
-`software-engineer-aiws` is the optional domain plugin for SOP-governed software engineering work in the AI workspace.
+`software-engineer-aiws` is the optional domain plugin for SOP-governed software engineering and technical documentation work in the AI workspace.
 
 It owns:
 
 - the `/dev` skill as a thin engineering entrypoint
+- the `writing-documentation` skill for AIWS-aware technical documentation
 - Python-first support agents for implementation, debugging, TDD, review, and documentation
 
 It depends on:
@@ -31,3 +32,4 @@ Runtime note:
 
 - this plugin is intentionally thin and defers default workflow behavior to `core-aiws/protocols/sop.md`
 - in v1 it does not define shared-memory scopes or bootstrap-specific assets
+- the documentation skill reads AIWS memory surfaces only when they are already available
