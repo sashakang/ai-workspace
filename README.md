@@ -1,10 +1,26 @@
 # AI Workspace
 
-This repository is a small AI workspace for Claude Code.
+AI Workspace is a provider-agnostic skill management system for AI coding and productivity hosts.
 
-It is built around one idea: useful Claude workflows should be packaged as installable plugins, not left as personal setup, scattered prompts, or one-off local habits.
+Its purpose is to make skills reusable across tools, teams, and visibility levels. Instead of keeping workflows as scattered prompts, local folders, or host-specific setup, AI Workspace treats every skill as a repo-backed artifact that can be discovered, validated, installed, materialized, edited locally, and proposed back to its source repository through a pull request.
 
-The platform currently gives teams:
+The system is built around three ideas:
+
+- skills live in repositories
+- access to skills is controlled by repository visibility and permissions
+- shared infrastructure, such as self-improvement workflows and memory contracts, should be reused across all skill levels
+
+AI Workspace currently has real support for Claude Code and early support paths for Codex and Cowork. The target compatibility set is:
+
+- Codex app
+- Codex CLI
+- Claude Code CLI
+- Claude Code Desktop
+- Claude Cowork Desktop
+
+The intended local shape is a single workspace folder containing all relevant skill and infrastructure repositories. All supported hosts can read from that shared workspace, while AI Workspace generates the host-specific files each app needs.
+
+This repository currently includes:
 
 - `core-aiws` for shared process and improvement workflows
 - `memory-aiws` for shared cross-project memory contracts
@@ -14,20 +30,32 @@ The platform currently gives teams:
 
 ## What It Is For
 
-Use this platform when you want Claude Code to behave less like a blank assistant and more like a reusable working system.
+Use this platform when you want AI hosts to work from a structured skill system instead of ad hoc prompting.
 
-It is meant for teams that want:
+It is meant for people and teams that want:
 
-- shared operating procedures across Claude sessions
+- shared operating procedures across host sessions
 - reusable domain workflows instead of ad hoc prompting
 - memory boundaries between project memory, shared memory, and runtime state
-- a path to ship more domain plugins over time
+- a path to ship more skills and domain plugins over time
+- a local contribution loop for improving skills and proposing changes back to their source repositories
 
-In practice, this means you install the shared foundation once, then add only the domain plugins you actually want.
+AI Workspace does not force every AI provider to use the same native plugin format. Different hosts expect different shapes: Claude Code may need one plugin or skill layout, Codex may need another local skill layout, and Cowork may need a packaged plugin-style output. AI Workspace keeps the skill source model consistent, then creates the right host-specific output for each app.
 
 ## How The Platform Is Structured
 
-The platform is intentionally split into composable plugins rather than one large monolith.
+The platform is intentionally split into shared infrastructure and repo-backed skill layers rather than one large monolith.
+
+This repository contains two kinds of plugins:
+
+- infrastructure plugins, which provide shared behavior needed by the skill system itself
+- domain plugins, which provide example skill sets for specific kinds of work
+
+Users should install the infrastructure plugins plus only the domain plugins that are relevant to their work. A data analyst should not need to install a software-engineering plugin unless they want those workflows, and a software engineer should not need analyst workflows unless they are useful.
+
+This repository is not the whole ecosystem. Other repositories can provide additional infrastructure or domain plugins for a person, project team, unit, company, or open-source community. Those external plugins still participate in the same shared architecture: they can live alongside this repository inside the same local AI Workspace folder, use the same infrastructure plugins, follow the same contracts, and produce host-specific output for the same supported apps.
+
+This keeps the system modular: shared infrastructure is reused across all skill levels, while domain capabilities remain opt-in.
 
 ### `core-aiws`
 
@@ -36,7 +64,7 @@ The shared process layer.
 It provides:
 
 - the platform SOP
-- the public `/aiws-improve` workflow
+- the public `aiws-improve` workflow
 - shared protocols that other plugins can depend on
 
 ### `memory-aiws`
@@ -52,7 +80,7 @@ It defines:
 
 ### Domain plugins
 
-The domain plugins today are `aiws-productivity`, `data-analysis-aiws`, and `software-engineer-aiws`.
+The example domain plugins today are `aiws-productivity`, `data-analysis-aiws`, and `software-engineer-aiws`.
 
 They currently provide:
 
@@ -64,9 +92,39 @@ They currently provide:
 
 Some domain plugins are intentionally primed with references and bootstrap guidance. Others, like `software-engineer-aiws`, stay deliberately thin and rely on the shared SOP plus a small agent surface.
 
+## Skill Levels And Access
+
+AI Workspace assumes that skills and plugins are distributed through repositories. Repository access defines who can see and use them, while the local AI Workspace folder gives supported hosts one shared place to discover, edit, test, and materialize them.
+
+For example:
+
+- a public GitHub repository can provide open-source skills
+- a personal private repository can provide one user's private skills
+- a company repository can provide company-wide skills
+- a unit repository can provide skills for a department, function, or operating group
+- a project repository can provide skills for the project team
+
+The system should not need a separate permission model for skills if the repository host already controls access. AIWS focuses on discovery, validation, installation, materialization, local editing, host compatibility, and shared infrastructure.
+
+## Local Skill Editing And Review
+
+AI Workspace also supports a contribution loop for skills.
+
+A skill can be installed or materialized locally, edited in the workspace, tested against a supported host, and then pushed back to its source repository as a pull request. The source repository remains the canonical home of the skill.
+
+The review and merge process stays with the repository owner:
+
+- personal skills can be reviewed and merged by the user
+- company skills can be reviewed by the appropriate skill owner or team
+- open-source skills can follow the public repository's normal contribution process
+- unit skills can be reviewed by the owning unit or delegated maintainers
+- project-team skills can be reviewed by the project maintainers
+
+This keeps local iteration fast while preserving ownership, review, and canonical versioning in the source repo. AI Workspace should help with the mechanics of editing, validating, packaging, and proposing changes, but it should not bypass the repo's normal review process.
+
 ## Why This Is Extensible
 
-This repository is not only an analyst plugin repo. It is a platform for adding more plugins with the same architecture.
+This repository is not only an analyst plugin repo. It is a platform for adding more repo-backed skills and plugins with the same architecture.
 
 The extensibility model is:
 
