@@ -297,6 +297,35 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertIn("Local draft edit.", draft_skill.read_text())
             self.assertNotIn("Upstream source edit", draft_skill.read_text())
 
+    def test_create_or_open_draft_rejects_orphaned_draft_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+            orphan = (
+                aiws_root
+                / "plugins"
+                / "ai-workspace"
+                / f"example-plugin-{draft_id('example-plugin', 'meeting-followup', 'https://github.com/example/example-plugin').rsplit('--', 1)[1]}"
+            )
+            orphan.mkdir(parents=True)
+
+            with self.assertRaisesRegex(SkillManagerError, "already exists without a usable record"):
+                create_or_open_draft(
+                    aiws_root,
+                    source_plugin_root=plugin_root,
+                    plugin_id="example-plugin",
+                    skill_id="meeting-followup",
+                    origin_marketplace="ai-workspace",
+                    origin_repo="https://github.com/example/example-plugin",
+                    origin_ref="master",
+                    base_version="1.0.0",
+                    base_commit="abc123",
+                )
+
+            self.assertTrue(orphan.exists())
+
     def test_revert_draft_removes_draft_files_and_record(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)
@@ -356,6 +385,102 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 revert_draft(aiws_root, record_id)
 
             self.assertTrue(outside.exists())
+            self.assertTrue(record_path.exists())
+
+    def test_revert_draft_refuses_symlinked_plugins_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            external_plugins = temp_root / "external-plugins"
+            external_plugins.mkdir()
+            (aiws_root).mkdir()
+            (aiws_root / "plugins").symlink_to(external_plugins, target_is_directory=True)
+            record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+            draft = external_plugins / "ai-workspace" / f"example-plugin-{record_id.rsplit('--', 1)[1]}"
+            draft.mkdir(parents=True)
+            record_path = aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
+            record_path.parent.mkdir(parents=True)
+            record_path.write_text(json.dumps(self.draft_record_payload(draft)))
+
+            with self.assertRaisesRegex(SkillManagerError, "must not be a symlink"):
+                revert_draft(aiws_root, record_id)
+
+            self.assertTrue(draft.exists())
+            self.assertTrue(record_path.exists())
+
+    def test_revert_draft_rejects_traversal_record_id_before_loading(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            escaped_record = aiws_root / "state" / "outside.json"
+            escaped_record.parent.mkdir(parents=True)
+            escaped_record.write_text(json.dumps({"draft_path": str(aiws_root / "plugins" / "ai-workspace" / "x")}))
+
+            with self.assertRaisesRegex(SkillManagerError, "outside AIWS draft state root"):
+                revert_draft(aiws_root, "../outside")
+
+            self.assertTrue(escaped_record.exists())
+
+    def test_revert_draft_refuses_symlinked_state_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            external_state = temp_root / "external-state"
+            external_state.mkdir()
+            aiws_root.mkdir()
+            (aiws_root / "state").symlink_to(external_state, target_is_directory=True)
+            record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+            external_record = external_state / "skill-drafts" / f"{record_id}.json"
+            external_record.parent.mkdir()
+            external_record.write_text(
+                json.dumps(
+                    self.draft_record_payload(
+                        aiws_root / "plugins" / "ai-workspace" / f"example-plugin-{record_id.rsplit('--', 1)[1]}"
+                    )
+                )
+            )
+
+            with self.assertRaisesRegex(SkillManagerError, "must not be a symlink"):
+                revert_draft(aiws_root, record_id)
+
+            self.assertTrue(external_record.exists())
+
+    def test_revert_draft_refuses_non_deterministic_draft_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            marketplace_root = aiws_root / "plugins" / "ai-workspace"
+            marketplace_root.mkdir(parents=True)
+            record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+            record_path = aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
+            record_path.parent.mkdir(parents=True)
+            record_path.write_text(json.dumps(self.draft_record_payload(marketplace_root)))
+
+            with self.assertRaisesRegex(SkillManagerError, "unexpected draft path"):
+                revert_draft(aiws_root, record_id)
+
+            self.assertTrue(marketplace_root.exists())
+            self.assertTrue(record_path.exists())
+
+    def test_revert_draft_refuses_deterministic_draft_path_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+            marketplace_root = aiws_root / "plugins" / "ai-workspace"
+            target = marketplace_root / "other-draft"
+            target.mkdir(parents=True)
+            deterministic = marketplace_root / f"example-plugin-{record_id.rsplit('--', 1)[1]}"
+            deterministic.symlink_to(target, target_is_directory=True)
+            record_path = aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
+            record_path.parent.mkdir(parents=True)
+            record_path.write_text(json.dumps(self.draft_record_payload(deterministic)))
+
+            with self.assertRaisesRegex(SkillManagerError, "must not contain symlinks"):
+                revert_draft(aiws_root, record_id)
+
+            self.assertTrue(target.exists())
+            self.assertTrue(deterministic.is_symlink())
             self.assertTrue(record_path.exists())
 
     def test_revert_draft_refuses_plugins_root_as_draft_path(self) -> None:
@@ -423,6 +548,25 @@ class AiwsSkillManagerTests(unittest.TestCase):
         skill_file = skill_root / "SKILL.md"
         skill_file.write_text(f"---\nname: {name}\ndescription: Test skill.\n---\n\n# Test Skill\n")
         return skill_file
+
+    def draft_record_payload(self, draft_path: Path) -> dict[str, object]:
+        return {
+            "plugin_id": "example-plugin",
+            "skill_id": "meeting-followup",
+            "origin_marketplace": "ai-workspace",
+            "origin_repo": "https://github.com/example/example-plugin",
+            "origin_ref": "master",
+            "base_version": "1.0.0",
+            "base_commit": "abc123",
+            "draft_path": str(draft_path),
+            "active": True,
+            "modified": False,
+            "publish_target": None,
+            "branch_name": None,
+            "pr_url": None,
+            "last_validation_status": "passed",
+            "updated_at": "2026-05-09T00:00:00Z",
+        }
 
 
 if __name__ == "__main__":

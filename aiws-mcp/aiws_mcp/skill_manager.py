@@ -93,7 +93,27 @@ def load_json(path: Path) -> Any:
         raise SkillManagerError(f"Invalid JSON: {path}") from exc
 
 
+def reject_symlinked_root(root: Path, *, label: str) -> None:
+    if root.is_symlink():
+        raise SkillManagerError(f"{label} must not be a symlink: {root}")
+
+
+def reject_symlinked_child_path(path: Path, root: Path, *, label: str) -> None:
+    try:
+        relative = path.absolute().relative_to(root.absolute())
+    except ValueError as exc:
+        raise SkillManagerError(f"{label} is outside AIWS draft plugin root: {path}") from exc
+
+    current = root.absolute()
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise SkillManagerError(f"{label} must not contain symlinks: {path}")
+
+
 def require_path_under(path: Path, root: Path, *, label: str) -> Path:
+    reject_symlinked_root(root, label="AIWS draft plugin root")
+    reject_symlinked_child_path(path, root, label=label)
     resolved_path = path.resolve()
     resolved_root = root.resolve()
     if resolved_path == resolved_root:
@@ -106,6 +126,8 @@ def require_path_under(path: Path, root: Path, *, label: str) -> Path:
 
 
 def require_record_path_under(path: Path, root: Path) -> Path:
+    reject_symlinked_root(root.parent, label="AIWS draft state parent")
+    reject_symlinked_root(root, label="AIWS draft state root")
     resolved_path = path.resolve()
     resolved_root = root.resolve()
     if resolved_path == resolved_root:
@@ -437,6 +459,13 @@ def revert_draft(aiws_root: Path, record_id: str) -> dict[str, str]:
 
     record = load_draft_record(aiws_root, record_id)
     draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")
+    expected_draft_path = require_path_under(
+        draft_worktree_path(aiws_root, record.origin_marketplace, record.plugin_id, record.origin_repo),
+        plugins_root,
+        label="Expected draft path",
+    )
+    if draft_path != expected_draft_path:
+        raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
 
     if draft_path.exists():
         if not draft_path.is_dir():
