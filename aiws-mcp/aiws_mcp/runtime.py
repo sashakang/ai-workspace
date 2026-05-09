@@ -28,6 +28,104 @@ class SkillValidationError(ValueError):
 
 
 @dataclass(frozen=True)
+class HostEvidenceSurface:
+    name: str
+    kind: str
+    path: Path | None = None
+    resource_uri: str | None = None
+    writable: bool = False
+    required: bool = False
+
+    def to_json(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "name": self.name,
+            "kind": self.kind,
+            "writable": self.writable,
+            "required": self.required,
+        }
+        if self.path is not None:
+            payload["path"] = str(self.path)
+        if self.resource_uri is not None:
+            payload["resource_uri"] = self.resource_uri
+        return payload
+
+
+@dataclass(frozen=True)
+class HostAdapter:
+    host_kind: str
+    default_home_env: str
+    default_home: str
+    capability_exposure: str
+    supports_direct_install: bool
+
+    def default_config_root(self, env: dict[str, str]) -> Path:
+        return Path(env.get(self.default_home_env, self.default_home)).expanduser().resolve()
+
+    def evidence_surfaces(self, config_root: Path, aiws_root: Path, host_id: str) -> list[HostEvidenceSurface]:
+        host_root = aiws_root / "hosts" / host_id
+        common = [
+            HostEvidenceSurface("host_identity", "file", host_root / "host.json", writable=True, required=True),
+            HostEvidenceSurface("staged_skill_changes", "directory", host_root / "staged-writes" / "skills", writable=True),
+            HostEvidenceSurface("materialized_skills", "directory", host_root / "shared-cache" / "skills", writable=True),
+            HostEvidenceSurface("skill_adapter", "directory", host_root / "adapter", writable=True),
+            HostEvidenceSurface("skill_catalog", "mcp-resource", resource_uri="aiws://skills"),
+        ]
+        if self.host_kind == "codex":
+            return [
+                *common,
+                HostEvidenceSurface("session_history", "jsonl", config_root / "history.jsonl"),
+                HostEvidenceSurface("installed_skills", "directory", config_root / "skills"),
+            ]
+        if self.host_kind == "claude-code":
+            return [
+                *common,
+                HostEvidenceSurface("observations", "jsonl", config_root / "improve" / "observations.jsonl", writable=True),
+                HostEvidenceSurface("project_daily_logs", "directory", config_root / "project-memory" / "current", writable=True),
+                HostEvidenceSurface("installed_contracts", "directory", config_root / "registry" / "plugins"),
+                HostEvidenceSurface("shared_memory_outbox", "directory", config_root / "shared-memory" / "outbox", writable=True),
+            ]
+        if self.host_kind == "cowork":
+            return [
+                *common,
+                HostEvidenceSurface("installed_plugins", "directory", config_root / "plugins"),
+                HostEvidenceSurface("package_uploads", "directory", config_root / "packages", writable=True),
+            ]
+        return common
+
+    def capability_map(self) -> dict[str, Any]:
+        return {
+            "capability_exposure": self.capability_exposure,
+            "direct_host_install_supported": self.supports_direct_install,
+            "skill_adapter_supported": True,
+        }
+
+
+HOST_ADAPTERS = {
+    "claude-code": HostAdapter(
+        host_kind="claude-code",
+        default_home_env="CLAUDE_HOME",
+        default_home="~/.claude",
+        capability_exposure="slash-command-or-skill",
+        supports_direct_install=False,
+    ),
+    "cowork": HostAdapter(
+        host_kind="cowork",
+        default_home_env="COWORK_HOME",
+        default_home="~/.cowork",
+        capability_exposure="plugin-package",
+        supports_direct_install=False,
+    ),
+    "codex": HostAdapter(
+        host_kind="codex",
+        default_home_env="CODEX_HOME",
+        default_home="~/.codex",
+        capability_exposure="skill",
+        supports_direct_install=True,
+    ),
+}
+
+
+@dataclass(frozen=True)
 class HostIdentity:
     host_id: str
     host_kind: str
@@ -148,13 +246,14 @@ def validate_skill_dir(skill_root: Path) -> dict[str, str]:
 
 
 def default_config_root(host_kind: str, env: dict[str, str]) -> Path:
-    if host_kind == "claude-code":
-        return Path(env.get("CLAUDE_HOME", "~/.claude")).expanduser().resolve()
-    if host_kind == "cowork":
-        return Path(env.get("COWORK_HOME", "~/.cowork")).expanduser().resolve()
-    if host_kind == "codex":
-        return Path(env.get("CODEX_HOME", "~/.codex")).expanduser().resolve()
-    raise ValueError(f"Unsupported host kind: {host_kind}")
+    return host_adapter(host_kind).default_config_root(env)
+
+
+def host_adapter(host_kind: str) -> HostAdapter:
+    try:
+        return HOST_ADAPTERS[host_kind]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported host kind: {host_kind}") from exc
 
 
 def derived_host_id(host_kind: str, config_root: Path) -> str:
@@ -208,6 +307,8 @@ def safe_copytree(source: Path, destination: Path) -> None:
             raise ValueError(f"Symlinks are not allowed in skill bundles: {item}")
         if not is_relative_to(item.resolve(), source.resolve()):
             raise ValueError(f"Skill bundle path escapes its root: {item}")
+    if source.resolve() == destination.resolve():
+        return
     if destination.exists():
         shutil.rmtree(destination)
     shutil.copytree(source, destination)
@@ -293,6 +394,8 @@ class AiwsRuntime:
             )
             if host_kind is not None and host_kind != existing.host_kind:
                 raise ValueError("Supplied host_kind conflicts with existing host.json.")
+            if "capabilities" not in payload or "evidence_surfaces" not in payload:
+                write_json_atomic(host_json, self._host_json_payload(existing))
             return existing
 
         if host_kind is None:
@@ -303,13 +406,33 @@ class AiwsRuntime:
         ensure_dir(host_root)
         write_json_atomic(
             host_json,
-            {
-                "host_id": host.host_id,
-                "host_kind": host.host_kind,
-                "config_root": str(host.config_root),
-            },
+            self._host_json_payload(host),
         )
         return host
+
+    def _host_json_payload(self, host: HostIdentity) -> dict[str, Any]:
+        adapter = host_adapter(host.host_kind)
+        return {
+            "host_id": host.host_id,
+            "host_kind": host.host_kind,
+            "config_root": str(host.config_root),
+            "capabilities": adapter.capability_map(),
+            "evidence_surfaces": [
+                surface.to_json()
+                for surface in adapter.evidence_surfaces(host.config_root, self.root, host.host_id)
+            ],
+        }
+
+    def host_surfaces(self, *, host_kind: str | None = None, host_id: str | None = None) -> dict[str, Any]:
+        host = self.ensure_host(host_kind=host_kind, host_id=host_id)
+        payload = self._host_json_payload(host)
+        return {
+            "host_id": host.host_id,
+            "host_kind": host.host_kind,
+            "config_root": str(host.config_root),
+            "capabilities": payload["capabilities"],
+            "evidence_surfaces": payload["evidence_surfaces"],
+        }
 
     def built_in_records(self) -> list[SkillRecord]:
         records = []
@@ -383,14 +506,22 @@ class AiwsRuntime:
             entrypoint = skill_root / "SKILL.md"
             if not entrypoint.exists():
                 continue
-            metadata = validate_skill_content(entrypoint.read_text(), skill_root.name)
+            skill_id = skill_root.parent.name
+            content = entrypoint.read_text()
+            try:
+                metadata = validate_skill_content(content, skill_id)
+            except SkillValidationError:
+                # Older MVP caches used <scope>/<version>/<skill-id>. Ignore those
+                # generated artifacts instead of crashing catalog reads after upgrade.
+                validate_skill_content(content, skill_root.name)
+                continue
             records.append(
                 SkillRecord(
-                    skill_id=skill_root.name,
+                    skill_id=skill_id,
                     name=metadata["name"],
                     description=metadata["description"],
                     scope=skill_root.parent.parent.name,
-                    version=skill_root.parent.name,
+                    version=skill_root.name,
                     source=str(skill_root),
                     root=skill_root,
                     entrypoint_content=None,
@@ -401,10 +532,17 @@ class AiwsRuntime:
         return records
 
     def catalog_records(self) -> list[SkillRecord]:
+        materialized = self.materialized_records()
+        materialized_ids = {record.skill_id for record in materialized}
+        built_ins = [
+            record
+            for record in self.built_in_records()
+            if record.skill_id not in materialized_ids
+        ]
         return [
-            *self.built_in_records(),
+            *built_ins,
             *self.personal_records(),
-            *self.materialized_records(),
+            *materialized,
             *self.remote_fixture_records(),
         ]
 
@@ -536,7 +674,7 @@ class AiwsRuntime:
             return {"status": "unavailable", "reason": "Remote fixture records are metadata-only in MVP."}
 
         cache_root = self.root / "hosts" / host.host_id / "shared-cache" / "skills"
-        target_root = cache_root / self._safe_scope(record.scope) / record.version / record.skill_id
+        target_root = cache_root / self._safe_scope(record.scope) / record.skill_id / record.version
         ensure_dir(target_root.parent)
 
         if record.root is not None:
@@ -684,6 +822,13 @@ class AiwsRuntime:
             return result
         if not actions["install"]:
             result["status"] = "unchanged" if actions["unchanged"] else "no_skills"
+            if not dry_run and host_id is not None:
+                self._resolve_host_for_install(
+                    host_kind=host_kind,
+                    host_id=host_id,
+                    config_root=resolved_config_root,
+                    dry_run=False,
+                )
             return result
         if dry_run:
             result["status"] = "planned"
@@ -765,6 +910,8 @@ class AiwsRuntime:
                 raise ValueError("Supplied host_kind conflicts with existing host.json.")
             if config_root is not None and existing.config_root != resolved_config_root:
                 raise ValueError("Supplied config_root conflicts with existing host.json.")
+            if not dry_run and ("capabilities" not in payload or "evidence_surfaces" not in payload):
+                write_json_atomic(host_json, self._host_json_payload(existing))
             return existing
 
         if dry_run:

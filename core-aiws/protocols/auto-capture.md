@@ -4,11 +4,9 @@ Run this protocol at the end of every non-lightweight task.
 
 ## 1. Append to project daily log
 
-Write to the imported project-memory snapshot:
+Write to the host-provided project log or project-memory surface when one exists.
 
-`${CLAUDE_PLUGIN_DATA}/project-memory/current/YYYY-MM-DD.md`
-
-The native Claude project-memory surface remains canonical; approved writes are staged in the imported snapshot and then applied back through the host-side project-memory bridge.
+Hosts may expose this as a file, directory, MCP resource, or native memory bridge. If no writable project surface exists, skip the write and report that no project capture surface was available.
 
 Capture:
 
@@ -22,9 +20,7 @@ Capture:
 
 If a learning is clearly reusable across projects or plugins, stage it for `memory-aiws` instead of writing directly into another plugin root.
 
-Use one immutable outbox file per candidate:
-
-`${CLAUDE_PLUGIN_DATA}/shared-memory/outbox/<ISO-ts>--<uuid>.json`
+Use the host-provided shared-memory candidate outbox when one exists. If the host exposes a filesystem outbox, write one immutable file per candidate.
 
 Each candidate file should include:
 
@@ -49,12 +45,13 @@ Shared-memory consolidation and export are handled later by the host-side shared
 
 If the user corrected behavior, assumptions, or workflow:
 
-- append a structured observation to `${CLAUDE_PLUGIN_DATA}/improve/observations.jsonl`
+- append a structured observation to the host-provided observation or improvement-marker surface, if one exists
 - do not silently mutate durable memory files to “fix” the record
 
 ## 4. Propose workflow improvements
 
-If the workflow should change, draft the exact proposed edit and target file, then route it through `/aiws-improve` and SOP review.
+If the workflow should change, draft the exact proposed edit and target file, then route it through the canonical `aiws-improve` capability and SOP review.
+If the current host does not expose slash commands, route it through the canonical `aiws-improve` capability by the host's native mechanism.
 
 ## 5. Keep capture scoped
 
@@ -62,5 +59,5 @@ Auto-capture should not:
 
 - create a second project-memory system
 - write directly into sibling plugin roots
-- treat `/aiws-improve` as the routine shared-memory refresh trigger
+- treat `aiws-improve` as the routine shared-memory refresh trigger
 - bypass approval for prompt, protocol, or skill changes

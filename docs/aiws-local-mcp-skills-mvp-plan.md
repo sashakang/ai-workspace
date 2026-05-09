@@ -6,6 +6,8 @@ Build `aiws-mcp`, a local Python stdio MCP server that becomes the AIWS skills c
 
 This MVP is local-only: no remote company sync, remote downloads/uploads, shared memory migration, or script execution. Existing plugin/helper code stays intact during this slice.
 
+Static host-native plugin or skill installs may still work without `aiws-mcp`, but only as static artifacts exposed by the host. Managed AIWS behavior requires the MCP control plane: catalog search, materialization, host evidence surfaces, local draft editing, staging, update flows, and promotion/export workflows.
+
 Gate 1 status: passed, including the later host-path simplification.
 
 - Architecture reviewer: approved
@@ -71,11 +73,12 @@ Duplicate shared skill IDs fail closed unless scope/version is pinned. Remote fi
 Materialization writes only under:
 
 ```text
-~/.aiws/hosts/<host-id>/shared-cache/skills/
+~/.aiws/hosts/<host-id>/shared-cache/skills/<scope-id>/<skill-id>/<version>/
 ~/.aiws/hosts/<host-id>/adapter/
 ```
 
 It never writes directly into `~/.claude`, `~/.cowork`, `~/.codex`, project repos, or host config files.
+Codex `install-host` is a separate adapter-owned export/install operation that copies AIWS-managed adapter output into Codex's host skill directory with ownership markers and conflict checks.
 
 Integrity:
 
@@ -104,7 +107,21 @@ Host identity:
 {
   "host_id": "my-claude-code",
   "host_kind": "claude-code",
-  "config_root": "/Users/example/.claude"
+  "config_root": "/Users/example/.claude",
+  "capabilities": {
+    "capability_exposure": "slash-command-or-skill",
+    "direct_host_install_supported": false,
+    "skill_adapter_supported": true
+  },
+  "evidence_surfaces": [
+    {
+      "name": "host_identity",
+      "kind": "file",
+      "path": "~/.aiws/hosts/my-claude-code/host.json",
+      "writable": true,
+      "required": true
+    }
+  ]
 }
 ```
 
@@ -126,6 +143,8 @@ Adapters:
 - Cowork: generate `adapter/aiws-generated-plugin/.claude-plugin/plugin.json` and `adapter/aiws-generated-plugin/skills/<skill-id>/SKILL.md`.
 - Codex: generate `adapter/skills/<skill-id>/SKILL.md` and `adapter/aiws-codex-export.json`; do not hard-code undocumented Codex install paths.
 
+Host adapters own host-specific roots, evidence surfaces, and capability exposure. Adapter output shape and direct host install/export behavior are host-specific responsibilities; in the MVP implementation they may still live inside the AIWS runtime, but they should remain behind the adapter contract and not leak provider-specific paths into core skills or protocols.
+
 ## Privacy And Promotion
 
 - `stage_change` writes immutable local proposal files under `~/.aiws/hosts/<host-id>/staged-writes/skills/`.
@@ -139,6 +158,7 @@ Adapters:
 - Built-in skills pass the same validator as user skills.
 - SOP/improve built-ins contain no legacy plugin-path assumptions.
 - Host ID derivation, `host.json` persistence, conflict handling, and missing-first-registration errors.
+- Host evidence surfaces and capability metadata are persisted in `host.json` and exposed through MCP.
 - Skill validation rejects invalid frontmatter and unsafe paths.
 - Materialization rejects path traversal, symlinks, and bad integrity.
 - Duplicate skill IDs fail closed unless scope/version is pinned.

@@ -8,11 +8,11 @@ It intentionally depends on `core-aiws` for shared process behavior. It does not
 
 - `meeting-followup` — turns meeting transcripts or notes into minutes, decisions, action items, unresolved questions, and draft follow-up messages.
 
-## Connectors
+## External Connectors
 
-- `slack` (optional, host-managed) — lets `meeting-followup` read relevant Slack messages, threads, search results, or canvases when the user asks for Slack context. It can send or schedule Slack follow-up messages only after the user approves the exact text and destination.
+- Slack (optional, provided by a separate Slack plugin or host connector) lets `meeting-followup` read relevant Slack messages, threads, search results, or canvases when the user asks for Slack context. It can send or schedule Slack follow-up messages only after the user approves the exact text and destination.
 
-The plugin must still work without Slack. If the connector is unavailable, produce copy-ready follow-up drafts instead of attempting Slack actions.
+This plugin does not register its own Slack MCP server. The plugin must still work without Slack. If the connector is unavailable, produce copy-ready follow-up drafts instead of attempting Slack actions.
 
 ## Boundary
 

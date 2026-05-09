@@ -354,6 +354,8 @@ Spawn reviewers IN PARALLEL based on task type:
 
 **Fake consensus guard**: Same as Gate 1. Actual sub-agent outputs required. No fabricated approvals.
 
+**Self-review guard**: Representative review is not Gate 2. A gate passes only with independent reviewer output from the required reviewer slots. If the Representative accidentally reports a self-review as a gate result, mark that gate `NOT RUN`, correct the record, and run the real review.
+
 **Exit**: All reviewers APPROVE. Proceed to Phase 7.
 
 ---
@@ -470,7 +472,7 @@ The protocol handles: issue review, process assessment, categorization, deduplic
 
 Structured `core-aiws` session logging is an optional future extension, not a v1 requirement.
 
-If introduced later, use [Session Log Protocol](./session-log.md). Until then, rely on Claude Code native session history, observations, and project memory as the evidence surfaces.
+If introduced later, use [Session Log Protocol](./session-log.md). Until then, rely on the host-provided session history, observations, and project memory surfaces.
 
 ---
 
@@ -579,5 +581,6 @@ Skills not listed here follow SOP defaults.
 | Commit without user approval | User controls git | Present results, wait for instruction |
 | Continue past halt condition | Infinite loops waste time | Escalate to user |
 | Self-approve your own plan | Confirmation bias | Independent reviewers validate |
+| Treat self-review as Gate 2 | Creates fake assurance | Run independent reviewers and mark the self-review as NOT RUN |
 | Hard-code data in notebooks | Not traceable or reproducible | All data from real queries (enforced in Gate 2 checklist) |
 | Report fake consensus | Undermines entire quality system | Spawn actual reviewers, get actual votes |

@@ -5,28 +5,30 @@ description: Analyze accumulated user signals and propose improvements to worksp
 
 # Batch Self-Improvement Analysis
 
-This is the shared `/aiws-improve` surface owned by `core-aiws`.
+This is the shared `aiws-improve` capability owned by `core-aiws`.
 
 Gathers accumulated signals from multiple sources, synthesizes patterns, then runs the unified [Self-Improvement Protocol](../../protocols/self-improvement.md) in batch mode.
 
 **Scope**: This skill is responsible only for evidence gathering and synthesis (Phases 1-3). All decision rules for prompt, skill, protocol, and workflow improvement live in the protocol — do not duplicate them here. Shared-memory refresh is not owned by this skill.
 
+`aiws-improve` is the canonical AIWS capability identity. Hosts may expose it as a slash command, a skill, an MCP prompt, or another native UI affordance. Do not assume `/aiws-improve` is available unless the current host advertises slash-command exposure.
+
 ---
 
 ## Phase 1: Gather Batch Evidence
 
-Read all available sources (skip any that don't exist):
+Resolve host evidence surfaces first. Prefer the AIWS host evidence contract, for example `aiws.host.surfaces` when exposed by the local MCP runtime. Read all available logical surfaces and skip any that the current host does not provide:
 
-1. **Observations**: `${CLAUDE_PLUGIN_DATA}/improve/observations.jsonl` — find the most recent `improve_run` entry as cutoff, filter to newer entries
-2. **Daily logs**: Today's + yesterday's from `${CLAUDE_PLUGIN_DATA}/project-memory/current/YYYY-MM-DD.md`
-3. **Claude Code native session history** when the host environment makes it available
-4. **Installed plugin contracts**: `${CLAUDE_PLUGIN_DATA}/registry/plugins/*.json`
-5. **Current conversation context**
+1. **Observations**: host-provided structured correction, frustration, give-up, positive, and improvement markers. Find the most recent `improve_run` marker as cutoff when markers exist.
+2. **Project notes or daily logs**: host-provided project memory or session notes for today and yesterday when available.
+3. **Session history and transcripts**: host-provided current or recent interaction history when available.
+4. **Installed contracts and skill catalog**: host-provided plugin contracts, skill manifests, or AIWS catalog resources.
+5. **Current conversation context**.
 
 Present evidence summary:
 
 ```
-## Evidence Summary (since last /aiws-improve run)
+## Evidence Summary (since last aiws-improve run)
 
 **Observations** (from hook signals):
 | Signal Type   | Count |
@@ -36,7 +38,7 @@ Present evidence summary:
 | give_up       | N     |
 | positive      | N     |
 
-**Other sources**: N daily log entries, N session histories reviewed
+**Other sources**: N project notes, N session histories reviewed, N installed contracts or manifests reviewed
 - Unique sessions: N
 - Unique projects: N
 - Date range: YYYY-MM-DD to YYYY-MM-DD
@@ -50,15 +52,15 @@ If no evidence exists from any source, report "No new signals to analyze" and st
 
 For each **high-severity** observation (correction, frustration, give_up):
 
-1. Read the transcript at the observation's `transcript` path
-2. Find context: what was Claude doing? What did the user ask? Where did it go wrong?
+1. Resolve the related transcript or session context through the host-provided evidence surface when available. If the host provides only a summary, or no transcript surface at all, continue from the observation summary and current context, and mark the missing transcript as an evidence gap.
+2. Find context: what was the host agent doing? What did the user ask? Where did it go wrong?
 3. Identify root cause: missing rule, bad agent prompt, wrong default, process friction, tool discovery, architecture insight
 
 Present findings:
 ```
 ### Finding: <obs_id> (<type>, <date>)
 **User said**: "<message excerpt>"
-**Context**: <what Claude was doing>
+**Context**: <what the host agent was doing>
 **Root cause**: <category> - <specific explanation>
 **Target**: <file path> : <section/line>
 ```
@@ -88,7 +90,7 @@ Present:
 
 Follow the [Self-Improvement Protocol](../../protocols/self-improvement.md) in batch mode with the synthesized findings from Phase 3 as input. Start from Step 3 (Categorize and Decide) — Steps 1-2 are skipped in batch mode. Use the synthesized patterns from Phase 3 as input to Step 3's categorization; formal Learning Entry Format is applied in Step 4.2.
 
-Do not treat `/aiws-improve` as the routine shared-memory consolidation trigger. Shared-memory candidate capture happens during end-of-task auto-capture, and shared-memory refresh is handled automatically by the host-side shared-memory bridge.
+Do not treat `aiws-improve` as the routine shared-memory consolidation trigger. Shared-memory candidate capture happens during end-of-task auto-capture, and shared-memory refresh is handled automatically by the host-side shared-memory bridge.
 
 ---
 
@@ -96,12 +98,12 @@ Do not treat `/aiws-improve` as the routine shared-memory consolidation trigger.
 
 After protocol completion:
 
-1. Append an `improve_run` marker to `${CLAUDE_PLUGIN_DATA}/improve/observations.jsonl`:
+1. Append an `improve_run` marker to the host-provided writable observation or improvement-marker surface, if one exists:
    ```json
    {"id":"imp_<8-char-hex>","ts":"<ISO timestamp>","type":"improve_run","severity":"info","message":"Processed observations up to <latest_obs_id>"}
    ```
 
-2. For each applied change, append a verification entry:
+2. For each applied change, append a verification entry to the same host-provided marker surface, if one exists:
    ```json
    {"id":"verify_<8-char-hex>","ts":"<ISO timestamp>","type":"improvement_applied","severity":"info","message":"Applied: <brief description>. Monitor for recurrence."}
    ```

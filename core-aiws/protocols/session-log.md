@@ -6,11 +6,11 @@ Lightweight structured logging for non-lightweight work executed under `core-aiw
 
 ## Location
 
-`${CLAUDE_PLUGIN_DATA}/session-logs/sop_session_<YYYYMMDD_HHMMSS>.log`
+Use the host-provided session-log evidence surface when one exists.
 
-Example:
+Example filesystem shape:
 
-`${CLAUDE_PLUGIN_DATA}/session-logs/sop_session_20260326_101530.log`
+`<host-session-log-root>/sop_session_20260326_101530.log`
 
 ## Purpose
 
@@ -22,7 +22,7 @@ Session logs are evidence for:
 - unresolved questions
 - self-improvement input
 
-They are not a replacement for Claude session JSONL history.
+They are not a replacement for host-native session history.
 
 ## Format
 

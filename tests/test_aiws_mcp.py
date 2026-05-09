@@ -78,6 +78,51 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertNotIn("CLAUDE_PLUGIN_DATA", improve)
         self.assertNotIn("registry/plugins", improve)
 
+    def test_materialized_skill_replaces_builtin_fallback_identity(self) -> None:
+        self.runtime.materialize_skill(skill_id="aiws-improve", host_kind="codex")
+
+        local = self.runtime.list_local_skills()
+        improve_records = [
+            item for item in local["skills"] if item["skill_id"] == "aiws-improve"
+        ]
+
+        self.assertEqual(len(improve_records), 1)
+        self.assertTrue(improve_records[0]["materialized"])
+
+    def test_repeated_materialize_of_built_in_skill_is_idempotent(self) -> None:
+        first = self.runtime.materialize_skill(skill_id="aiws-improve", host_kind="codex")
+        cache_path = Path(first["cache_path"])
+        before = self.read_tree(cache_path)
+
+        second = self.runtime.materialize_skill(skill_id="aiws-improve", host_kind="codex")
+
+        self.assertEqual(second["status"], "materialized")
+        self.assertTrue(cache_path.exists())
+        self.assertEqual(before, self.read_tree(cache_path))
+
+    def test_old_materialized_cache_layout_is_ignored_without_crashing(self) -> None:
+        old_root = (
+            self.root
+            / "hosts"
+            / "codex-legacy"
+            / "shared-cache"
+            / "skills"
+            / "personal"
+            / "1.0.0"
+            / "local-review"
+        )
+        old_root.mkdir(parents=True)
+        (old_root / "SKILL.md").write_text(
+            "---\nname: local-review\ndescription: Old cache layout.\n---\n\n# Local Review\n"
+        )
+
+        local = self.runtime.list_local_skills()
+
+        self.assertNotIn(
+            "local-review",
+            {item["skill_id"] for item in local["skills"] if item["materialized"]},
+        )
+
     def test_validator_rejects_invalid_skill_frontmatter(self) -> None:
         skill_root = self.root / "personal" / "skills" / "Bad_Name"
         skill_root.mkdir(parents=True)
@@ -95,6 +140,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
         payload = json.loads(host_json.read_text())
         self.assertEqual(payload["host_kind"], "claude-code")
         self.assertEqual(payload["config_root"], str(self.claude_home.resolve()))
+        self.assertIn("capabilities", payload)
+        self.assertIn("evidence_surfaces", payload)
+        surface_names = {surface["name"] for surface in payload["evidence_surfaces"]}
+        self.assertIn("host_identity", surface_names)
+        self.assertIn("observations", surface_names)
 
         loaded = self.runtime.ensure_host(host_id=host.host_id)
         self.assertEqual(loaded.host_kind, "claude-code")
@@ -104,6 +154,21 @@ class AiwsMcpSkillTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             self.runtime.ensure_host(host_id="missing-host")
+
+    def test_host_surfaces_are_provider_neutral_and_host_specific(self) -> None:
+        codex = self.runtime.host_surfaces(host_kind="codex")
+        self.assertEqual(codex["host_kind"], "codex")
+        self.assertEqual(codex["capabilities"]["capability_exposure"], "skill")
+        codex_surfaces = {surface["name"]: surface for surface in codex["evidence_surfaces"]}
+        self.assertIn("session_history", codex_surfaces)
+        self.assertIn("skill_catalog", codex_surfaces)
+        self.assertFalse(codex_surfaces["installed_skills"]["writable"])
+        self.assertNotIn("CLAUDE_PLUGIN_DATA", json.dumps(codex))
+
+        claude = self.runtime.host_surfaces(host_kind="claude-code")
+        claude_surfaces = {surface["name"]: surface for surface in claude["evidence_surfaces"]}
+        self.assertIn("observations", claude_surfaces)
+        self.assertIn("installed_contracts", claude_surfaces)
 
     def test_materialize_generates_claude_adapter_and_integrity(self) -> None:
         self.write_personal_skill("local-review", "Review local work.")
@@ -118,6 +183,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         cache_path = Path(result["cache_path"])
         adapter_path = Path(result["adapter_path"])
         self.assertTrue(cache_path.is_relative_to(self.runtime.root))
+        self.assertEqual(cache_path.parts[-3:], ("personal", "local-review", "1.0.0"))
         self.assertTrue(adapter_path.is_relative_to(self.runtime.root))
         self.assertTrue((adapter_path / ".claude" / "skills" / "local-review" / "SKILL.md").exists())
         self.assertFalse((self.claude_home / "skills" / "local-review" / "SKILL.md").exists())
@@ -267,6 +333,58 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 config_root=Path(self.tempdir.name) / "other-codex",
             )
 
+    def test_install_host_backfills_legacy_host_json_for_explicit_host_id(self) -> None:
+        host_id = "codex-legacy"
+        host_root = self.root / "hosts" / host_id
+        adapter_root = host_root / "adapter"
+        skill_root = adapter_root / "skills" / "local-review"
+        skill_root.mkdir(parents=True)
+        (skill_root / "SKILL.md").write_text(
+            "---\nname: local-review\ndescription: Review local work.\n---\n\n# Local Review\n"
+        )
+        (adapter_root / "aiws-codex-export.json").write_text(
+            json.dumps({"skills": [{"skill_id": "local-review", "path": "skills/local-review"}]})
+        )
+        legacy_payload = {
+            "host_id": host_id,
+            "host_kind": "codex",
+            "config_root": str(self.codex_home.resolve()),
+        }
+        (host_root / "host.json").write_text(json.dumps(legacy_payload))
+
+        result = self.runtime.install_host(host_kind="codex", host_id=host_id)
+
+        payload = json.loads((host_root / "host.json").read_text())
+        self.assertEqual(result["status"], "ok")
+        self.assertIn("capabilities", payload)
+        self.assertIn("evidence_surfaces", payload)
+
+    def test_install_host_dry_run_does_not_backfill_legacy_host_json(self) -> None:
+        host_id = "codex-legacy"
+        host_root = self.root / "hosts" / host_id
+        adapter_root = host_root / "adapter"
+        skill_root = adapter_root / "skills" / "local-review"
+        skill_root.mkdir(parents=True)
+        (skill_root / "SKILL.md").write_text(
+            "---\nname: local-review\ndescription: Review local work.\n---\n\n# Local Review\n"
+        )
+        (adapter_root / "aiws-codex-export.json").write_text(
+            json.dumps({"skills": [{"skill_id": "local-review", "path": "skills/local-review"}]})
+        )
+        legacy_payload = {
+            "host_id": host_id,
+            "host_kind": "codex",
+            "config_root": str(self.codex_home.resolve()),
+        }
+        host_json = host_root / "host.json"
+        host_json.write_text(json.dumps(legacy_payload, sort_keys=True))
+        before = host_json.read_text()
+
+        result = self.runtime.install_host(host_kind="codex", host_id=host_id, dry_run=True)
+
+        self.assertEqual(result["status"], "planned")
+        self.assertEqual(host_json.read_text(), before)
+
     def test_install_host_rejects_host_id_path_traversal(self) -> None:
         with self.assertRaises(ValueError):
             self.runtime.install_host(host_kind="codex", host_id="../outside-host")
@@ -277,6 +395,29 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(result["status"], "no_skills")
         self.assertFalse((self.codex_home / "skills").exists())
         self.assertFalse((self.root / "hosts").exists())
+
+    def test_install_host_no_skills_backfills_legacy_explicit_host_json(self) -> None:
+        host_id = "codex-legacy"
+        host_root = self.root / "hosts" / host_id
+        host_root.mkdir(parents=True)
+        host_json = host_root / "host.json"
+        host_json.write_text(
+            json.dumps(
+                {
+                    "host_id": host_id,
+                    "host_kind": "codex",
+                    "config_root": str(self.codex_home.resolve()),
+                },
+                sort_keys=True,
+            )
+        )
+
+        result = self.runtime.install_host(host_kind="codex", host_id=host_id)
+
+        payload = json.loads(host_json.read_text())
+        self.assertEqual(result["status"], "no_skills")
+        self.assertIn("capabilities", payload)
+        self.assertIn("evidence_surfaces", payload)
 
     def test_install_host_reports_stale_targets_when_adapter_missing(self) -> None:
         host = self.runtime.ensure_host(host_kind="codex")
@@ -585,6 +726,26 @@ class AiwsMcpSkillTests(unittest.TestCase):
         payload = json.loads(dry_run.stdout)
         self.assertEqual(payload["status"], "planned")
         self.assertFalse((self.codex_home / "skills" / "local-review").exists())
+
+        host_surfaces = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "aiws_mcp",
+                "--root",
+                str(self.root),
+                "host-surfaces",
+                "--host-kind",
+                "codex",
+            ],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        surfaces_payload = json.loads(host_surfaces.stdout)
+        self.assertEqual(surfaces_payload["host_kind"], "codex")
+        self.assertIn("evidence_surfaces", surfaces_payload)
 
         failed = subprocess.run(
             [

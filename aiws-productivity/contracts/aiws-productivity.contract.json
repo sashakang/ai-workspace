@@ -1,6 +1,6 @@
 {
   "plugin_id": "aiws-productivity",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "public_skills": [
     "meeting-followup"
   ],
@@ -11,7 +11,7 @@
   "connectors": [
     {
       "id": "slack",
-      "kind": "host-managed-mcp",
+      "kind": "optional-external-plugin",
       "required": false,
       "capabilities": [
         "messages.read",
@@ -32,7 +32,6 @@
     "skills/*/SKILL.md",
     "contracts/*.json",
     ".claude-plugin/plugin.json",
-    ".mcp.json",
     "README.md"
   ]
 }

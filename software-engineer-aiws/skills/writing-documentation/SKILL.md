@@ -11,10 +11,10 @@ Do not use this full workflow for tiny typo fixes, purely conversational explana
 
 ## AIWS Surfaces
 
-This skill uses `core-aiws` for the SOP. When `memory-aiws` or project-memory surfaces are installed, read them before making broad documentation decisions:
+This skill uses `core-aiws` for the SOP. When `memory-aiws`, project-memory, or host evidence surfaces are available, read them before making broad documentation decisions:
 
-- `${CLAUDE_PLUGIN_DATA}/shared-memory/`
-- `${CLAUDE_PLUGIN_DATA}/project-memory/current/`
+- host-provided shared-memory and project-memory surfaces
+- host-provided session history, installed contracts, and skill catalog surfaces when relevant
 - AIWS MCP skill catalog tools, when the task is about installed, staged, or materialized AIWS skills
 
 For AIWS repository work, validate plugin and skill packaging through the existing release gate rather than manually eyeballing manifests.
@@ -74,6 +74,10 @@ Write in direct, practical English:
 - explain why only when it changes the reader's decision or prevents misuse
 
 For skill docs, keep `SKILL.md` concise and move detailed patterns into one-level-deep reference files. Do not add clutter files inside a skill folder.
+
+For AIWS skill placement, first look for the closest existing domain plugin before proposing a new plugin. Create a new plugin only when no existing plugin owns the audience, workflow, or lifecycle.
+
+For source-repo documentation changes, treat the repository files as canonical. Installed host skill folders, generated adapters, and materialized caches are generated artifacts that may be replaced from source.
 
 ### 5. Verify
 
@@ -136,4 +140,4 @@ During that pass, look specifically for:
 - user corrections about tone, audience, or depth
 - validation steps that should become reusable documentation workflow rules
 
-Do not directly mutate shared memory or sibling plugin files as a shortcut. Stage reusable learnings through the AIWS memory outbox or route workflow changes through `/aiws-improve` and the SOP review path.
+Do not directly mutate shared memory or sibling plugin files as a shortcut. Stage reusable learnings through the host-provided AIWS memory outbox when available, or route workflow changes through the canonical `aiws-improve` capability and the SOP review path.

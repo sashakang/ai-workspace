@@ -33,6 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
     install_host.add_argument("--config-root", type=Path)
     install_host.add_argument("--dry-run", action="store_true")
 
+    host_surfaces = subparsers.add_parser("host-surfaces")
+    host_surfaces.add_argument("--host-kind")
+    host_surfaces.add_argument("--host-id")
+
     subparsers.add_parser("list-local")
 
     validate_release = subparsers.add_parser("validate-release")
@@ -73,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
                 config_root=args.config_root,
                 dry_run=args.dry_run,
             )
+        elif args.command == "host-surfaces":
+            result = runtime.host_surfaces(host_kind=args.host_kind, host_id=args.host_id)
         else:
             result = runtime.list_local_skills()
 

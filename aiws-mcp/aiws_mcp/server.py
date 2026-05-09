@@ -65,6 +65,10 @@ def create_server(root: Path | None = None):
     def list_staged_changes(target_scope: str | None = None, skill_id: str | None = None) -> dict[str, Any]:
         return runtime.list_staged_changes(target_scope=target_scope, skill_id=skill_id)
 
+    @server.tool(name="aiws.host.surfaces")
+    def host_surfaces(host_kind: str | None = None, host_id: str | None = None) -> dict[str, Any]:
+        return runtime.host_surfaces(host_kind=host_kind, host_id=host_id)
+
     @server.resource("aiws://protocols/sop")
     def sop_resource() -> str:
         return runtime.get_resource("aiws://protocols/sop")

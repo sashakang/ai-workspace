@@ -76,6 +76,8 @@ sequenceDiagram
 │   ├── memory/
 │   └── skills/
 ├── hosts/<host-id>/
+│   ├── host.json
+│   ├── adapter/
 │   ├── shared-cache/memory/
 │   ├── shared-cache/skills/
 │   └── staged-writes/
@@ -91,6 +93,16 @@ sequenceDiagram
   - `memory.submit(stage_ref)` for explicit `unit:<id>` or `company` only
   - `catalog.resolve(skill_ref, actor, host_id)`
   - `catalog.get(manifest_ref)`
+
+- Host adapter contract:
+  - `host_id` is the local identity and state boundary.
+  - `host_kind` selects a host adapter implementation, not a model provider assumption.
+  - `config_root` is host-owned configuration state; AIWS may read declared evidence surfaces there but does not treat host paths as core paths.
+  - Host adapters expose `capabilities`, including how a canonical AIWS capability is surfaced in that host: slash command, skill, MCP prompt, command palette, package, or conversational trigger.
+  - Host adapters expose logical evidence surfaces. Standard names include `observations`, `project_daily_logs`, `session_history`, `transcripts`, `installed_contracts`, `skill_catalog`, `improvement_markers`, `shared_memory_outbox`, `materialized_skills`, and `staged_skill_changes`.
+  - Evidence surfaces are records with `{name, kind, path_or_resource, writable, required}`. Paths are host-adapter details; core skills and protocols refer to logical names.
+  - Missing optional evidence surfaces degrade gracefully. Required surfaces fail closed before a workflow depends on them.
+  - Host adapters own provider-specific mapping for default config roots, adapter output shape, direct host install/export, and native invocation. Core AIWS owns only the contract and local state invariants.
 
 - Memory read contract:
   - Reads are against one local composed view only: `personal` + host-local shared-cache.
@@ -129,6 +141,15 @@ sequenceDiagram
   - Bundles may not declare host-native commands or host-specific tool names.
   - `required_tools` use the AIWS capability vocabulary, for example: `fs.read`, `fs.write`, `shell.exec`, `python.exec`, `git.read`, `git.write`, `memory.read`, `memory.write-stage`, `catalog.resolve`, `mcp:<namespace>.<tool>`.
   - Hosts map native tools to that vocabulary or fail closed.
+  - Direct writes into host config roots, such as installing generated Codex skill folders, are adapter-owned export/install operations. They are not materialization.
+
+- Source and lifecycle contract:
+  - Maintainer source edits may happen directly in the canonical Git repo and do not require a running AIWS MCP control plane.
+  - End-user skill lifecycle operations use the AIWS control plane or an equivalent host adapter: install, update, edit draft, activate local modified skill, stage promotion, and submit to a target scope.
+  - Installed host skill folders, adapter outputs, and materialized cache entries are generated artifacts. They are not the public source of truth.
+  - A modified installed skill should appear as the same user-facing skill identity with local modification state, not as a second confusing copy.
+  - Capability identity is provider-neutral. Host UI exposure is adapter-specific: slash command, skill, MCP prompt, command palette, package, or conversational trigger.
+  - Dry-run operations are read-only. Validation, planning, migration detection, and conflict reporting must not backfill, repair, delete, or write files during dry-run.
 
 - Shared write contract:
   - Shared writes are local stage + explicit sync.

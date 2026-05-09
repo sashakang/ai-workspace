@@ -7,7 +7,7 @@ Unified post-task improvement workflow for the `core-aiws` control plane.
 Resolve mode first:
 
 - **Realtime mode**: invoked from SOP Phase 9 with current-session evidence
-- **Batch mode**: invoked from `/aiws-improve` with synthesized findings
+- **Batch mode**: invoked from the `aiws-improve` capability with synthesized findings
 
 Realtime mode runs all steps. Batch mode starts at Step 3.
 
@@ -75,12 +75,12 @@ Then decide whether it belongs in:
 
 For findings with confidence >= MEDIUM:
 
-1. read the target through the installed plugin contract registry at `${CLAUDE_PLUGIN_DATA}/registry/plugins/*.json`
+1. read the target through the host-provided installed contract or skill catalog surface
 2. check whether the rule already exists
 3. draft the smallest possible exact edit
 4. present the edit for approval
 
-Do not rely on ad hoc sibling-plugin filesystem discovery.
+Do not rely on ad hoc sibling-plugin filesystem discovery when a host contract or catalog surface is available.
 
 ## Step 5: Apply and Record
 
@@ -95,8 +95,8 @@ For each approved change:
 
 Check whether previously applied improvements reduced recurrence:
 
-- scan `${CLAUDE_PLUGIN_DATA}/improve/observations.jsonl`
-- scan Claude Code native session history if the host environment makes it available
+- scan the host-provided observation or improvement-marker surface
+- scan host-provided session history or transcript surfaces when available
 - report whether the same pattern recurred
 
 ## Step 7: Finalize Session Log
@@ -110,4 +110,4 @@ If a structured `core-aiws` session log exists, mark it complete and record any 
 3. use evidence, not speculation
 4. use plugin contracts to discover targets
 5. do not treat self-improvement as the shared-memory refresh engine
-6. shared-memory refresh is automatic through the host-side bridge, not `/aiws-improve`
+6. shared-memory refresh is automatic through the host-side bridge, not `aiws-improve`

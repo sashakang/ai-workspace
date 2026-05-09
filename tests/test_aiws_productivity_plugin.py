@@ -6,7 +6,6 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SLACK_MCP_URL = "https://mcp.slack.com/mcp"
 
 
 class AiwsProductivityPluginTests(unittest.TestCase):
@@ -29,9 +28,9 @@ class AiwsProductivityPluginTests(unittest.TestCase):
             entry for entry in marketplace["plugins"] if entry["name"] == "aiws-productivity"
         )
 
-        self.assertEqual(plugin_json["version"], "0.2.0")
-        self.assertEqual(contract["version"], "0.2.0")
-        self.assertEqual(marketplace_entry["version"], "0.2.0")
+        self.assertEqual(plugin_json["version"], "0.2.1")
+        self.assertEqual(contract["version"], "0.2.1")
+        self.assertEqual(marketplace_entry["version"], "0.2.1")
 
     def test_meeting_followup_belongs_to_aiws_productivity_not_core(self) -> None:
         productivity_contract = json.loads(
@@ -54,43 +53,25 @@ class AiwsProductivityPluginTests(unittest.TestCase):
         self.assertIn("do not perform daily planning", content.lower())
         self.assertIn("do not sync tasks", content.lower())
 
-    def test_mcp_config_uses_real_claude_code_schema(self) -> None:
-        """Fail on the old fabricated top-level 'servers' schema; pass only with 'mcpServers'."""
-        mcp_config = json.loads(
-            (REPO_ROOT / "aiws-productivity" / ".mcp.json").read_text()
+    def test_aiws_productivity_does_not_register_slack_mcp_server(self) -> None:
+        self.assertFalse(
+            (REPO_ROOT / "aiws-productivity" / ".mcp.json").exists(),
+            "aiws-productivity must not register a Slack MCP server. Install the dedicated Slack plugin instead.",
         )
-
-        self.assertNotIn(
-            "servers",
-            mcp_config,
-            "aiws-productivity/.mcp.json must use the real Claude Code key 'mcpServers' "
-            "(not the fabricated top-level 'servers'). Plugin loaders ignore the old shape.",
-        )
-        self.assertIn("mcpServers", mcp_config)
 
     def test_aiws_productivity_declares_optional_slack_connector(self) -> None:
         contract = json.loads(
             (REPO_ROOT / "aiws-productivity" / "contracts" / "aiws-productivity.contract.json").read_text()
         )
-        mcp_config = json.loads(
-            (REPO_ROOT / "aiws-productivity" / ".mcp.json").read_text()
-        )
 
         # Contract documentation block (informational; not consumed by the loader).
         slack = next(conn for conn in contract["connectors"] if conn["id"] == "slack")
-        self.assertEqual(slack["kind"], "host-managed-mcp")
+        self.assertEqual(slack["kind"], "optional-external-plugin")
         self.assertFalse(slack["required"])
         self.assertIn("messages.read", slack["capabilities"])
         self.assertIn("messages.write", slack["capabilities"])
         self.assertIn("messages.schedule", slack["capabilities"])
-        self.assertIn(".mcp.json", contract["improve_targets"])
-
-        # The actual loader-facing shape: mcpServers + http + canonical Slack URL.
-        self.assertIn("mcpServers", mcp_config)
-        self.assertIn("slack", mcp_config["mcpServers"])
-        slack_server = mcp_config["mcpServers"]["slack"]
-        self.assertEqual(slack_server["type"], "http")
-        self.assertEqual(slack_server["url"], SLACK_MCP_URL)
+        self.assertNotIn(".mcp.json", contract["improve_targets"])
 
     def test_meeting_followup_requires_explicit_approval_for_slack_writes(self) -> None:
         content = (REPO_ROOT / "aiws-productivity" / "skills" / "meeting-followup" / "SKILL.md").read_text()
