@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -90,6 +91,30 @@ def load_json(path: Path) -> Any:
         return json.loads(path.read_text())
     except json.JSONDecodeError as exc:
         raise SkillManagerError(f"Invalid JSON: {path}") from exc
+
+
+def require_path_under(path: Path, root: Path, *, label: str) -> Path:
+    resolved_path = path.resolve()
+    resolved_root = root.resolve()
+    if resolved_path == resolved_root:
+        raise SkillManagerError(f"{label} is outside AIWS draft plugin root: {path}")
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise SkillManagerError(f"{label} is outside AIWS draft plugin root: {path}") from exc
+    return resolved_path
+
+
+def require_record_path_under(path: Path, root: Path) -> Path:
+    resolved_path = path.resolve()
+    resolved_root = root.resolve()
+    if resolved_path == resolved_root:
+        raise SkillManagerError(f"Draft record path is outside AIWS draft state root: {path}")
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise SkillManagerError(f"Draft record path is outside AIWS draft state root: {path}") from exc
+    return resolved_path
 
 
 def parse_skill_frontmatter(content: str) -> tuple[dict[str, str], str]:
@@ -342,6 +367,83 @@ def create_draft_record(
 def load_draft_record(aiws_root: Path, record_id: str) -> DraftRecord:
     payload = load_json(draft_record_path(aiws_root, record_id))
     return DraftRecord(**payload)
+
+
+def create_or_open_draft(
+    aiws_root: Path,
+    *,
+    source_plugin_root: Path,
+    plugin_id: str,
+    skill_id: str,
+    origin_marketplace: str,
+    origin_repo: str,
+    origin_ref: str,
+    base_version: str,
+    base_commit: str,
+) -> DraftRecord:
+    validation = validate_plugin(source_plugin_root, expected_name=plugin_id, expected_version=base_version)
+    skill_names = {skill["name"] for skill in validation["skills"]}
+    if skill_id not in skill_names:
+        raise SkillManagerError(f"Requested skill {skill_id!r} does not exist in plugin {plugin_id!r}.")
+
+    record_id = draft_id(plugin_id, skill_id, origin_repo)
+    record_path = draft_record_path(aiws_root, record_id)
+    state_root = aiws_root / "state" / "skill-drafts"
+    plugins_root = aiws_root / "plugins"
+    expected_draft_path = draft_worktree_path(aiws_root, origin_marketplace, plugin_id, origin_repo)
+    require_record_path_under(record_path, state_root)
+    require_path_under(expected_draft_path, plugins_root, label="Draft path")
+
+    if record_path.exists():
+        existing = load_draft_record(aiws_root, record_id)
+        existing_draft_path = require_path_under(Path(existing.draft_path), plugins_root, label="Draft path")
+        if existing_draft_path != expected_draft_path.resolve():
+            raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
+        if existing_draft_path.exists():
+            return existing
+
+    if expected_draft_path.exists():
+        raise SkillManagerError(f"Draft path already exists without a usable record: {expected_draft_path}")
+
+    expected_draft_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_plugin_root, expected_draft_path)
+
+    record = DraftRecord(
+        plugin_id=plugin_id,
+        skill_id=skill_id,
+        origin_marketplace=origin_marketplace,
+        origin_repo=origin_repo,
+        origin_ref=origin_ref,
+        base_version=base_version,
+        base_commit=base_commit,
+        draft_path=str(expected_draft_path),
+        active=True,
+        modified=False,
+        publish_target=None,
+        branch_name=None,
+        pr_url=None,
+        last_validation_status="passed",
+        updated_at=utc_now(),
+    )
+    write_json_atomic(record_path, record.to_json())
+    return record
+
+
+def revert_draft(aiws_root: Path, record_id: str) -> dict[str, str]:
+    record_path = draft_record_path(aiws_root, record_id)
+    state_root = aiws_root / "state" / "skill-drafts"
+    plugins_root = aiws_root / "plugins"
+    require_record_path_under(record_path, state_root)
+
+    record = load_draft_record(aiws_root, record_id)
+    draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")
+
+    if draft_path.exists():
+        if not draft_path.is_dir():
+            raise SkillManagerError(f"Draft path is not a directory: {draft_path}")
+        shutil.rmtree(draft_path)
+    record_path.unlink()
+    return {"status": "reverted", "record_id": record_id}
 
 
 def update_from_github_decision(record: DraftRecord | None) -> dict[str, Any]:

@@ -14,9 +14,11 @@ if AIWS_MCP_PYTHONPATH not in sys.path:
 
 from aiws_mcp.skill_manager import (  # noqa: E402
     SkillManagerError,
+    create_or_open_draft,
     create_draft_record,
     draft_id,
     load_draft_record,
+    revert_draft,
     update_from_github_decision,
     validate_marketplace,
     validate_plugin,
@@ -228,6 +230,168 @@ class AiwsSkillManagerTests(unittest.TestCase):
             ["keep_local_modified_skill_active", "discard_local_changes_and_update", "submit_or_upload_first"],
         )
 
+    def test_create_or_open_draft_copies_valid_plugin_and_records_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            record = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="ai-workspace",
+                origin_repo="https://github.com/example/example-plugin",
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+            )
+
+            draft_path = Path(record.draft_path)
+            record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+
+            self.assertTrue((draft_path / ".claude-plugin" / "plugin.json").is_file())
+            self.assertTrue((draft_path / "skills" / "meeting-followup" / "SKILL.md").is_file())
+            self.assertEqual(load_draft_record(aiws_root, record_id), record)
+            self.assertTrue(record.active)
+            self.assertFalse(record.modified)
+            self.assertEqual(record.last_validation_status, "passed")
+
+    def test_create_or_open_draft_reopens_existing_draft_without_overwriting_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+            skill_file = self.write_skill(plugin_root, "meeting-followup")
+
+            record = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="ai-workspace",
+                origin_repo="https://github.com/example/example-plugin",
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+            )
+            draft_skill = Path(record.draft_path) / "skills" / "meeting-followup" / "SKILL.md"
+            draft_skill.write_text(draft_skill.read_text() + "\nLocal draft edit.\n")
+            skill_file.write_text(skill_file.read_text() + "\nUpstream source edit that must not overwrite.\n")
+
+            reopened = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="ai-workspace",
+                origin_repo="https://github.com/example/example-plugin",
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+            )
+
+            self.assertEqual(Path(reopened.draft_path), Path(record.draft_path))
+            self.assertIn("Local draft edit.", draft_skill.read_text())
+            self.assertNotIn("Upstream source edit", draft_skill.read_text())
+
+    def test_revert_draft_removes_draft_files_and_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            record = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="ai-workspace",
+                origin_repo="https://github.com/example/example-plugin",
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+            )
+            record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+
+            result = revert_draft(aiws_root, record_id)
+
+            self.assertEqual(result["status"], "reverted")
+            self.assertFalse(Path(record.draft_path).exists())
+            self.assertFalse((aiws_root / "state" / "skill-drafts" / f"{record_id}.json").exists())
+            self.assertTrue((aiws_root / "plugins").exists())
+
+    def test_revert_draft_refuses_paths_outside_aiws_draft_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            outside = temp_root / "outside-plugin"
+            outside.mkdir()
+            record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+            record = {
+                "plugin_id": "example-plugin",
+                "skill_id": "meeting-followup",
+                "origin_marketplace": "ai-workspace",
+                "origin_repo": "https://github.com/example/example-plugin",
+                "origin_ref": "master",
+                "base_version": "1.0.0",
+                "base_commit": "abc123",
+                "draft_path": str(outside),
+                "active": True,
+                "modified": False,
+                "publish_target": None,
+                "branch_name": None,
+                "pr_url": None,
+                "last_validation_status": "passed",
+                "updated_at": "2026-05-09T00:00:00Z",
+            }
+            record_path = aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
+            record_path.parent.mkdir(parents=True)
+            record_path.write_text(json.dumps(record))
+
+            with self.assertRaisesRegex(SkillManagerError, "outside AIWS draft plugin root"):
+                revert_draft(aiws_root, record_id)
+
+            self.assertTrue(outside.exists())
+            self.assertTrue(record_path.exists())
+
+    def test_revert_draft_refuses_plugins_root_as_draft_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugins_root = aiws_root / "plugins"
+            plugins_root.mkdir(parents=True)
+            record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+            record = {
+                "plugin_id": "example-plugin",
+                "skill_id": "meeting-followup",
+                "origin_marketplace": "ai-workspace",
+                "origin_repo": "https://github.com/example/example-plugin",
+                "origin_ref": "master",
+                "base_version": "1.0.0",
+                "base_commit": "abc123",
+                "draft_path": str(plugins_root),
+                "active": True,
+                "modified": False,
+                "publish_target": None,
+                "branch_name": None,
+                "pr_url": None,
+                "last_validation_status": "passed",
+                "updated_at": "2026-05-09T00:00:00Z",
+            }
+            record_path = aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
+            record_path.parent.mkdir(parents=True)
+            record_path.write_text(json.dumps(record))
+
+            with self.assertRaisesRegex(SkillManagerError, "outside AIWS draft plugin root"):
+                revert_draft(aiws_root, record_id)
+
+            self.assertTrue(plugins_root.exists())
+            self.assertTrue(record_path.exists())
+
     def write_plugin(self, root: Path, *, public_skills: list[str]) -> Path:
         plugin_root = root / "example-plugin"
         (plugin_root / ".claude-plugin").mkdir(parents=True)
@@ -252,6 +416,13 @@ class AiwsSkillManagerTests(unittest.TestCase):
             )
         )
         return plugin_root
+
+    def write_skill(self, plugin_root: Path, name: str) -> Path:
+        skill_root = plugin_root / "skills" / name
+        skill_root.mkdir(parents=True)
+        skill_file = skill_root / "SKILL.md"
+        skill_file.write_text(f"---\nname: {name}\ndescription: Test skill.\n---\n\n# Test Skill\n")
+        return skill_file
 
 
 if __name__ == "__main__":
