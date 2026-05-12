@@ -110,7 +110,7 @@ The system should not need a separate permission model for skills if the reposit
 
 AI Workspace also supports a contribution loop for skills.
 
-A skill can be installed or materialized locally, edited in the workspace, tested against a supported host, and then pushed back to its source repository as a pull request. The source repository remains the canonical home of the skill.
+A skill can be installed or materialized locally, edited in the workspace, tested against a supported host, and staged as a proposal for a specific target repository. A later explicit submit-for-review action can create or update a pull request. The source repository remains the canonical home of the skill.
 
 The review and merge process stays with the repository owner:
 
@@ -178,7 +178,7 @@ core-aiws
 aiws-productivity
 ```
 
-Do not install `memory-aiws` for that flow. Skill install, update, edit, test, and PR upload are owned by the internal `core-aiws` skill-management bridge, with editable drafts under `~/.aiws/plugins/` and draft state under `~/.aiws/state/skill-drafts/`.
+Do not install `memory-aiws` for that flow. Skill install, update, edit, test, and staged proposal creation are owned by the internal `core-aiws` skill-management bridge, with editable drafts under `~/.aiws/plugins/` and draft state under `~/.aiws/state/skill-drafts/`. Users stage proposals in Cowork first; a later explicit submit-for-review step can create the maintainer-facing PR.
 
 You can also add additional Claude marketplaces for company, unit, or personal plugin repos. In v1, AIWS trusts marketplaces by the exact identifier Claude records for them. Installed plugins stay in the same local AIWS ecosystem, and plugins that declare shared-memory scopes read from or write to the same canonical `memory-aiws` store.
 

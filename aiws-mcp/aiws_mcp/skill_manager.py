@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
+import uuid
+import zipfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,12 +46,15 @@ class DraftRecord:
     base_version: str
     base_commit: str
     draft_path: str
+    base_tree_digest: str | None
+    current_tree_digest: str | None
     active: bool
     modified: bool
     publish_target: str | None
     branch_name: str | None
     pr_url: str | None
     last_validation_status: str
+    last_validation_tree_digest: str | None
     updated_at: str
 
     def to_json(self) -> dict[str, Any]:
@@ -80,8 +86,12 @@ def draft_worktree_path(aiws_root: Path, marketplace: str, plugin_id: str, origi
 
 
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    reject_existing_symlink_components(path.parent, label="JSON write parent")
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + ".tmp")
+    reject_existing_symlink_components(temp.parent, label="JSON temporary parent")
+    if temp.is_symlink():
+        raise SkillManagerError(f"JSON temporary path must not be a symlink: {temp}")
     temp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     temp.replace(path)
 
@@ -93,9 +103,31 @@ def load_json(path: Path) -> Any:
         raise SkillManagerError(f"Invalid JSON: {path}") from exc
 
 
+def draft_record_from_payload(payload: dict[str, Any]) -> DraftRecord:
+    compatible = dict(payload)
+    compatible.setdefault("base_tree_digest", None)
+    compatible.setdefault("current_tree_digest", None)
+    compatible.setdefault("last_validation_tree_digest", None)
+    return DraftRecord(**compatible)
+
+
 def reject_symlinked_root(root: Path, *, label: str) -> None:
     if root.is_symlink():
         raise SkillManagerError(f"{label} must not be a symlink: {root}")
+
+
+def reject_existing_symlink_components(path: Path, *, label: str) -> None:
+    absolute = path.absolute()
+    current = Path(absolute.anchor) if absolute.anchor else Path()
+    parts = absolute.parts[1:] if absolute.anchor else absolute.parts
+    for part in parts:
+        current = current / part
+        if current.parent == Path(current.anchor):
+            continue
+        if current.is_symlink():
+            raise SkillManagerError(f"{label} must not contain symlinks: {path}")
+        if not current.exists():
+            break
 
 
 def reject_symlinked_child_path(path: Path, root: Path, *, label: str) -> None:
@@ -137,6 +169,34 @@ def require_record_path_under(path: Path, root: Path) -> Path:
     except ValueError as exc:
         raise SkillManagerError(f"Draft record path is outside AIWS draft state root: {path}") from exc
     return resolved_path
+
+
+def tree_digest(root: Path) -> str:
+    if not root.is_dir():
+        raise SkillManagerError(f"Draft path is not a directory: {root}")
+
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            raise SkillManagerError(f"Draft path must not contain symlinks: {path}")
+        if path.is_dir():
+            digest.update(b"D\0")
+            digest.update(relative.encode("utf-8"))
+            digest.update(b"\0")
+            continue
+        if path.is_file():
+            digest.update(b"F\0")
+            digest.update(relative.encode("utf-8"))
+            digest.update(b"\0")
+            content = path.read_bytes()
+            digest.update(str(len(content)).encode("ascii"))
+            digest.update(b"\0")
+            digest.update(content)
+            digest.update(b"\0")
+            continue
+        raise SkillManagerError(f"Unsupported draft tree entry: {path}")
+    return digest.hexdigest()
 
 
 def parse_skill_frontmatter(content: str) -> tuple[dict[str, str], str]:
@@ -365,6 +425,7 @@ def create_draft_record(
 ) -> DraftRecord:
     record_id = draft_id(plugin_id, skill_id, origin_repo)
     draft_path = draft_worktree_path(aiws_root, origin_marketplace, plugin_id, origin_repo)
+    base_tree_digest = tree_digest(draft_path) if draft_path.exists() else None
     record = DraftRecord(
         plugin_id=plugin_id,
         skill_id=skill_id,
@@ -374,12 +435,15 @@ def create_draft_record(
         base_version=base_version,
         base_commit=base_commit,
         draft_path=str(draft_path),
+        base_tree_digest=base_tree_digest,
+        current_tree_digest=base_tree_digest,
         active=True,
         modified=False,
         publish_target=None,
         branch_name=None,
         pr_url=None,
         last_validation_status="not_run",
+        last_validation_tree_digest=None,
         updated_at=utc_now(),
     )
     write_json_atomic(draft_record_path(aiws_root, record_id), record.to_json())
@@ -388,7 +452,129 @@ def create_draft_record(
 
 def load_draft_record(aiws_root: Path, record_id: str) -> DraftRecord:
     payload = load_json(draft_record_path(aiws_root, record_id))
-    return DraftRecord(**payload)
+    if not isinstance(payload, dict):
+        raise SkillManagerError(f"Draft record must be a JSON object: {draft_record_path(aiws_root, record_id)}")
+    return draft_record_from_payload(payload)
+
+
+def safely_identify_draft_record(aiws_root: Path, record_id: str) -> DraftRecord:
+    record_path = draft_record_path(aiws_root, record_id)
+    require_record_path_under(record_path, aiws_root / "state" / "skill-drafts")
+    return load_draft_record(aiws_root, record_id)
+
+
+def persist_validation_status(aiws_root: Path, record_id: str, status: str) -> DraftRecord:
+    record = safely_identify_draft_record(aiws_root, record_id)
+    validation_tree_digest = record.current_tree_digest if status == "passed" else None
+    updated = DraftRecord(
+        **{
+            **record.to_json(),
+            "last_validation_status": status,
+            "last_validation_tree_digest": validation_tree_digest,
+            "updated_at": utc_now(),
+        }
+    )
+    write_json_atomic(draft_record_path(aiws_root, record_id), updated.to_json())
+    return updated
+
+
+def persist_validation_failure(aiws_root: Path, record_id: str, *, digest_failed: bool) -> DraftRecord:
+    record = safely_identify_draft_record(aiws_root, record_id)
+    updates: dict[str, Any] = {
+        "last_validation_status": "failed",
+        "last_validation_tree_digest": None,
+        "updated_at": utc_now(),
+    }
+    if digest_failed:
+        updates.update({"modified": True, "current_tree_digest": None})
+    updated = DraftRecord(**{**record.to_json(), **updates})
+    write_json_atomic(draft_record_path(aiws_root, record_id), updated.to_json())
+    return updated
+
+
+def persist_stage_validation_result(
+    aiws_root: Path,
+    record_id: str,
+    *,
+    status: str,
+    current_tree_digest: str | None,
+    modified: bool,
+) -> DraftRecord:
+    record = safely_identify_draft_record(aiws_root, record_id)
+    validation_tree_digest = current_tree_digest if status == "passed" else None
+    updated = DraftRecord(
+        **{
+            **record.to_json(),
+            "current_tree_digest": current_tree_digest,
+            "modified": modified,
+            "last_validation_status": status,
+            "last_validation_tree_digest": validation_tree_digest,
+            "updated_at": utc_now(),
+        }
+    )
+    write_json_atomic(draft_record_path(aiws_root, record_id), updated.to_json())
+    return updated
+
+
+def require_non_blank_string(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise SkillManagerError(f"{field_name} must be a non-blank string.")
+    return value.strip()
+
+
+def proposal_record_path(aiws_root: Path, proposal_id: str) -> Path:
+    return aiws_root / "state" / "skill-proposals" / f"{proposal_id}.json"
+
+
+def require_proposal_path_under(path: Path, root: Path) -> Path:
+    reject_symlinked_root(root.parent, label="AIWS proposal state parent")
+    reject_symlinked_root(root, label="AIWS proposal state root")
+    absolute_path = path.absolute()
+    absolute_root = root.absolute()
+    if absolute_path == absolute_root:
+        raise SkillManagerError(f"Proposal path is outside AIWS proposal state root: {path}")
+    try:
+        absolute_path.relative_to(absolute_root)
+    except ValueError as exc:
+        raise SkillManagerError(f"Proposal path is outside AIWS proposal state root: {path}") from exc
+    return absolute_path
+
+
+def validate_proposal_write_path(path: Path, root: Path) -> Path:
+    require_proposal_path_under(path, root)
+    reject_existing_symlink_components(path.parent, label="Proposal path parent")
+    if path.is_symlink():
+        raise SkillManagerError(f"Proposal path must not be a symlink: {path}")
+    temp_path = path.with_suffix(path.suffix + ".tmp")
+    reject_existing_symlink_components(temp_path.parent, label="Proposal temporary path parent")
+    if temp_path.is_symlink():
+        raise SkillManagerError(f"Proposal temporary path must not be a symlink: {temp_path}")
+    return temp_path
+
+
+def write_json_exclusive_via_temp(path: Path, payload: dict[str, Any]) -> bool:
+    proposal_root = path.parent
+    temp_path = validate_proposal_write_path(path, proposal_root)
+    proposal_root.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        return False
+    if temp_path.exists():
+        return False
+
+    try:
+        with temp_path.open("x") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        os.link(temp_path, path)
+    except FileExistsError:
+        return False
+    finally:
+        remove_package_file(temp_path)
+    return True
+
+
+def remove_package_file(path: Path | None) -> None:
+    if path is not None and path.exists() and not path.is_symlink() and path.is_file():
+        path.unlink()
 
 
 def create_or_open_draft(
@@ -422,13 +608,14 @@ def create_or_open_draft(
         if existing_draft_path != expected_draft_path.resolve():
             raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
         if existing_draft_path.exists():
-            return existing
+            return refresh_modified_status(aiws_root, record_id)
 
     if expected_draft_path.exists():
         raise SkillManagerError(f"Draft path already exists without a usable record: {expected_draft_path}")
 
     expected_draft_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source_plugin_root, expected_draft_path)
+    base_tree_digest = tree_digest(expected_draft_path)
 
     record = DraftRecord(
         plugin_id=plugin_id,
@@ -439,16 +626,374 @@ def create_or_open_draft(
         base_version=base_version,
         base_commit=base_commit,
         draft_path=str(expected_draft_path),
+        base_tree_digest=base_tree_digest,
+        current_tree_digest=base_tree_digest,
         active=True,
         modified=False,
         publish_target=None,
         branch_name=None,
         pr_url=None,
         last_validation_status="passed",
+        last_validation_tree_digest=base_tree_digest,
         updated_at=utc_now(),
     )
     write_json_atomic(record_path, record.to_json())
     return record
+
+
+def refresh_modified_status(aiws_root: Path, record_id: str) -> DraftRecord:
+    record_path = draft_record_path(aiws_root, record_id)
+    state_root = aiws_root / "state" / "skill-drafts"
+    plugins_root = aiws_root / "plugins"
+    require_record_path_under(record_path, state_root)
+
+    record = load_draft_record(aiws_root, record_id)
+    draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")
+    expected_draft_path = require_path_under(
+        draft_worktree_path(aiws_root, record.origin_marketplace, record.plugin_id, record.origin_repo),
+        plugins_root,
+        label="Expected draft path",
+    )
+    if draft_path != expected_draft_path:
+        raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
+
+    current_tree_digest = tree_digest(draft_path)
+    if record.base_tree_digest is None and record.modified:
+        base_tree_digest = None
+        modified = True
+    else:
+        base_tree_digest = record.base_tree_digest or current_tree_digest
+        modified = current_tree_digest != base_tree_digest
+    if (
+        record.base_tree_digest == base_tree_digest
+        and record.current_tree_digest == current_tree_digest
+        and record.modified == modified
+    ):
+        return record
+
+    refreshed = DraftRecord(
+        **{
+            **record.to_json(),
+            "base_tree_digest": base_tree_digest,
+            "current_tree_digest": current_tree_digest,
+            "modified": modified,
+            "updated_at": utc_now(),
+        }
+    )
+    write_json_atomic(record_path, refreshed.to_json())
+    return refreshed
+
+
+def package_path_for_record(package_output_dir: Path, record_id: str) -> Path:
+    return package_output_dir / f"{record_id}.zip"
+
+
+def reject_output_dir_inside_draft(package_output_dir: Path, draft_path: Path) -> None:
+    draft_resolved = draft_path.resolve()
+    output_resolved = package_output_dir.resolve(strict=False)
+    if output_resolved == draft_resolved:
+        raise SkillManagerError(f"Package output directory must not be inside the draft tree: {package_output_dir}")
+    try:
+        output_resolved.relative_to(draft_resolved)
+    except ValueError:
+        return
+    raise SkillManagerError(f"Package output directory must not be inside the draft tree: {package_output_dir}")
+
+
+def path_is_at_or_under(path: Path, root: Path) -> bool:
+    absolute_path = path.absolute()
+    absolute_root = root.absolute()
+    if absolute_path == absolute_root:
+        return True
+    try:
+        absolute_path.relative_to(absolute_root)
+    except ValueError:
+        return False
+    return True
+
+
+def path_is_under_claude_memory_data(path: Path) -> bool:
+    parts = path.absolute().parts
+    lowered_parts = [part.lower() for part in parts]
+    marker = (".claude", "plugins", "data")
+    for index in range(0, len(lowered_parts) - len(marker) + 1):
+        if tuple(lowered_parts[index : index + len(marker)]) != marker:
+            continue
+        return any("memory" in part for part in lowered_parts[index + len(marker) :])
+    return False
+
+
+def reject_disallowed_package_output_dir(aiws_root: Path, package_output_dir: Path) -> None:
+    disallowed_roots = (aiws_root / "memory", aiws_root / "imports", aiws_root / "exports")
+    for root in disallowed_roots:
+        if path_is_at_or_under(package_output_dir, root):
+            raise SkillManagerError(f"Package output directory is under a disallowed package output directory: {root}")
+    if path_is_under_claude_memory_data(package_output_dir):
+        raise SkillManagerError(
+            "Package output directory is under a disallowed package output directory: .claude/plugins/data/*memory*"
+        )
+
+
+def validate_package_output_dir(
+    aiws_root: Path, package_output_dir: Path, draft_path: Path, record_id: str
+) -> tuple[Path, Path]:
+    if package_output_dir is None:
+        raise SkillManagerError("Package output directory is required.")
+    reject_existing_symlink_components(package_output_dir.parent, label="Package output directory parent")
+    if package_output_dir.is_symlink():
+        raise SkillManagerError(f"Package output directory must not be a symlink: {package_output_dir}")
+    reject_disallowed_package_output_dir(aiws_root, package_output_dir)
+    reject_output_dir_inside_draft(package_output_dir, draft_path)
+    if package_output_dir.exists() and not package_output_dir.is_dir():
+        raise SkillManagerError(f"Package output path is not a directory: {package_output_dir}")
+
+    package_path = package_path_for_record(package_output_dir, record_id)
+    reject_existing_symlink_components(package_path.parent, label="Package path parent")
+    if package_path.is_symlink():
+        raise SkillManagerError(f"Package path must not be a symlink: {package_path}")
+    temp_path = package_output_dir / f".{record_id}.zip.tmp"
+    reject_existing_symlink_components(temp_path.parent, label="Temporary package path parent")
+    if temp_path.is_symlink():
+        raise SkillManagerError(f"Temporary package path must not be a symlink: {temp_path}")
+    return package_path, temp_path
+
+
+def zip_entry_name(path: Path, root: Path) -> str:
+    relative = path.relative_to(root)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SkillManagerError(f"Unsafe package entry path: {path}")
+    entry_name = relative.as_posix()
+    if not entry_name or entry_name.startswith("/"):
+        raise SkillManagerError(f"Unsafe package entry path: {path}")
+    return entry_name
+
+
+def build_draft_package(aiws_root: Path, record_id: str, package_output_dir: Path) -> dict[str, Any]:
+    safely_identify_draft_record(aiws_root, record_id)
+    package_path: Path | None = None
+    temp_path: Path | None = None
+    refresh_completed = False
+    try:
+        record = refresh_modified_status(aiws_root, record_id)
+        refresh_completed = True
+        draft_path = require_path_under(Path(record.draft_path), aiws_root / "plugins", label="Draft path")
+        package_path, temp_path = validate_package_output_dir(aiws_root, package_output_dir, draft_path, record_id)
+
+        validation = validate_plugin(draft_path, expected_name=record.plugin_id, expected_version=record.base_version)
+        skill_names = {skill["name"] for skill in validation["skills"]}
+        if record.skill_id not in skill_names:
+            raise SkillManagerError(f"Requested skill {record.skill_id!r} does not exist in plugin {record.plugin_id!r}.")
+
+        package_output_dir.mkdir(parents=True, exist_ok=True)
+        if temp_path.exists():
+            temp_path.unlink()
+
+        with zipfile.ZipFile(temp_path, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            for path in sorted(draft_path.rglob("*"), key=lambda item: item.relative_to(draft_path).as_posix()):
+                if path.is_symlink():
+                    raise SkillManagerError(f"Draft path must not contain symlinks: {path}")
+                if path.is_dir():
+                    continue
+                if not path.is_file():
+                    raise SkillManagerError(f"Unsupported draft tree entry: {path}")
+                package.write(path, zip_entry_name(path, draft_path))
+        temp_path.replace(package_path)
+        record = persist_validation_status(aiws_root, record_id, "passed")
+    except Exception:
+        remove_package_file(temp_path)
+        remove_package_file(package_path)
+        persist_validation_failure(aiws_root, record_id, digest_failed=not refresh_completed)
+        raise
+
+    return {
+        "status": "packaged",
+        "record_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "package_path": str(package_path),
+        "modified": record.modified,
+        "status_label": "Modified locally" if record.modified else "Current",
+        "validation_status": "passed",
+        "package_layout": "cowork_flat_root",
+    }
+
+
+def activate_draft(aiws_root: Path, record_id: str, host_kind: str, package_output_dir: Path) -> dict[str, Any]:
+    if host_kind != "cowork":
+        raise SkillManagerError("Only host_kind='cowork' is supported for draft activation in this slice.")
+
+    safely_identify_draft_record(aiws_root, record_id)
+    try:
+        record = refresh_modified_status(aiws_root, record_id)
+    except Exception:
+        persist_validation_failure(aiws_root, record_id, digest_failed=True)
+        raise
+    if not record.modified:
+        draft_path = require_path_under(Path(record.draft_path), aiws_root / "plugins", label="Draft path")
+        try:
+            validation = validate_plugin(draft_path, expected_name=record.plugin_id, expected_version=record.base_version)
+            skill_names = {skill["name"] for skill in validation["skills"]}
+            if record.skill_id not in skill_names:
+                raise SkillManagerError(
+                    f"Requested skill {record.skill_id!r} does not exist in plugin {record.plugin_id!r}."
+                )
+            persist_validation_status(aiws_root, record_id, "passed")
+        except Exception:
+            persist_validation_failure(aiws_root, record_id, digest_failed=False)
+            raise
+        return {
+            "status": "not_modified",
+            "record_id": record_id,
+            "plugin_id": record.plugin_id,
+            "skill_id": record.skill_id,
+            "modified": False,
+            "status_label": "Current",
+            "actions": [],
+        }
+
+    package = build_draft_package(aiws_root, record_id, package_output_dir)
+    return {
+        **package,
+        "status": "host_capability_missing",
+        "activation_effective": False,
+        "requires_manual_upload": True,
+        "actions": [
+            {
+                "type": "package_upload",
+                "terminal": False,
+                "host_kind": "cowork",
+                "package_path": package["package_path"],
+                "label": "Upload draft package to Cowork",
+            }
+        ],
+    }
+
+
+def stage_proposal(
+    aiws_root: Path,
+    record_id: str,
+    target_scope: str,
+    target_repo: str,
+    summary: str,
+    rationale: str,
+) -> dict[str, Any]:
+    record_id = require_non_blank_string(record_id, "record_id")
+    target_scope = require_non_blank_string(target_scope, "target_scope")
+    target_repo = require_non_blank_string(target_repo, "target_repo")
+    summary = require_non_blank_string(summary, "summary")
+    rationale = require_non_blank_string(rationale, "rationale")
+
+    record = safely_identify_draft_record(aiws_root, record_id)
+    canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
+    if canonical_record_id != record_id:
+        raise SkillManagerError(f"Draft record id does not match canonical draft id {canonical_record_id}.")
+
+    plugins_root = aiws_root / "plugins"
+    draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")
+    expected_draft_path = require_path_under(
+        draft_worktree_path(aiws_root, record.origin_marketplace, record.plugin_id, record.origin_repo),
+        plugins_root,
+        label="Expected draft path",
+    )
+    if draft_path != expected_draft_path:
+        persist_validation_failure(aiws_root, record_id, digest_failed=True)
+        raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
+
+    try:
+        current_tree_digest = tree_digest(draft_path)
+    except Exception:
+        persist_validation_failure(aiws_root, record_id, digest_failed=True)
+        raise
+
+    modified = record.base_tree_digest is not None and current_tree_digest != record.base_tree_digest
+    if record.base_tree_digest is None:
+        persist_stage_validation_result(
+            aiws_root,
+            record_id,
+            status="failed",
+            current_tree_digest=current_tree_digest,
+            modified=True,
+        )
+        raise SkillManagerError(f"Draft record {record_id} has no base_tree_digest; cannot stage proposal.")
+    if not modified:
+        persist_stage_validation_result(
+            aiws_root,
+            record_id,
+            status="failed",
+            current_tree_digest=current_tree_digest,
+            modified=False,
+        )
+        raise SkillManagerError(f"Draft record {record_id} does not differ from its base tree.")
+
+    try:
+        validation = validate_plugin(draft_path, expected_name=record.plugin_id, expected_version=record.base_version)
+        skill_names = {skill["name"] for skill in validation["skills"]}
+        if record.skill_id not in skill_names:
+            raise SkillManagerError(f"Requested skill {record.skill_id!r} does not exist in plugin {record.plugin_id!r}.")
+    except Exception:
+        persist_stage_validation_result(
+            aiws_root,
+            record_id,
+            status="failed",
+            current_tree_digest=current_tree_digest,
+            modified=modified,
+        )
+        raise
+
+    record = persist_stage_validation_result(
+        aiws_root,
+        record_id,
+        status="passed",
+        current_tree_digest=current_tree_digest,
+        modified=True,
+    )
+
+    proposal_root = aiws_root / "state" / "skill-proposals"
+    created_at = utc_now()
+    for _attempt in range(10):
+        proposal_id = f"skillprop_{uuid.uuid4().hex}"
+        proposal_path = proposal_record_path(aiws_root, proposal_id)
+        proposal = {
+            "proposal_id": proposal_id,
+            "draft_id": record_id,
+            "plugin_id": record.plugin_id,
+            "skill_id": record.skill_id,
+            "origin_marketplace": record.origin_marketplace,
+            "origin_repo": record.origin_repo,
+            "origin_ref": record.origin_ref,
+            "base_version": record.base_version,
+            "base_commit": record.base_commit,
+            "draft_path": record.draft_path,
+            "base_tree_digest": record.base_tree_digest,
+            "current_tree_digest": current_tree_digest,
+            "validation_status": "passed",
+            "validation_tree_digest": current_tree_digest,
+            "target_scope": target_scope,
+            "target_repo": target_repo,
+            "summary": summary,
+            "rationale": rationale,
+            "active": record.active,
+            "modified": record.modified,
+            "status": "staged",
+            "branch_name": None,
+            "pr_url": None,
+            "created_at": created_at,
+            "updated_at": created_at,
+        }
+        if write_json_exclusive_via_temp(proposal_path, proposal):
+            return {
+                "status": "staged",
+                "proposal_id": proposal_id,
+                "proposal_path": str(proposal_path),
+                "draft_id": record_id,
+                "plugin_id": record.plugin_id,
+                "skill_id": record.skill_id,
+                "target_scope": target_scope,
+                "target_repo": target_repo,
+                "next_action": "submit_for_review",
+            }
+
+    raise SkillManagerError(f"Could not allocate a unique proposal record under {proposal_root}.")
 
 
 def revert_draft(aiws_root: Path, record_id: str) -> dict[str, str]:

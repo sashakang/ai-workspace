@@ -26,7 +26,15 @@ Example unit marketplace:
 github.com/owner/repo
 ```
 
-Repository layout:
+Current read-only repo validation found the marketplace manifest at:
+
+```text
+.claude-plugin/marketplace.json
+```
+
+That manifest points to root-level plugin sources such as `./core-aiws` and `./aiws-productivity`. This is the current observed repo shape.
+
+The layout below is an example, target, or alternate marketplace shape. Do not treat it as the only proven current layout unless Cowork runtime validation confirms that Cowork requires or prefers it:
 
 ```text
 .claude-plugin/marketplace.json
@@ -39,6 +47,18 @@ plugins/
 ```
 
 `marketplace.json` includes `name`, `owner`, and `plugins`. Each plugin entry includes `name`, `source`, `version`, and `description`. Each plugin has a matching `.claude-plugin/plugin.json`.
+
+Runtime Cowork proof is still required. The repo has static validation evidence only; it does not yet prove that Cowork accepts the marketplace, installs the plugins, exposes the expected skills, or invokes `meeting-followup`.
+
+Runtime evidence to collect:
+
+- the Cowork marketplace add UI label and exact menu or settings path
+- whether Cowork accepts root-level source directories or requires `plugins/<plugin-id>`
+- installed plugin IDs
+- visible skill IDs, including `meeting-followup`
+- proof that `meeting-followup` can be invoked
+- a sanitized `installed_plugins.json`, if Cowork exposes one
+- runtime logs or errors from marketplace add, plugin install, skill visibility, and invocation
 
 ## Scoped Variants
 
@@ -69,8 +89,10 @@ Organization-managed plugins are read-only for members in Cowork. User changes t
 Editable draft files live under:
 
 ```text
-~/.aiws/plugins/<marketplace-slug>/<plugin-id>
+~/.aiws/plugins/<marketplace-slug>/<plugin-id>-<origin-repo-sha10>
 ```
+
+`origin-repo-sha10 = sha256(origin_repo)[:10]`. Including the origin hash prevents collisions when different source repos use the same plugin ID. This does not create duplicate visible skills: visible skill identity remains `plugin_id + skill_id`.
 
 The authoritative draft registry lives under:
 
@@ -103,14 +125,13 @@ AIWS backend or a GitHub App handles branches and pull requests behind the scene
 
 ## Validation Gates
 
-Before install, update, draft activation, or PR submission, AIWS validates:
+For the fresh Cowork marketplace install slice, AIWS validates:
 
 - marketplace and plugin manifests
 - plugin contracts
-- `.mcp.json` files using top-level `mcpServers`
 - skill folders using Codex `skill-creator` compatibility rules
 - version alignment across marketplace entries, plugin manifests, and contracts
 
-`.mcp.json` files with top-level `servers` fail validation.
-
 Skill folders must include `SKILL.md` with only `name` and `description` frontmatter. The skill folder name must match the frontmatter `name`.
+
+`.mcp.json` validation is later control-plane and release-readiness work, not a Phase 1 install validation gate. In that later slice, `.mcp.json` files must use top-level `mcpServers`; files with top-level `servers` fail validation.

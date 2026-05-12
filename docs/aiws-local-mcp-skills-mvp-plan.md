@@ -59,6 +59,8 @@ aiws.skills.list_staged_changes({target_scope?, skill_id?})
   -> {proposals: [...]}
 ```
 
+`aiws.skills.stage_change` is the legacy host-local staged-write surface under `~/.aiws/hosts/<host-id>/staged-writes/skills/`. It is not the Cowork skill proposal workflow. Cowork-facing skill proposals use the `core-aiws` skill-management operation `stage_proposal(draft_id, target_scope, target_repo, summary, rationale)`, which writes under `~/.aiws/state/skill-proposals/` and persists the concrete review repository.
+
 Catalog sources:
 
 ```text
@@ -147,7 +149,7 @@ Host adapters own host-specific roots, evidence surfaces, and capability exposur
 
 ## Privacy And Promotion
 
-- `stage_change` writes immutable local proposal files under `~/.aiws/hosts/<host-id>/staged-writes/skills/`.
+- `stage_change` writes immutable legacy host-local staged-write files under `~/.aiws/hosts/<host-id>/staged-writes/skills/`. It must not be used for Cowork skill proposal staging.
 - No upload happens in MVP.
 - Raw transcripts or evidence are copied only when explicitly supplied by the user.
 - Personal skills and staged evidence are not sent to remote APIs.

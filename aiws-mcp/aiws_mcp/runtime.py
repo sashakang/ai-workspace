@@ -1176,6 +1176,7 @@ class AiwsRuntime:
         bundle_path: str | None = None,
         evidence: str | None = None,
     ) -> dict[str, Any]:
+        """Legacy host-local staged write surface; Cowork skill proposals use stage_proposal."""
         host = self.ensure_host(host_kind=host_kind, host_id=host_id)
         proposal_id = "skillchg_" + uuid.uuid4().hex[:12]
         proposal_path = (

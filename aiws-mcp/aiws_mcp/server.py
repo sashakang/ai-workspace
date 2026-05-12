@@ -48,6 +48,7 @@ def create_server(root: Path | None = None):
         bundle_path: str | None = None,
         evidence: str | None = None,
     ) -> dict[str, Any]:
+        """Legacy host-local staged write surface; not the Cowork skill proposal path."""
         return runtime.stage_change(
             skill_id=skill_id,
             target_scope=target_scope,
