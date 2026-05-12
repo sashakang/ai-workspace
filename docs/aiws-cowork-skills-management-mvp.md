@@ -82,13 +82,13 @@ build_draft_package(draft_id, package_output_dir)
 activate_draft(draft_id, host_kind, package_output_dir)
 update_from_github(plugin_id, marketplace_id)
 stage_proposal(draft_id, target_scope, target_repo, summary, rationale)
-submit_pr(draft_id, target_repo)
+submit_pr(proposal_id, submitter)
 revert_draft(draft_id)
 ```
 
 For Phase 2 MVP acceptance, the required staging operation is `stage_proposal(draft_id, target_scope, target_repo, summary, rationale)`. It writes a local proposal record under `~/.aiws/state/skill-proposals/` with enough provenance and review notes for later review. `target_scope` is the Cowork/user-facing label and policy scope. `target_repo` is the concrete backend review repository persisted for later submit-for-review. Staging owns current validation for the draft: it revalidates the current draft tree, records the validation digest, and writes no proposal if current validation fails. It must not be silently treated as `submit_pr`.
 
-`submit_pr` or an equivalent upload flow is a separate explicit action after staging. In the Cowork UX, this should appear as a friendly submit-for-review action, not as a git workflow. The backend may create or update a GitHub pull request, and maintainers may use GitHub UI to review and merge it.
+`submit_pr` or an equivalent submitter flow is a separate explicit action after staging. It consumes the staged `proposal_id` and uses the proposal's stored `target_repo`; it must not ask for or accept a fresh repository value at submit time. In the Cowork UX, this should appear as a friendly submit-for-review action, not as a git workflow. The backend may create or update a GitHub pull request, and maintainers may use GitHub UI to review and merge it.
 
 For the current Cowork MVP, `activate_draft` should use the reinstall-draft strategy: build a package under the same plugin identity and replace the active user-level plugin package through the supported Cowork/plugin install path. If Cowork cannot activate the draft programmatically, the operation should return `host_capability_missing` with one non-terminal package-upload action instead of pretending activation succeeded.
 
@@ -129,7 +129,7 @@ Staging a proposed improvement records the user's draft as a proposal for a targ
 - review notes or change summary
 - active/modified status at the time of staging
 
-Staging writes a local proposal record first. Submission comes after that record exists and should create a reviewable proposal, normally a GitHub pull request or equivalent review item. Direct push is not part of the normal current-user flow.
+Staging writes a local proposal record first. Submission comes after that record exists and should create a reviewable proposal, normally a GitHub pull request or equivalent review item. Submission must recheck that the draft tree still matches the validation digest captured during staging; if the draft changed, the user restages. Retry safety comes from deterministic branch identity `aiws/skill-proposals/<proposal_id>`, so repeat submits update or return the same review item instead of creating duplicates. Required reviewer roles include `AI engineer`. Direct push is not part of the normal current-user flow.
 
 Normal users should stay in Cowork for this sequence:
 

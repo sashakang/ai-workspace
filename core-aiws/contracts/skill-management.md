@@ -39,11 +39,13 @@ build_draft_package(draft_id, package_output_dir)
 activate_draft(draft_id, host_kind, package_output_dir)
 update_from_github(plugin_id, marketplace_id)
 stage_proposal(draft_id, target_scope, target_repo, summary, rationale)
-submit_pr(draft_id, target_repo)
+submit_pr(proposal_id, submitter)
 revert_draft(draft_id)
 ```
 
 `stage_proposal` writes a local proposal record only, under `~/.aiws/state/skill-proposals/`. It records the draft, target scope, target review repository, summary, rationale, provenance, and validation status for later review. `target_scope` is the Cowork/user-facing label and policy scope. `target_repo` is the concrete backend review repository persisted for a later submit-for-review action. Staging must not upload, submit, create a pull request, or push changes; `submit_pr` or another explicit submit-for-review operation is follow-on behavior. Package export or upload is an admin/deployment fallback, not the normal user staging path.
+
+`submit_pr` consumes a staged `proposal_id`, not a fresh repository argument. The proposal's stored `target_repo` is the review destination. Before calling the submitter adapter, the manager revalidates that the current draft tree still matches the staged `validation_tree_digest`, that the plugin still validates with the original plugin ID and version, and that the requested skill still exists. If the draft changed after staging, the user must restage. The submitter receives deterministic branch identity `aiws/skill-proposals/<proposal_id>` and required reviewer roles including `AI engineer`; it owns GitHub mechanics and must create or update one review item for retry safety. PR metadata is stored on the proposal record only, because one draft can have multiple proposals to different target repos.
 
 `build_draft_package` requires an explicit `package_output_dir`; callers must choose the output location. The manager must not invent a default path. Before writing a package, it refreshes the draft modified state, revalidates the draft plugin manifest with the original `plugin_id` and `base_version`, confirms the requested `skill_id` is still present, and rejects symlinks in the draft tree, the output directory, or a preexisting package path. The output directory must not be inside the draft tree or under the disallowed memory, import, export, or Claude memory data roots.
 
@@ -142,6 +144,8 @@ updated_at
 
 Proposal files must be created with collision-safe IDs and must never overwrite an existing proposal file. Proposal state roots, final paths, and temporary paths must fail closed on symlinks.
 
+A staged proposal submitted for review moves from `status='staged'` to `status='submitted_for_review'` only after the submitter returns nonblank `branch_name` and `pr_url`. Successful submission also adds `required_review_roles` and `submitted_at` to the proposal record. If submission fails or returns invalid metadata, local proposal state remains staged and retryable. If an already submitted proposal has complete metadata, submit returns that existing result without calling the submitter again. If submitted metadata is incomplete, submit fails closed.
+
 When an active modified draft exists, update from GitHub must fail closed and offer only:
 
 ```text
@@ -163,6 +167,6 @@ Managed skills must remain compatible with Codex `skill-creator` rules:
 
 ## GitHub Policy
 
-Users edit and test first, then stage a proposal with `target_scope` and `target_repo`. A later explicit submit-for-review action may create or update a pull request. Direct push is not part of the normal user flow.
+Users edit and test first, then stage a proposal with `target_scope` and `target_repo`. A later explicit submit-for-review action submits the staged proposal and may create or update a pull request. Direct push is not part of the normal user flow.
 
 GitHub auth is delegated to the authenticated user, Cowork organization connection, or configured organization bot/App. Users must not paste tokens into chat.

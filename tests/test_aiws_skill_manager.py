@@ -25,6 +25,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     refresh_modified_status,
     revert_draft,
     stage_proposal,
+    submit_pr,
     tree_digest,
     update_from_github_decision,
     validate_marketplace,
@@ -32,6 +33,24 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     validate_mcp_config,
     validate_skill_creator_compat,
 )
+
+
+class FakeProposalSubmitter:
+    def __init__(self, response: dict[str, object] | None = None, error: Exception | None = None) -> None:
+        self.response = response
+        self.error = error
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(self, payload: dict[str, object]) -> dict[str, object]:
+        self.calls.append(payload)
+        if self.error is not None:
+            raise self.error
+        if self.response is not None:
+            return self.response
+        return {
+            "branch_name": payload["branch_name"],
+            "pr_url": "https://github.com/example/review/pull/123",
+        }
 
 
 class AiwsSkillManagerTests(unittest.TestCase):
@@ -955,6 +974,192 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertFalse((aiws_root / "managed-plugins").exists())
             self.assertFalse((temp_root / ".claude").exists())
 
+    def test_submit_pr_submits_staged_proposal_and_persists_review_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record, staged = self.create_staged_meeting_followup_proposal(Path(temp))
+            submitter = FakeProposalSubmitter()
+
+            result = submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            expected_branch = f"aiws/skill-proposals/{staged['proposal_id']}"
+            self.assertEqual(result["status"], "submitted_for_review")
+            self.assertEqual(result["status_label"], "Submitted for review")
+            self.assertEqual(result["proposal_id"], staged["proposal_id"])
+            self.assertEqual(result["draft_id"], record_id)
+            self.assertEqual(result["target_repo"], "review-repo")
+            self.assertEqual(result["branch_name"], expected_branch)
+            self.assertEqual(result["pr_url"], "https://github.com/example/review/pull/123")
+            self.assertEqual(len(submitter.calls), 1)
+            self.assertEqual(submitter.calls[0]["branch_name"], expected_branch)
+            self.assertEqual(submitter.calls[0]["target_repo"], "review-repo")
+            self.assertEqual(submitter.calls[0]["draft_path"], record.draft_path)
+            self.assertEqual(submitter.calls[0]["validation_tree_digest"], tree_digest(Path(record.draft_path)))
+            self.assertIn("AI engineer", submitter.calls[0]["required_review_roles"])
+
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["status"], "submitted_for_review")
+            self.assertEqual(proposal["branch_name"], expected_branch)
+            self.assertEqual(proposal["pr_url"], "https://github.com/example/review/pull/123")
+            self.assertIn("submitted_at", proposal)
+
+            loaded = load_draft_record(aiws_root, record_id)
+            self.assertIsNone(loaded.branch_name)
+            self.assertIsNone(loaded.pr_url)
+
+    def test_submit_pr_already_submitted_proposal_returns_existing_metadata_without_submitter_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            first_submitter = FakeProposalSubmitter()
+            first = submit_pr(aiws_root, staged["proposal_id"], first_submitter)
+            second_submitter = FakeProposalSubmitter()
+
+            second = submit_pr(aiws_root, staged["proposal_id"], second_submitter)
+
+            self.assertEqual(second["status"], "submitted_for_review")
+            self.assertEqual(second["branch_name"], first["branch_name"])
+            self.assertEqual(second["pr_url"], first["pr_url"])
+            self.assertEqual(second_submitter.calls, [])
+
+    def test_submit_pr_already_submitted_proposal_still_honors_target_repo_allowlist(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            submit_pr(aiws_root, staged["proposal_id"], FakeProposalSubmitter())
+            second_submitter = FakeProposalSubmitter()
+
+            with self.assertRaisesRegex(SkillManagerError, "target_repo is not allowed"):
+                submit_pr(aiws_root, staged["proposal_id"], second_submitter, allowed_target_repos=["other-repo"])
+
+            self.assertEqual(second_submitter.calls, [])
+
+    def test_submit_pr_rejects_incomplete_submitted_metadata_without_submitter_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            proposal_path = Path(staged["proposal_path"])
+            proposal = json.loads(proposal_path.read_text())
+            proposal["status"] = "submitted_for_review"
+            proposal["branch_name"] = "aiws/skill-proposals/" + staged["proposal_id"]
+            proposal["pr_url"] = None
+            proposal_path.write_text(json.dumps(proposal))
+            submitter = FakeProposalSubmitter()
+
+            with self.assertRaisesRegex(SkillManagerError, "submitted proposal metadata is incomplete"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(submitter.calls, [])
+
+    def test_submit_pr_rejects_missing_proposal_without_submitter_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            submitter = FakeProposalSubmitter()
+
+            with self.assertRaisesRegex(SkillManagerError, "Proposal record not found"):
+                submit_pr(Path(temp) / ".aiws", "skillprop_missing", submitter)
+
+            self.assertEqual(submitter.calls, [])
+
+    def test_submit_pr_rejects_failed_validation_proposal_without_submitter_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            proposal_path = Path(staged["proposal_path"])
+            proposal = json.loads(proposal_path.read_text())
+            proposal["validation_status"] = "failed"
+            proposal_path.write_text(json.dumps(proposal))
+            submitter = FakeProposalSubmitter()
+
+            with self.assertRaisesRegex(SkillManagerError, "validation status is not passed"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(submitter.calls, [])
+
+    def test_submit_pr_rejects_post_stage_draft_edits_without_submitter_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, record, staged = self.create_staged_meeting_followup_proposal(Path(temp))
+            self.edit_draft_skill(record, "\nEdit after staging.\n")
+            submitter = FakeProposalSubmitter()
+
+            with self.assertRaisesRegex(SkillManagerError, "changed since staging"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(submitter.calls, [])
+            self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"])["status"], "staged")
+
+    def test_submit_pr_rejects_invalid_draft_without_submitter_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, record, staged = self.create_staged_meeting_followup_proposal(Path(temp))
+            skill_path = Path(record.draft_path) / "skills" / "meeting-followup" / "SKILL.md"
+            skill_path.unlink()
+            submitter = FakeProposalSubmitter()
+
+            with self.assertRaises(SkillManagerError):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(submitter.calls, [])
+            self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"])["status"], "staged")
+
+    def test_submit_pr_submitter_failure_leaves_proposal_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            before = self.proposal_payload(aiws_root, staged["proposal_id"])
+            submitter = FakeProposalSubmitter(error=RuntimeError("remote unavailable"))
+
+            with self.assertRaisesRegex(RuntimeError, "remote unavailable"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"]), before)
+
+    def test_submit_pr_invalid_submitter_metadata_leaves_proposal_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            before = self.proposal_payload(aiws_root, staged["proposal_id"])
+            submitter = FakeProposalSubmitter(response={"branch_name": " ", "pr_url": ""})
+
+            with self.assertRaisesRegex(SkillManagerError, "submitter returned invalid review metadata"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"]), before)
+
+    def test_submit_pr_rejects_target_repo_outside_allowlist_without_submitter_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            submitter = FakeProposalSubmitter()
+
+            with self.assertRaisesRegex(SkillManagerError, "target_repo is not allowed"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter, allowed_target_repos=["other-repo"])
+
+            self.assertEqual(submitter.calls, [])
+
+    def test_submit_pr_writes_only_local_proposal_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                temp_root
+            )
+
+            submit_pr(aiws_root, staged["proposal_id"], FakeProposalSubmitter())
+
+            self.assertEqual(len(self.proposal_payloads(aiws_root)), 1)
+            self.assertFalse((aiws_root / "hosts").exists())
+            self.assertFalse((aiws_root / "memory").exists())
+            self.assertFalse((aiws_root / "imports").exists())
+            self.assertFalse((aiws_root / "exports").exists())
+            self.assertFalse((aiws_root / "rpm").exists())
+            self.assertFalse((aiws_root / "packages").exists())
+            self.assertFalse((aiws_root / "managed-plugins").exists())
+            self.assertFalse((temp_root / ".claude").exists())
+
     def test_create_or_open_draft_reopens_existing_draft_without_overwriting_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)
@@ -1263,6 +1468,14 @@ class AiwsSkillManagerTests(unittest.TestCase):
         record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
         return aiws_root, record_id, plugin_root, record
 
+    def create_staged_meeting_followup_proposal(
+        self, temp_root: Path
+    ) -> tuple[Path, str, Path, object, dict[str, object]]:
+        aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+        self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+        staged = stage_proposal(aiws_root, record_id, "Cowork", "review-repo", "Summary", "Rationale")
+        return aiws_root, record_id, plugin_root, record, staged
+
     def assert_no_package_artifacts(self, package_dir: Path) -> None:
         if not package_dir.exists():
             return
@@ -1277,6 +1490,9 @@ class AiwsSkillManagerTests(unittest.TestCase):
     def proposal_payloads(self, aiws_root: Path) -> list[dict[str, object]]:
         proposal_root = aiws_root / "state" / "skill-proposals"
         return [json.loads(path.read_text()) for path in sorted(proposal_root.glob("*.json"))]
+
+    def proposal_payload(self, aiws_root: Path, proposal_id: str) -> dict[str, object]:
+        return json.loads((aiws_root / "state" / "skill-proposals" / f"{proposal_id}.json").read_text())
 
     def edit_draft_skill(self, record: object, content: str) -> None:
         draft_skill = Path(record.draft_path) / "skills" / "meeting-followup" / "SKILL.md"

@@ -526,6 +526,10 @@ def proposal_record_path(aiws_root: Path, proposal_id: str) -> Path:
     return aiws_root / "state" / "skill-proposals" / f"{proposal_id}.json"
 
 
+def proposal_state_root(aiws_root: Path) -> Path:
+    return aiws_root / "state" / "skill-proposals"
+
+
 def require_proposal_path_under(path: Path, root: Path) -> Path:
     reject_symlinked_root(root.parent, label="AIWS proposal state parent")
     reject_symlinked_root(root, label="AIWS proposal state root")
@@ -570,6 +574,32 @@ def write_json_exclusive_via_temp(path: Path, payload: dict[str, Any]) -> bool:
     finally:
         remove_package_file(temp_path)
     return True
+
+
+def load_proposal_record(aiws_root: Path, proposal_id: str) -> dict[str, Any]:
+    proposal_id = require_non_blank_string(proposal_id, "proposal_id")
+    if "/" in proposal_id or "\\" in proposal_id or ".." in proposal_id:
+        raise SkillManagerError(f"Invalid proposal_id: {proposal_id}")
+    proposal_root = proposal_state_root(aiws_root)
+    proposal_path = proposal_record_path(aiws_root, proposal_id)
+    require_proposal_path_under(proposal_path, proposal_root)
+    if not proposal_path.exists():
+        raise SkillManagerError(f"Proposal record not found: {proposal_id}")
+    if proposal_path.is_symlink():
+        raise SkillManagerError(f"Proposal path must not be a symlink: {proposal_path}")
+    payload = load_json(proposal_path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError(f"Proposal record must be a JSON object: {proposal_path}")
+    if payload.get("proposal_id") != proposal_id:
+        raise SkillManagerError(f"Proposal record id does not match requested proposal_id {proposal_id}.")
+    return payload
+
+
+def write_proposal_record(aiws_root: Path, proposal_id: str, payload: dict[str, Any]) -> None:
+    proposal_root = proposal_state_root(aiws_root)
+    proposal_path = proposal_record_path(aiws_root, proposal_id)
+    require_proposal_path_under(proposal_path, proposal_root)
+    write_json_atomic(proposal_path, payload)
 
 
 def remove_package_file(path: Path | None) -> None:
@@ -994,6 +1024,134 @@ def stage_proposal(
             }
 
     raise SkillManagerError(f"Could not allocate a unique proposal record under {proposal_root}.")
+
+
+def proposal_branch_name(proposal_id: str) -> str:
+    return f"aiws/skill-proposals/{proposal_id}"
+
+
+def normalize_review_roles(required_review_roles: list[str] | tuple[str, ...] | None) -> list[str]:
+    if required_review_roles is None:
+        return ["AI engineer"]
+    roles = [require_non_blank_string(role, "required_review_roles") for role in required_review_roles]
+    if "AI engineer" not in roles:
+        roles.append("AI engineer")
+    return roles
+
+
+def call_proposal_submitter(submitter: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    if hasattr(submitter, "submit"):
+        result = submitter.submit(payload)
+    elif callable(submitter):
+        result = submitter(payload)
+    else:
+        raise SkillManagerError("submitter must be callable or expose submit(payload).")
+    if not isinstance(result, dict):
+        raise SkillManagerError("submitter returned invalid review metadata.")
+    return result
+
+
+def submitted_review_response(proposal: dict[str, Any]) -> dict[str, Any]:
+    branch_name = require_non_blank_string(proposal.get("branch_name"), "branch_name")
+    pr_url = require_non_blank_string(proposal.get("pr_url"), "pr_url")
+    return {
+        "status": "submitted_for_review",
+        "status_label": "Submitted for review",
+        "proposal_id": proposal["proposal_id"],
+        "draft_id": proposal["draft_id"],
+        "plugin_id": proposal["plugin_id"],
+        "skill_id": proposal["skill_id"],
+        "target_scope": proposal["target_scope"],
+        "target_repo": proposal["target_repo"],
+        "branch_name": branch_name,
+        "pr_url": pr_url,
+    }
+
+
+def submit_pr(
+    aiws_root: Path,
+    proposal_id: str,
+    submitter: Any,
+    *,
+    required_review_roles: list[str] | tuple[str, ...] | None = None,
+    allowed_target_repos: list[str] | tuple[str, ...] | set[str] | None = None,
+) -> dict[str, Any]:
+    proposal_id = require_non_blank_string(proposal_id, "proposal_id")
+    proposal = load_proposal_record(aiws_root, proposal_id)
+    target_repo = require_non_blank_string(proposal.get("target_repo"), "target_repo")
+    if allowed_target_repos is not None and target_repo not in set(allowed_target_repos):
+        raise SkillManagerError(f"target_repo is not allowed: {target_repo}")
+
+    status = proposal.get("status")
+    if status == "submitted_for_review":
+        try:
+            return submitted_review_response(proposal)
+        except SkillManagerError as exc:
+            raise SkillManagerError(f"submitted proposal metadata is incomplete: {proposal_id}") from exc
+    if status != "staged":
+        raise SkillManagerError(f"Proposal {proposal_id} is not staged for review.")
+    if proposal.get("validation_status") != "passed":
+        raise SkillManagerError(f"Proposal {proposal_id} validation status is not passed.")
+
+    record_id = require_non_blank_string(proposal.get("draft_id"), "draft_id")
+    record = safely_identify_draft_record(aiws_root, record_id)
+    canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
+    if canonical_record_id != record_id or canonical_record_id != proposal.get("draft_id"):
+        raise SkillManagerError(f"Draft record id does not match canonical draft id {canonical_record_id}.")
+
+    plugins_root = aiws_root / "plugins"
+    draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")
+    expected_draft_path = require_path_under(
+        draft_worktree_path(aiws_root, record.origin_marketplace, record.plugin_id, record.origin_repo),
+        plugins_root,
+        label="Expected draft path",
+    )
+    if draft_path != expected_draft_path:
+        raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
+
+    current_tree_digest = tree_digest(draft_path)
+    validation_tree_digest = require_non_blank_string(
+        proposal.get("validation_tree_digest"), "validation_tree_digest"
+    )
+    if current_tree_digest != validation_tree_digest:
+        raise SkillManagerError(f"Draft {record_id} changed since staging; restage before submit.")
+
+    validation = validate_plugin(draft_path, expected_name=record.plugin_id, expected_version=record.base_version)
+    skill_names = {skill["name"] for skill in validation["skills"]}
+    if record.skill_id not in skill_names:
+        raise SkillManagerError(f"Requested skill {record.skill_id!r} does not exist in plugin {record.plugin_id!r}.")
+
+    review_roles = normalize_review_roles(required_review_roles)
+    branch_name = proposal_branch_name(proposal_id)
+    submitter_payload = {
+        **proposal,
+        "branch_name": branch_name,
+        "target_repo": target_repo,
+        "draft_path": record.draft_path,
+        "validation_tree_digest": validation_tree_digest,
+        "required_review_roles": review_roles,
+    }
+    submitter_result = call_proposal_submitter(submitter, submitter_payload)
+    try:
+        submitted_branch_name = require_non_blank_string(submitter_result.get("branch_name"), "branch_name")
+        pr_url = require_non_blank_string(submitter_result.get("pr_url"), "pr_url")
+    except SkillManagerError as exc:
+        raise SkillManagerError("submitter returned invalid review metadata.") from exc
+    if submitted_branch_name != branch_name:
+        raise SkillManagerError("submitter returned invalid review metadata.")
+
+    submitted_at = utc_now()
+    updated_proposal = {
+        **proposal,
+        "status": "submitted_for_review",
+        "branch_name": submitted_branch_name,
+        "pr_url": pr_url,
+        "required_review_roles": review_roles,
+        "submitted_at": submitted_at,
+        "updated_at": submitted_at,
+    }
+    write_proposal_record(aiws_root, proposal_id, updated_proposal)
+    return submitted_review_response(updated_proposal)
 
 
 def revert_draft(aiws_root: Path, record_id: str) -> dict[str, str]:
