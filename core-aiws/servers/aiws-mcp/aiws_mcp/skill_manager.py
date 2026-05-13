@@ -803,8 +803,21 @@ def create_or_open_draft(
 
     if record_path.exists():
         existing = load_draft_record(aiws_root, record_id)
+        existing_identity = draft_id(existing.plugin_id, existing.skill_id, existing.origin_repo)
+        if (
+            existing_identity != record_id
+            or existing.plugin_id != plugin_id
+            or existing.skill_id != skill_id
+            or existing.origin_repo != origin_repo
+        ):
+            raise SkillManagerError(f"Draft record {record_id} does not match requested draft identity.")
         existing_draft_path = require_path_under(Path(existing.draft_path), plugins_root, label="Draft path")
-        if existing_draft_path != expected_draft_path.resolve():
+        recorded_draft_path = require_path_under(
+            draft_worktree_path(aiws_root, existing.origin_marketplace, existing.plugin_id, existing.origin_repo),
+            plugins_root,
+            label="Recorded draft path",
+        )
+        if existing_draft_path != recorded_draft_path:
             raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
         if existing_draft_path.exists():
             refreshed = refresh_modified_status(aiws_root, record_id)

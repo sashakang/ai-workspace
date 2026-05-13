@@ -26,6 +26,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     delete_draft_file,
     discover_installed_plugins,
     draft_id,
+    draft_worktree_path,
     GhCliProposalSubmitter,
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     load_draft_record,
@@ -969,6 +970,132 @@ class AiwsSkillManagerTests(unittest.TestCase):
             loaded = load_draft_record(aiws_root, record_id)
             self.assertEqual(loaded.last_validation_status, "failed")
             self.assertIsNone(loaded.last_validation_tree_digest)
+
+    def test_validate_draft_root_level_out_of_scope_file_persists_failed_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            (Path(record.draft_path) / "plugin.yaml").write_text("name: test-only\n")
+
+            with self.assertRaisesRegex(SkillManagerError, "outside the managed skill folder"):
+                validate_draft(aiws_root, record_id)
+
+            self.assert_no_proposals(aiws_root)
+            loaded = load_draft_record(aiws_root, record_id)
+            self.assertEqual(loaded.last_validation_status, "failed")
+            self.assertIsNone(loaded.last_validation_tree_digest)
+            self.assertTrue(loaded.modified)
+            self.assertNotEqual(loaded.current_tree_digest, record.base_tree_digest)
+
+            reopened = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=_plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="ai-workspace",
+                origin_repo="https://github.com/example/example-plugin",
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+            )
+
+            self.assertEqual(reopened.last_validation_status, "failed")
+            self.assertIsNone(reopened.last_validation_tree_digest)
+            self.assertTrue(reopened.modified)
+            self.assertTrue((Path(reopened.draft_path) / "plugin.yaml").is_file())
+
+    def test_create_or_open_draft_reopens_dirty_draft_when_source_marketplace_slug_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+            origin_repo = "https://github.com/example/example-plugin"
+
+            record = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="rpm",
+                origin_repo=origin_repo,
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+            )
+            (Path(record.draft_path) / "plugin.yaml").write_text("name: test-only\n")
+            record_id = draft_id("example-plugin", "meeting-followup", origin_repo)
+            with self.assertRaisesRegex(SkillManagerError, "outside the managed skill folder"):
+                validate_draft(aiws_root, record_id)
+
+            reopened = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="cowork-upload",
+                origin_repo=origin_repo,
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+            )
+
+            self.assertEqual(Path(reopened.draft_path), Path(record.draft_path))
+            self.assertEqual(reopened.origin_marketplace, "rpm")
+            self.assertEqual(reopened.last_validation_status, "failed")
+            self.assertIsNone(reopened.last_validation_tree_digest)
+            self.assertTrue(reopened.modified)
+            self.assertTrue((Path(reopened.draft_path) / "plugin.yaml").is_file())
+
+    def test_create_or_open_draft_rejects_tampered_existing_record_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+            requested_repo = "https://github.com/example/example-plugin"
+            record_id = draft_id("example-plugin", "meeting-followup", requested_repo)
+            tampered_repo = "https://github.com/example/other-plugin"
+            tampered_draft = draft_worktree_path(aiws_root, "rpm", "other-plugin", tampered_repo)
+            tampered_draft.mkdir(parents=True)
+            payload = {
+                "plugin_id": "other-plugin",
+                "skill_id": "meeting-followup",
+                "origin_marketplace": "rpm",
+                "origin_repo": tampered_repo,
+                "origin_ref": "master",
+                "base_version": "1.0.0",
+                "base_commit": "abc123",
+                "draft_path": str(tampered_draft),
+                "base_tree_digest": "base",
+                "current_tree_digest": "base",
+                "active": True,
+                "modified": False,
+                "publish_target": None,
+                "branch_name": None,
+                "pr_url": None,
+                "last_validation_status": "passed",
+                "last_validation_tree_digest": "base",
+                "updated_at": "2026-05-09T00:00:00Z",
+            }
+            record_path = aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
+            record_path.parent.mkdir(parents=True)
+            record_path.write_text(json.dumps(payload))
+
+            with self.assertRaisesRegex(SkillManagerError, "does not match requested draft identity"):
+                create_or_open_draft(
+                    aiws_root,
+                    source_plugin_root=plugin_root,
+                    plugin_id="example-plugin",
+                    skill_id="meeting-followup",
+                    origin_marketplace="cowork-upload",
+                    origin_repo=requested_repo,
+                    origin_ref="master",
+                    base_version="1.0.0",
+                    base_commit="abc123",
+                )
+
+            self.assertEqual(json.loads(record_path.read_text())["plugin_id"], "other-plugin")
+            self.assertTrue(tampered_draft.exists())
 
     def test_validate_draft_rejects_legacy_record_missing_base_digest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
