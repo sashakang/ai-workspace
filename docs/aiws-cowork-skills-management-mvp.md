@@ -16,6 +16,7 @@ Use these documents as the governing references:
 
 - `docs/aiws-project-development-plan.md` for phase order and acceptance criteria.
 - `docs/aiws-skills-cowork-marketplace.md` for Cowork marketplace, plugin, and scoped-variant behavior.
+- `docs/cowork-skills-management-phase2-test-plan.md` for the current Phase 2A validation scenario.
 - `core-aiws/contracts/skill-management.md` for the closed operation surface and draft registry contract.
 - `docs/aiws-target-architecture.md` for target-state AIWS runtime boundaries.
 

@@ -8,6 +8,8 @@ The current `core-aiws` MCP bridge is a Phase 2A technical pilot when it depends
 
 The implementation must stay aligned with `core-aiws/contracts/skill-management.md`. The main implementation surfaces to inspect are `aiws-mcp/aiws_mcp/skill_manager.py` and `aiws-mcp/aiws_mcp/runtime.py`, with tests in `tests/test_aiws_skill_manager.py`, `tests/test_aiws_mcp.py`, and `tests/test_aiws_productivity_plugin.py`.
 
+The current tester-facing Phase 2A scenario is tracked in `docs/cowork-skills-management-phase2-test-plan.md`.
+
 ## Session Rules
 
 - Owner for every slice: developer session.

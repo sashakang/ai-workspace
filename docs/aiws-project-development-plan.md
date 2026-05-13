@@ -165,6 +165,8 @@ Acceptance criteria:
 
 Current status: the Cowork skill-management bridge now proves the lifecycle behavior for a technical pilot, but it is not yet the Phase 2B end-user package because the launcher depends on `uvx`.
 
+Current testing scenario: `docs/cowork-skills-management-phase2-test-plan.md` covers the Phase 2A path from marketplace-installed `core-aiws` and `aiws-productivity` through `meeting-followup`, draft creation, safe draft edits, `aiws.skills.validate_draft`, and side-effect checks.
+
 ### Phase 3: Shared Memory Sync Foundation
 
 Make memory sync a single shared infrastructure layer across hosts. For the current v1 bridge, Claude Code may own the canonical `memory-aiws` plugin-data store while Cowork reads imported snapshots and stages candidate writes through the bridge. Claude Code can be used as an intermediate validation host or implementation target if that helps delivery, but it must not define the product semantics. The target canonical layer remains `~/.aiws/`, `memory-aiws`, and the shared memory contract.
