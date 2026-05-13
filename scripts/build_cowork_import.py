@@ -51,6 +51,33 @@ def build_core_aiws_package(repo_root: Path, output_dir: Path) -> Path:
     return package_path
 
 
+def build_productivity_package(repo_root: Path, output_dir: Path) -> Path:
+    return build_plugin_package(repo_root, "aiws-productivity", output_dir)
+
+
+def build_cowork_import_packages(repo_root: Path, output_dir: Path) -> list[Path]:
+    return [
+        build_core_aiws_package(repo_root, output_dir),
+        build_productivity_package(repo_root, output_dir),
+    ]
+
+
+def build_plugin_package(repo_root: Path, plugin_name: str, output_dir: Path) -> Path:
+    repo_root = repo_root.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    plugin_root = repo_root / plugin_name
+    manifest_path = plugin_root / ".claude-plugin" / "plugin.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    package_path = output_dir / f"{manifest['name']}-{manifest['version']}.zip"
+
+    with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as package:
+        for source in _iter_files(plugin_root):
+            _write_file(package, source, source.relative_to(plugin_root))
+
+    return package_path
+
+
 def _iter_files(root: Path) -> Iterable[Path]:
     for path in sorted(root.rglob("*")):
         if not path.is_file():
@@ -81,5 +108,6 @@ def _write_file(package: zipfile.ZipFile, source: Path, archive_name: Path) -> N
 
 
 if __name__ == "__main__":
-    package = build_core_aiws_package(Path(__file__).resolve().parents[1], Path("dist/cowork-import"))
-    print(package)
+    packages = build_cowork_import_packages(Path(__file__).resolve().parents[1], Path("dist/cowork-import"))
+    for package in packages:
+        print(package)

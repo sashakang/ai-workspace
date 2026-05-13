@@ -41,12 +41,7 @@ Expected files:
 ```text
 core-aiws-0.3.4.zip
 aiws-productivity-0.2.1.zip
-aiws-cowork-import-phase1-2026-05-11.zip
 ```
-
-Try the individual plugin zips first if Cowork imports one plugin at a time.
-
-Use the bundle only if Cowork supports importing multiple plugin packages or a zip containing plugin folders.
 
 The passing runtime test used the individual plugin ZIPs. Cowork accepted a flat archive root with `.claude-plugin/plugin.json`, `skills/`, `contracts/`, and `README.md`.
 

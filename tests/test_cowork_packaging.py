@@ -16,10 +16,24 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.build_cowork_import import build_core_aiws_package, launcher_check  # noqa: E402
+from scripts.build_cowork_import import (  # noqa: E402
+    build_core_aiws_package,
+    build_cowork_import_packages,
+    build_productivity_package,
+    launcher_check,
+)
 
 
 class CoworkPackagingTests(unittest.TestCase):
+    def test_builds_all_cowork_import_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package_paths = build_cowork_import_packages(REPO_ROOT, Path(temp))
+
+        self.assertEqual(
+            {package.name for package in package_paths},
+            {"core-aiws-0.3.4.zip", "aiws-productivity-0.2.1.zip"},
+        )
+
     def test_core_package_includes_mcp_config_launcher_and_server_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             package_path = build_core_aiws_package(REPO_ROOT, Path(temp))
@@ -37,6 +51,20 @@ class CoworkPackagingTests(unittest.TestCase):
         self.assertFalse(any(name.startswith("servers/aiws-mcp/dist/") for name in names))
         self.assertEqual(mcp["mcpServers"]["aiws"]["command"], "sh")
         self.assertIn("${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-launcher", mcp["mcpServers"]["aiws"]["args"])
+
+    def test_productivity_package_is_flat_importable_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package_path = build_productivity_package(REPO_ROOT, Path(temp))
+
+            with zipfile.ZipFile(package_path) as package:
+                names = set(package.namelist())
+
+        self.assertIn(".claude-plugin/plugin.json", names)
+        self.assertIn("contracts/aiws-productivity.contract.json", names)
+        self.assertIn("skills/meeting-followup/SKILL.md", names)
+        self.assertNotIn("servers/aiws-mcp/pyproject.toml", names)
+        self.assertFalse(any(name.startswith("build/") for name in names))
+        self.assertFalse(any(name.startswith("dist/") for name in names))
 
     def test_launcher_check_reports_missing_uvx_clearly(self) -> None:
         with mock.patch.object(shutil, "which", return_value=None):
