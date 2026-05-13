@@ -257,17 +257,26 @@ If you are not using a fresh disposable AIWS test root, use a distinct validatio
 Prompt to Cowork:
 
 ```text
-Create or open a disposable AIWS draft for:
+Run Scenario D through the AIWS draft-management tools only.
+
+First call aiws.skills.create_or_open_draft with:
 
 plugin_id: aiws-productivity
 skill_id: meeting-followup
 target_repo: <disposable test review repository>
 
-In that disposable draft, make a test-only edit outside skills/meeting-followup/, for example in a contract or plugin manifest.
+Use a disposable target_repo value that is different from the normal happy-path test repo, for example:
+sashakang/aiws-skill-tests-disposable
 
-Then run draft validation.
+After the tool returns a draft_id and draft_path, confirm the draft_path is under ~/.aiws/plugins/.
 
-Do not activate, stage, package, submit, or edit installed marketplace plugin files.
+In that returned AIWS draft only, make a test-only edit outside skills/meeting-followup/, for example in a contract or plugin manifest.
+
+Then call aiws.skills.validate_draft(draft_id).
+
+Do not create a manual /tmp copy. Do not run manual schema-only validation. Do not activate, stage, package, submit, or edit installed marketplace plugin files.
+
+If Cowork cannot create an AIWS draft with draft_id and draft_path, mark Scenario D as BLOCKED.
 ```
 
 Expected tool calls:
@@ -303,19 +312,28 @@ If you are not using a fresh disposable AIWS test root, use a distinct validatio
 Prompt to Cowork:
 
 ```text
-Create or open a disposable AIWS draft for:
+Run Scenario E through the AIWS draft-management tools only.
+
+First call aiws.skills.create_or_open_draft with:
 
 plugin_id: aiws-productivity
 skill_id: meeting-followup
 target_repo: <disposable test review repository>
 
-In that disposable draft, temporarily remove or rename:
+Use a disposable target_repo value that is different from the normal happy-path test repo, for example:
+sashakang/aiws-skill-tests-disposable-missing-skill
+
+After the tool returns a draft_id and draft_path, confirm the draft_path is under ~/.aiws/plugins/.
+
+In that returned AIWS draft only, temporarily remove or rename:
 
 skills/meeting-followup/SKILL.md
 
-Then run draft validation.
+Then call aiws.skills.validate_draft(draft_id).
 
-Do not activate, stage, package, submit, or edit installed marketplace plugin files.
+Do not create a manual /tmp copy. Do not run manual schema-only validation. Do not activate, stage, package, submit, or edit installed marketplace plugin files.
+
+If Cowork cannot create an AIWS draft with draft_id and draft_path, mark Scenario E as BLOCKED.
 ```
 
 Expected tool calls:
