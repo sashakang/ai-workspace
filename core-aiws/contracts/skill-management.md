@@ -40,6 +40,7 @@ read_draft_file(draft_id, relative_path)
 write_draft_file(draft_id, relative_path, content)
 delete_draft_file(draft_id, relative_path)
 refresh_modified_status(draft_id)
+validate_draft(draft_id)
 build_draft_package(draft_id, package_output_dir)
 activate_draft(draft_id, host_kind, package_output_dir)
 update_from_github(plugin_id, marketplace_id)
@@ -54,7 +55,7 @@ revert_draft(draft_id)
 
 Draft file operations are the Cowork-facing edit surface for this phase. They are limited to text files under `skills/<skill_id>/` for the draft's own `skill_id`. They must reject path traversal, absolute paths, symlinks, binary content, and any path outside that managed skill folder. They must not edit contracts, plugin manifests, memory paths, installed source plugin packages, or Cowork/Claude runtime state.
 
-For this phase, proposals are skill-folder-only. `stage_proposal` and `submit_pr` must reject a draft if any changed path is outside `skills/<skill_id>/`. The GitHub submitter must sync exactly that skill folder into the target repository, so the validated proposal content and the pull request diff cannot diverge.
+For this phase, proposals are skill-folder-only. `validate_draft`, `stage_proposal`, and `submit_pr` must reject a draft if any changed path is outside `skills/<skill_id>/`. `validate_draft` refreshes and persists validation status and digest metadata without staging, submitting, activating, or building a package. The GitHub submitter must sync exactly that skill folder into the target repository, so the validated proposal content and the pull request diff cannot diverge.
 
 `build_draft_package` requires an explicit `package_output_dir`; callers must choose the output location. The manager must not invent a default path. Before writing a package, it refreshes the draft modified state, revalidates the draft plugin manifest with the original `plugin_id` and `base_version`, confirms the requested `skill_id` is still present, and rejects symlinks in the draft tree, the output directory, or a preexisting package path. The output directory must not be inside the draft tree or under the disallowed memory, import, export, or Claude memory data roots.
 

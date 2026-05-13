@@ -1149,6 +1149,78 @@ def build_draft_package(aiws_root: Path, record_id: str, package_output_dir: Pat
     }
 
 
+def validate_draft(aiws_root: Path, record_id: str) -> dict[str, Any]:
+    record_id = require_non_blank_string(record_id, "record_id")
+    record = safely_identify_draft_record(aiws_root, record_id)
+    canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
+    if canonical_record_id != record_id:
+        persist_validation_failure(aiws_root, record_id, digest_failed=True)
+        raise SkillManagerError(f"Draft record id does not match canonical draft id {canonical_record_id}.")
+
+    plugins_root = aiws_root / "plugins"
+    try:
+        draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")
+        expected_draft_path = require_path_under(
+            draft_worktree_path(aiws_root, record.origin_marketplace, record.plugin_id, record.origin_repo),
+            plugins_root,
+            label="Expected draft path",
+        )
+        if draft_path != expected_draft_path:
+            persist_validation_failure(aiws_root, record_id, digest_failed=True)
+            raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
+
+        current_tree_digest = tree_digest(draft_path)
+    except Exception:
+        persist_validation_failure(aiws_root, record_id, digest_failed=True)
+        raise
+
+    modified = record.base_tree_digest is not None and current_tree_digest != record.base_tree_digest
+    if record.base_tree_digest is None:
+        persist_stage_validation_result(
+            aiws_root,
+            record_id,
+            status="failed",
+            current_tree_digest=current_tree_digest,
+            modified=True,
+        )
+        raise SkillManagerError(f"Draft record {record_id} has no base_tree_digest; cannot validate draft.")
+
+    try:
+        require_changes_only_under_skill(aiws_root, record_id, draft_path, record.skill_id)
+        validation = validate_plugin(draft_path, expected_name=record.plugin_id, expected_version=record.base_version)
+        skill_names = {skill["name"] for skill in validation["skills"]}
+        if record.skill_id not in skill_names:
+            raise SkillManagerError(f"Requested skill {record.skill_id!r} does not exist in plugin {record.plugin_id!r}.")
+    except Exception:
+        persist_stage_validation_result(
+            aiws_root,
+            record_id,
+            status="failed",
+            current_tree_digest=current_tree_digest,
+            modified=modified,
+        )
+        raise
+
+    record = persist_stage_validation_result(
+        aiws_root,
+        record_id,
+        status="passed",
+        current_tree_digest=current_tree_digest,
+        modified=modified,
+    )
+    return {
+        "status": "validated",
+        "record_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "modified": record.modified,
+        "status_label": "Modified locally" if record.modified else "Current",
+        "validation_status": "passed",
+        "validation_tree_digest": current_tree_digest,
+        "current_tree_digest": current_tree_digest,
+    }
+
+
 def activate_draft(aiws_root: Path, record_id: str, host_kind: str, package_output_dir: Path) -> dict[str, Any]:
     if host_kind != "cowork":
         raise SkillManagerError("Only host_kind='cowork' is supported for draft activation in this slice.")

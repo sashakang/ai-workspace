@@ -1242,6 +1242,9 @@ class AiwsRuntime:
         record = skill_manager.refresh_modified_status(self.root, draft_id)
         return {"status": "ok", "record_id": draft_id, **record.to_json()}
 
+    def validate_draft(self, draft_id: str) -> dict[str, Any]:
+        return skill_manager.validate_draft(self.root, draft_id)
+
     def activate_draft(
         self,
         draft_id: str,

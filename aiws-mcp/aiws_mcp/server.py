@@ -85,6 +85,10 @@ def create_server(root: Path | None = None):
     def refresh_draft(draft_id: str) -> dict[str, Any]:
         return runtime.refresh_draft(draft_id)
 
+    @server.tool(name="aiws.skills.validate_draft")
+    def validate_draft(draft_id: str) -> dict[str, Any]:
+        return runtime.validate_draft(draft_id)
+
     @server.tool(name="aiws.skills.activate_draft")
     def activate_draft(draft_id: str, host_kind: str, package_output_dir: str) -> dict[str, Any]:
         return runtime.activate_draft(draft_id, host_kind=host_kind, package_output_dir=package_output_dir)

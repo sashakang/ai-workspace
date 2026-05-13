@@ -133,6 +133,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
             "skills/meeting-followup/references/notes.md",
             "Local edit.\n",
         )
+        validated = runtime.validate_draft(record_id)
         deleted = runtime.delete_draft_file(record_id, "skills/meeting-followup/references/notes.md")
 
         self.assertEqual(discovered["status"], "ok")
@@ -142,6 +143,9 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("skills/meeting-followup/SKILL.md", listed["files"])
         self.assertIn("# Meeting Follow-Up", original["content"])
         self.assertEqual(written["status"], "written")
+        self.assertEqual(validated["status"], "validated")
+        self.assertEqual(validated["validation_status"], "passed")
+        self.assertTrue(validated["modified"])
         self.assertEqual(deleted["status"], "deleted")
         self.assert_no_memory_or_claude_writes()
 

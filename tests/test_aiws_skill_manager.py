@@ -39,6 +39,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     update_from_github_decision,
     validate_marketplace,
     validate_plugin,
+    validate_draft,
     validate_mcp_config,
     validate_skill_creator_compat,
     default_command_runner,
@@ -881,6 +882,138 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertFalse((aiws_root / "exports").exists())
             self.assertFalse((aiws_root / "rpm").exists())
             self.assertFalse((temp_root / ".claude").exists())
+
+    def test_validate_draft_changed_skill_passes_without_proposal_or_package(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal validation edit.\n")
+            package_dir = temp_root / "packages"
+            source_before = {
+                path.relative_to(plugin_root).as_posix(): path.read_bytes()
+                for path in sorted(plugin_root.rglob("*"))
+                if path.is_file()
+            }
+
+            result = validate_draft(aiws_root, record_id)
+
+            current_digest = tree_digest(Path(record.draft_path))
+            source_after = {
+                path.relative_to(plugin_root).as_posix(): path.read_bytes()
+                for path in sorted(plugin_root.rglob("*"))
+                if path.is_file()
+            }
+            self.assertEqual(result["status"], "validated")
+            self.assertEqual(result["validation_status"], "passed")
+            self.assertTrue(result["modified"])
+            self.assertEqual(result["current_tree_digest"], current_digest)
+            self.assertEqual(source_after, source_before)
+            self.assert_no_proposals(aiws_root)
+            self.assert_no_package_artifacts(package_dir)
+            loaded = load_draft_record(aiws_root, record_id)
+            self.assertEqual(loaded.last_validation_status, "passed")
+            self.assertEqual(loaded.last_validation_tree_digest, current_digest)
+            self.assertEqual(loaded.current_tree_digest, current_digest)
+            self.assertTrue(loaded.modified)
+
+    def test_validate_draft_unchanged_passes_and_marks_unmodified(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+
+            result = validate_draft(aiws_root, record_id)
+
+            current_digest = tree_digest(Path(record.draft_path))
+            self.assertEqual(result["validation_status"], "passed")
+            self.assertFalse(result["modified"])
+            loaded = load_draft_record(aiws_root, record_id)
+            self.assertEqual(loaded.last_validation_status, "passed")
+            self.assertEqual(loaded.last_validation_tree_digest, current_digest)
+            self.assertEqual(loaded.current_tree_digest, current_digest)
+            self.assertFalse(loaded.modified)
+            self.assert_no_proposals(aiws_root)
+
+    def test_validate_draft_invalid_plugin_or_missing_skill_fails_without_proposal(self) -> None:
+        for breakage in ("invalid-plugin", "missing-skill"):
+            with self.subTest(breakage=breakage):
+                with tempfile.TemporaryDirectory() as temp:
+                    aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+                    self.edit_draft_skill(record, "\nLocal validation edit.\n")
+                    draft_root = Path(record.draft_path)
+                    if breakage == "invalid-plugin":
+                        manifest_path = draft_root / ".claude-plugin" / "plugin.json"
+                        manifest = json.loads(manifest_path.read_text())
+                        manifest["name"] = "other-plugin"
+                        manifest_path.write_text(json.dumps(manifest))
+                    else:
+                        (draft_root / "skills" / "meeting-followup" / "SKILL.md").unlink()
+
+                    with self.assertRaises(SkillManagerError):
+                        validate_draft(aiws_root, record_id)
+
+                    self.assert_no_proposals(aiws_root)
+                    loaded = load_draft_record(aiws_root, record_id)
+                    self.assertEqual(loaded.last_validation_status, "failed")
+                    self.assertIsNone(loaded.last_validation_tree_digest)
+
+    def test_validate_draft_rejects_changes_outside_requested_skill_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal validation edit.\n")
+            contract = Path(record.draft_path) / "contracts" / "example-plugin.contract.json"
+            contract.write_text(contract.read_text() + "\n")
+
+            with self.assertRaisesRegex(SkillManagerError, "outside the managed skill folder"):
+                validate_draft(aiws_root, record_id)
+
+            self.assert_no_proposals(aiws_root)
+            loaded = load_draft_record(aiws_root, record_id)
+            self.assertEqual(loaded.last_validation_status, "failed")
+            self.assertIsNone(loaded.last_validation_tree_digest)
+
+    def test_validate_draft_rejects_legacy_record_missing_base_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal validation edit.\n")
+            record_path = aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
+            payload = json.loads(record_path.read_text())
+            payload.pop("base_tree_digest")
+            record_path.write_text(json.dumps(payload))
+
+            with self.assertRaisesRegex(SkillManagerError, "base_tree_digest"):
+                validate_draft(aiws_root, record_id)
+
+            loaded = load_draft_record(aiws_root, record_id)
+            self.assertEqual(loaded.last_validation_status, "failed")
+            self.assertIsNone(loaded.last_validation_tree_digest)
+            self.assertTrue(loaded.modified)
+            self.assert_no_proposals(aiws_root)
+
+    def test_validate_draft_rejects_unexpected_path_and_symlink_escape(self) -> None:
+        for breakage in ("unexpected-path", "symlink"):
+            with self.subTest(breakage=breakage):
+                with tempfile.TemporaryDirectory() as temp:
+                    temp_root = Path(temp)
+                    aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+                    if breakage == "unexpected-path":
+                        record_path = aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
+                        payload = json.loads(record_path.read_text())
+                        payload["draft_path"] = str(temp_root / "outside-draft")
+                        record_path.write_text(json.dumps(payload))
+                        expected = "outside AIWS draft plugin root|unexpected draft path"
+                    else:
+                        outside = temp_root / "outside.txt"
+                        outside.write_text("escape")
+                        (Path(record.draft_path) / "skills" / "meeting-followup" / "escape.md").symlink_to(outside)
+                        expected = "must not contain symlinks"
+
+                    with self.assertRaisesRegex(SkillManagerError, expected):
+                        validate_draft(aiws_root, record_id)
+
+                    self.assert_no_proposals(aiws_root)
+                    loaded = load_draft_record(aiws_root, record_id)
+                    self.assertEqual(loaded.last_validation_status, "failed")
+                    self.assertIsNone(loaded.last_validation_tree_digest)
+                    self.assertTrue(loaded.modified)
 
     def test_stage_proposal_writes_local_proposal_and_preserves_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
