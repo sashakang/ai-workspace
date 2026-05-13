@@ -34,6 +34,17 @@ submit/upload first
 
 Create or open a draft through the internal `core-aiws` skill-manager bridge. Store editable files under `~/.aiws/plugins/` and durable state under `~/.aiws/state/skill-drafts/`.
 
+Use the draft file operations for Cowork-facing edits:
+
+```text
+list_draft_files(draft_id)
+read_draft_file(draft_id, relative_path)
+write_draft_file(draft_id, relative_path, content)
+delete_draft_file(draft_id, relative_path)
+```
+
+For this phase, draft edits are limited to text files under `skills/<skill_id>/` for the selected skill. Do not edit plugin manifests, contracts, memory files, installed source packages, or Cowork/Claude runtime state through these operations.
+
 After edit, build and activate a draft package under the same plugin identity. The edited skill becomes the active version in the UI and runtime. If programmatic activation is unavailable, provide one package upload action and report the host capability gap.
 
 ## Stage And Submit
@@ -49,4 +60,6 @@ Public
 
 Call `stage_proposal(draft_id, target_scope, target_repo, summary, rationale)`. `target_scope` is the Cowork/user-facing label and policy scope. `target_repo` is the concrete repository to use later for maintainer review. Staging revalidates the current draft tree, records the validation digest, writes a local proposal record under `~/.aiws/state/skill-proposals/`, and must not create a branch, commit, push, upload, or open a pull request.
 
-Only after the user explicitly chooses submit-for-review may the backend call `submit_pr(proposal_id, submitter)`. Submission uses the staged proposal's stored `target_repo`; do not accept a fresh repository value at submit time. The submitter must use deterministic branch identity `aiws/skill-proposals/<proposal_id>`, include required reviewer roles including `AI engineer`, and create or update one review item for retry safety. If permission is missing, offer only non-terminal fallbacks: request access, personal/fork PR path, or admin package export.
+This phase supports skill-folder-only proposals. If the draft contains changes outside `skills/<skill_id>/`, require the user to revert or split those changes before staging.
+
+Only after the user explicitly chooses submit-for-review may the backend call `submit_pr(proposal_id, submitter)`. Submission uses the staged proposal's stored `target_repo`; do not accept a fresh repository value at submit time. The submitter must use deterministic branch identity `aiws/skill-proposals/<proposal_id>`, include required reviewer-role metadata including `AI engineer`, and create or update one review item for retry safety. GitHub-side repository policy owns actual reviewer assignment; do not ask the user to map roles to GitHub users. If permission is missing, offer only non-terminal fallbacks: request access, personal/fork PR path, or admin package export.

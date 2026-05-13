@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -47,6 +48,46 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.write_personal_skill(skill_id, "Review local work.")
         return self.runtime.materialize_skill(skill_id=skill_id, host_kind="codex")
 
+    def write_cowork_plugin(
+        self,
+        root: Path,
+        *,
+        plugin_id: str = "example-plugin",
+        version: str = "0.1.0",
+        skill_id: str = "meeting-followup",
+    ) -> Path:
+        plugin_root = root / plugin_id
+        skill_root = plugin_root / "skills" / skill_id
+        skill_root.mkdir(parents=True)
+        (plugin_root / ".claude-plugin").mkdir()
+        (plugin_root / ".claude-plugin" / "plugin.json").write_text(
+            json.dumps(
+                {
+                    "name": plugin_id,
+                    "description": "Example Cowork plugin.",
+                    "version": version,
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        (plugin_root / "contracts").mkdir()
+        (plugin_root / "contracts" / f"{plugin_id}.contract.json").write_text(
+            json.dumps(
+                {
+                    "plugin_id": plugin_id,
+                    "version": version,
+                    "public_skills": [skill_id],
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        (skill_root / "SKILL.md").write_text(
+            f"---\nname: {skill_id}\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n"
+        )
+        return plugin_root
+
     def read_tree(self, root: Path) -> dict[str, bytes]:
         return {
             str(path.relative_to(root)): path.read_bytes()
@@ -63,6 +104,136 @@ class AiwsMcpSkillTests(unittest.TestCase):
                     any(path.is_relative_to(root) for root in allowed_roots),
                     f"{path} was not under an allowed root",
                 )
+
+    def assert_no_memory_or_claude_writes(self) -> None:
+        self.assertFalse((self.root / "memory").exists())
+        self.assertFalse((self.root / "imports").exists())
+        self.assertFalse((self.root / "exports").exists())
+        self.assertFalse(self.claude_home.exists())
+
+    def test_cowork_runtime_discovers_plugin_and_edits_draft_skill_files(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        self.write_cowork_plugin(uploads)
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+        )
+
+        discovered = runtime.discover_installed_plugins(plugin_id="example-plugin")
+        draft = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/review",
+        )
+        record_id = draft["record_id"]
+        listed = runtime.list_draft_files(record_id)
+        original = runtime.read_draft_file(record_id, "skills/meeting-followup/SKILL.md")
+        written = runtime.write_draft_file(
+            record_id,
+            "skills/meeting-followup/references/notes.md",
+            "Local edit.\n",
+        )
+        deleted = runtime.delete_draft_file(record_id, "skills/meeting-followup/references/notes.md")
+
+        self.assertEqual(discovered["status"], "ok")
+        self.assertEqual(len(discovered["plugins"]), 1)
+        self.assertEqual(draft["status"], "draft_opened")
+        self.assertEqual(draft["origin_repo"], "example/review")
+        self.assertIn("skills/meeting-followup/SKILL.md", listed["files"])
+        self.assertIn("# Meeting Follow-Up", original["content"])
+        self.assertEqual(written["status"], "written")
+        self.assertEqual(deleted["status"], "deleted")
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_create_draft_requires_source_when_discovery_is_ambiguous(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        self.write_cowork_plugin(uploads / "first")
+        self.write_cowork_plugin(uploads / "second")
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+        )
+
+        discovered = runtime.discover_installed_plugins(plugin_id="example-plugin")
+
+        self.assertEqual(discovered["status"], "ambiguous_installed_plugin")
+        with self.assertRaisesRegex(ValueError, "ambiguous_installed_plugin"):
+            runtime.create_or_open_draft(
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                target_repo="example/review",
+            )
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_activate_draft_requires_explicit_package_output_dir(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        self.write_cowork_plugin(uploads)
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+        )
+        draft = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/review",
+        )
+        record_id = draft["record_id"]
+        runtime.write_draft_file(
+            record_id,
+            "skills/meeting-followup/SKILL.md",
+            "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n\nUpdated.\n",
+        )
+
+        with self.assertRaisesRegex(ValueError, "package_output_dir"):
+            runtime.activate_draft(record_id, host_kind="cowork", package_output_dir=None)
+
+        package_output_dir = self.root / "packages"
+        activated = runtime.activate_draft(
+            record_id,
+            host_kind="cowork",
+            package_output_dir=package_output_dir,
+        )
+
+        self.assertEqual(activated["status"], "host_capability_missing")
+        self.assertEqual(activated["actions"][0]["type"], "package_upload")
+        with zipfile.ZipFile(activated["package_path"]) as package:
+            self.assertIn("skills/meeting-followup/SKILL.md", package.namelist())
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_submit_for_review_uses_gh_cli_submitter(self) -> None:
+        class FakeGhCliProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        captured: dict[str, object] = {}
+
+        def fake_submit_pr(aiws_root: Path, proposal_id: str, submitter: object, **kwargs: object) -> dict[str, object]:
+            captured["aiws_root"] = aiws_root
+            captured["proposal_id"] = proposal_id
+            captured["submitter"] = submitter
+            captured["kwargs"] = kwargs
+            return {
+                "status": "submitted_for_review",
+                "proposal_id": proposal_id,
+                "branch_name": "aiws/skill-proposals/skillprop_123",
+                "pr_url": "https://github.com/example/review/pull/1",
+            }
+
+        with (
+            patch.object(runtime_module.skill_manager, "GhCliProposalSubmitter", FakeGhCliProposalSubmitter, create=True),
+            patch.object(runtime_module.skill_manager, "submit_pr", side_effect=fake_submit_pr),
+        ):
+            result = self.runtime.submit_for_review(
+                "skillprop_123",
+                allowed_target_repos=["example/review"],
+            )
+
+        self.assertEqual(result["status"], "submitted_for_review")
+        self.assertEqual(captured["aiws_root"], self.root.resolve())
+        self.assertEqual(captured["proposal_id"], "skillprop_123")
+        self.assertIsInstance(captured["submitter"], FakeGhCliProposalSubmitter)
+        self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
+        self.assert_no_memory_or_claude_writes()
 
     def test_clean_machine_has_sop_and_aiws_improve_without_plugins(self) -> None:
         local = self.runtime.list_local_skills()

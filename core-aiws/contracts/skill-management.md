@@ -14,6 +14,7 @@ Allowed write roots:
 ~/.aiws/plugins/
 ~/.aiws/state/skill-drafts/
 ~/.aiws/state/skill-proposals/
+~/.aiws/state/git-worktrees/
 temporary package build output
 explicit package output directories supplied by the caller
 ```
@@ -34,6 +35,10 @@ The skill-management contract is limited to this operation surface:
 ```text
 validate_plugin(source_or_package)
 create_or_open_draft(plugin_id, skill_id, origin_repo, origin_marketplace, base_ref)
+list_draft_files(draft_id)
+read_draft_file(draft_id, relative_path)
+write_draft_file(draft_id, relative_path, content)
+delete_draft_file(draft_id, relative_path)
 refresh_modified_status(draft_id)
 build_draft_package(draft_id, package_output_dir)
 activate_draft(draft_id, host_kind, package_output_dir)
@@ -46,6 +51,10 @@ revert_draft(draft_id)
 `stage_proposal` writes a local proposal record only, under `~/.aiws/state/skill-proposals/`. It records the draft, target scope, target review repository, summary, rationale, provenance, and validation status for later review. `target_scope` is the Cowork/user-facing label and policy scope. `target_repo` is the concrete backend review repository persisted for a later submit-for-review action. Staging must not upload, submit, create a pull request, or push changes; `submit_pr` or another explicit submit-for-review operation is follow-on behavior. Package export or upload is an admin/deployment fallback, not the normal user staging path.
 
 `submit_pr` consumes a staged `proposal_id`, not a fresh repository argument. The proposal's stored `target_repo` is the review destination. Before calling the submitter adapter, the manager revalidates that the current draft tree still matches the staged `validation_tree_digest`, that the plugin still validates with the original plugin ID and version, and that the requested skill still exists. If the draft changed after staging, the user must restage. The submitter receives deterministic branch identity `aiws/skill-proposals/<proposal_id>` and required reviewer roles including `AI engineer`; it owns GitHub mechanics and must create or update one review item for retry safety. PR metadata is stored on the proposal record only, because one draft can have multiple proposals to different target repos.
+
+Draft file operations are the Cowork-facing edit surface for this phase. They are limited to text files under `skills/<skill_id>/` for the draft's own `skill_id`. They must reject path traversal, absolute paths, symlinks, binary content, and any path outside that managed skill folder. They must not edit contracts, plugin manifests, memory paths, installed source plugin packages, or Cowork/Claude runtime state.
+
+For this phase, proposals are skill-folder-only. `stage_proposal` and `submit_pr` must reject a draft if any changed path is outside `skills/<skill_id>/`. The GitHub submitter must sync exactly that skill folder into the target repository, so the validated proposal content and the pull request diff cannot diverge.
 
 `build_draft_package` requires an explicit `package_output_dir`; callers must choose the output location. The manager must not invent a default path. Before writing a package, it refreshes the draft modified state, revalidates the draft plugin manifest with the original `plugin_id` and `base_version`, confirms the requested `skill_id` is still present, and rejects symlinks in the draft tree, the output directory, or a preexisting package path. The output directory must not be inside the draft tree or under the disallowed memory, import, export, or Claude memory data roots.
 

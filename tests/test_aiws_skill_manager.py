@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -20,8 +23,14 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     build_draft_package,
     create_or_open_draft,
     create_draft_record,
+    delete_draft_file,
+    discover_installed_plugins,
     draft_id,
+    GhCliProposalSubmitter,
+    DEFAULT_COMMAND_TIMEOUT_SECONDS,
     load_draft_record,
+    list_draft_files,
+    read_draft_file,
     refresh_modified_status,
     revert_draft,
     stage_proposal,
@@ -32,6 +41,8 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     validate_plugin,
     validate_mcp_config,
     validate_skill_creator_compat,
+    default_command_runner,
+    write_draft_file,
 )
 
 
@@ -51,6 +62,63 @@ class FakeProposalSubmitter:
             "branch_name": payload["branch_name"],
             "pr_url": "https://github.com/example/review/pull/123",
         }
+
+
+class FakeCommandRunner:
+    def __init__(
+        self,
+        target_repo: Path,
+        *,
+        existing_pr_url: str | None = None,
+        existing_pr_is_draft: bool = False,
+        no_changes: bool = False,
+    ) -> None:
+        self.target_repo = target_repo
+        self.existing_pr_url = existing_pr_url
+        self.existing_pr_is_draft = existing_pr_is_draft
+        self.no_changes = no_changes
+        self.calls: list[tuple[list[str], Path | None]] = []
+
+    def __call__(
+        self,
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append((list(args), cwd))
+        if args[:3] == ["gh", "api", "repos/example/review"]:
+            return subprocess.CompletedProcess(args, 0, '{"default_branch":"main","permissions":{"push":true}}\n', "")
+        if args[:4] == ["gh", "repo", "clone", "example/review"]:
+            destination = Path(args[4])
+            shutil.copytree(self.target_repo, destination)
+            (destination / ".git").mkdir()
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[:3] == ["git", "checkout", "-B"]:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[:3] == ["git", "status", "--porcelain"]:
+            stdout = "" if self.no_changes else " M skills/meeting-followup/SKILL.md\n"
+            return subprocess.CompletedProcess(args, 0, stdout, "")
+        if args[:2] == ["git", "add"]:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[:2] == ["git", "commit"]:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[:3] == ["git", "push", "--force-with-lease"]:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[:3] == ["gh", "pr", "list"]:
+            stdout = (
+                json.dumps([{"url": self.existing_pr_url, "isDraft": self.existing_pr_is_draft}])
+                if self.existing_pr_url
+                else "[]"
+            )
+            return subprocess.CompletedProcess(args, 0, stdout, "")
+        if args[:3] == ["gh", "pr", "edit"]:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[:3] == ["gh", "pr", "ready"]:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[:3] == ["gh", "pr", "create"]:
+            return subprocess.CompletedProcess(args, 0, "https://github.com/example/review/pull/7\n", "")
+        raise AssertionError(f"Unexpected command: {args}")
 
 
 class AiwsSkillManagerTests(unittest.TestCase):
@@ -288,6 +356,46 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertIsInstance(record.current_tree_digest, str)
             self.assertEqual(record.base_tree_digest, record.current_tree_digest)
 
+    def test_create_or_open_draft_rejects_source_plugin_symlinks_before_copy(self) -> None:
+        for planted in ("skill-file", "nested-file", "directory"):
+            with self.subTest(planted=planted):
+                with tempfile.TemporaryDirectory() as temp:
+                    temp_root = Path(temp)
+                    aiws_root = temp_root / ".aiws"
+                    plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+                    skill_file = self.write_skill(plugin_root, "meeting-followup")
+                    outside = temp_root / "outside.md"
+                    outside.write_text("outside\n")
+                    if planted == "skill-file":
+                        skill_file.unlink()
+                        skill_file.symlink_to(outside)
+                    elif planted == "nested-file":
+                        refs = plugin_root / "skills" / "meeting-followup" / "references"
+                        refs.mkdir()
+                        (refs / "linked.md").symlink_to(outside)
+                    else:
+                        outside_dir = temp_root / "outside-dir"
+                        outside_dir.mkdir()
+                        (plugin_root / "skills" / "meeting-followup" / "references").symlink_to(
+                            outside_dir,
+                            target_is_directory=True,
+                        )
+
+                    with self.assertRaisesRegex(SkillManagerError, "Source plugin tree must not contain symlinks"):
+                        create_or_open_draft(
+                            aiws_root,
+                            source_plugin_root=plugin_root,
+                            plugin_id="example-plugin",
+                            skill_id="meeting-followup",
+                            origin_marketplace="ai-workspace",
+                            origin_repo="https://github.com/example/example-plugin",
+                            origin_ref="master",
+                            base_version="1.0.0",
+                            base_commit="abc123",
+                        )
+
+                    self.assertFalse((aiws_root / "plugins").exists())
+
     def test_refresh_modified_status_keeps_unchanged_draft_unmodified_and_persists(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             aiws_root, record_id, _plugin_root, _record = self.create_meeting_followup_draft(Path(temp))
@@ -401,6 +509,50 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 refresh_modified_status(aiws_root, record_id)
 
             self.assertFalse(load_draft_record(aiws_root, record_id).modified)
+
+    def test_draft_file_tools_are_limited_to_requested_skill_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, _record = self.create_meeting_followup_draft(Path(temp))
+
+            listed = list_draft_files(aiws_root, record_id)
+            self.assertIn("skills/meeting-followup/SKILL.md", listed["files"])
+
+            original = read_draft_file(aiws_root, record_id, "skills/meeting-followup/SKILL.md")
+            self.assertIn("name: meeting-followup", original["content"])
+
+            written = write_draft_file(
+                aiws_root,
+                record_id,
+                "skills/meeting-followup/references/notes.md",
+                "Review notes.\n",
+            )
+            self.assertEqual(written["status"], "written")
+            self.assertTrue(load_draft_record(aiws_root, record_id).modified)
+            self.assertEqual(
+                read_draft_file(aiws_root, record_id, "skills/meeting-followup/references/notes.md")["content"],
+                "Review notes.\n",
+            )
+
+            deleted = delete_draft_file(aiws_root, record_id, "skills/meeting-followup/references/notes.md")
+            self.assertEqual(deleted["status"], "deleted")
+            self.assertNotIn("references/notes.md", "\n".join(list_draft_files(aiws_root, record_id)["files"]))
+
+            with self.assertRaisesRegex(SkillManagerError, "outside the managed skill folder"):
+                write_draft_file(aiws_root, record_id, "contracts/example-plugin.contract.json", "{}\n")
+            with self.assertRaisesRegex(SkillManagerError, "outside the managed skill folder"):
+                read_draft_file(aiws_root, record_id, "../escape.md")
+
+    def test_draft_file_tools_reject_symlinked_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            outside = temp_root / "outside.md"
+            outside.write_text("outside\n")
+            link = Path(record.draft_path) / "skills" / "meeting-followup" / "linked.md"
+            link.symlink_to(outside)
+
+            with self.assertRaisesRegex(SkillManagerError, "must not contain symlinks"):
+                read_draft_file(aiws_root, record_id, "skills/meeting-followup/linked.md")
 
     def test_build_draft_package_creates_flat_zip_and_preserves_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -647,6 +799,23 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(loaded.last_validation_status, "failed")
             self.assertTrue(loaded.modified)
 
+    def test_build_draft_package_rejects_any_claude_output_dir_without_creating_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            draft_skill = Path(record.draft_path) / "skills" / "meeting-followup" / "SKILL.md"
+            draft_skill.write_text(draft_skill.read_text() + "\nLocal draft edit.\n")
+            package_dir = temp_root / ".claude" / "packages"
+
+            with self.assertRaisesRegex(SkillManagerError, "disallowed package output directory: .claude"):
+                build_draft_package(aiws_root, record_id, package_dir)
+
+            self.assertFalse(package_dir.exists())
+            self.assertFalse((temp_root / ".claude").exists())
+            loaded = load_draft_record(aiws_root, record_id)
+            self.assertEqual(loaded.last_validation_status, "failed")
+            self.assertTrue(loaded.modified)
+
     def test_build_draft_package_failed_rebuild_removes_stale_final_zip(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)
@@ -834,6 +1003,18 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(loaded.last_validation_status, "failed")
             self.assertIsNone(loaded.last_validation_tree_digest)
 
+    def test_stage_proposal_rejects_changes_outside_requested_skill_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+            contract = Path(record.draft_path) / "contracts" / "example-plugin.contract.json"
+            contract.write_text(contract.read_text() + "\n")
+
+            with self.assertRaisesRegex(SkillManagerError, "outside the managed skill folder"):
+                stage_proposal(aiws_root, record_id, "Cowork", "review-repo", "Summary", "Rationale")
+
+            self.assert_no_proposals(aiws_root)
+
     def test_stage_proposal_rejects_legacy_record_missing_base_digest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
@@ -973,6 +1154,30 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertFalse((aiws_root / "packages").exists())
             self.assertFalse((aiws_root / "managed-plugins").exists())
             self.assertFalse((temp_root / ".claude").exists())
+
+    def test_discover_installed_plugins_finds_single_match_and_reports_ambiguity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            first_root = temp_root / "uploads" / "one"
+            plugin_root = self.write_plugin(first_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            found = discover_installed_plugins(plugin_id="example-plugin", search_roots=[first_root])
+            self.assertEqual(found["status"], "ok")
+            self.assertEqual(len(found["plugins"]), 1)
+            self.assertEqual(found["plugins"][0]["plugin_id"], "example-plugin")
+            self.assertEqual(found["plugins"][0]["base_version"], "1.0.0")
+
+            second_root = temp_root / "uploads" / "two"
+            other_plugin = self.write_plugin(second_root, public_skills=["meeting-followup"])
+            self.write_skill(other_plugin, "meeting-followup")
+            ambiguous = discover_installed_plugins(plugin_id="example-plugin", search_roots=[temp_root / "uploads"])
+
+            self.assertEqual(ambiguous["status"], "ambiguous_installed_plugin")
+            self.assertEqual(len(ambiguous["plugins"]), 2)
+
+            missing = discover_installed_plugins(plugin_id="missing-plugin", search_roots=[first_root])
+            self.assertEqual(missing["status"], "installed_plugin_not_found")
 
     def test_submit_pr_submits_staged_proposal_and_persists_review_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1159,6 +1364,121 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertFalse((aiws_root / "packages").exists())
             self.assertFalse((aiws_root / "managed-plugins").exists())
             self.assertFalse((temp_root / ".claude").exists())
+
+    def test_default_command_runner_disables_prompts_and_detaches_stdin(self) -> None:
+        completed = subprocess.CompletedProcess(["gh", "pr", "list"], 0, "", "")
+        with mock.patch("aiws_mcp.skill_manager.subprocess.run", return_value=completed) as run:
+            with mock.patch.dict(os.environ, {"AIWS_KEEP": "yes", "GH_PROMPT_DISABLED": "0"}, clear=True):
+                result = default_command_runner(["gh", "pr", "list"], cwd=Path("/tmp"))
+
+        self.assertIs(result, completed)
+        run.assert_called_once()
+        _args, kwargs = run.call_args
+        self.assertEqual(kwargs["cwd"], Path("/tmp"))
+        self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+        self.assertEqual(kwargs["env"]["AIWS_KEEP"], "yes")
+        self.assertEqual(kwargs["env"]["GH_PROMPT_DISABLED"], "1")
+        self.assertEqual(kwargs["timeout"], DEFAULT_COMMAND_TIMEOUT_SECONDS)
+        self.assertIs(kwargs["stdout"], subprocess.PIPE)
+        self.assertIs(kwargs["stderr"], subprocess.PIPE)
+        self.assertFalse(kwargs["check"])
+
+    def test_gh_submitter_syncs_only_skill_folder_and_creates_non_draft_pr_without_reviewers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                temp_root
+            )
+            self.set_proposal_target_repo(aiws_root, staged["proposal_id"], "example/review")
+            target_repo = temp_root / "target-repo"
+            target_repo.mkdir()
+            self.write_plugin(target_repo, public_skills=["meeting-followup"])
+            self.write_skill(target_repo / "example-plugin", "meeting-followup").write_text(
+                "---\nname: meeting-followup\ndescription: Old skill.\n---\n\n# Old\n"
+            )
+            (target_repo / "README.md").write_text("keep\n")
+            runner = FakeCommandRunner(target_repo)
+            submitter = GhCliProposalSubmitter(aiws_root=aiws_root, runner=runner)
+
+            result = submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(result["status"], "submitted_for_review")
+            self.assertEqual(result["pr_url"], "https://github.com/example/review/pull/7")
+            command_lines = [" ".join(call[0]) for call in runner.calls]
+            pr_create = next(command for command in command_lines if command.startswith("gh pr create"))
+            self.assertIn("--repo example/review", pr_create)
+            self.assertIn("--base main", pr_create)
+            self.assertIn("--head aiws/skill-proposals/", pr_create)
+            self.assertNotIn("--draft", pr_create)
+            self.assertNotIn("--reviewer", pr_create)
+            git_add = next(command for command in command_lines if command.startswith("git add"))
+            self.assertIn("example-plugin/skills/meeting-followup", git_add)
+
+            clone_dir = aiws_root / "state" / "git-worktrees" / "example__review" / staged["proposal_id"] / "repo"
+            self.assertEqual((clone_dir / "README.md").read_text(), "keep\n")
+            self.assertIn("Local proposal edit.", (clone_dir / "example-plugin" / "skills" / "meeting-followup" / "SKILL.md").read_text())
+            body_files = [
+                Path(call[0][call[0].index("--body-file") + 1])
+                for call in runner.calls
+                if call[0][:3] == ["gh", "pr", "create"]
+            ]
+            self.assertIn("CODEOWNERS: not_detected", body_files[0].read_text())
+            self.assertIn("Required review role: AI engineer", body_files[0].read_text())
+
+    def test_gh_submitter_no_changes_keeps_proposal_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                temp_root
+            )
+            self.set_proposal_target_repo(aiws_root, staged["proposal_id"], "example/review")
+            target_repo = temp_root / "target-repo"
+            target_repo.mkdir()
+            self.write_plugin(target_repo, public_skills=["meeting-followup"])
+            self.write_skill(target_repo / "example-plugin", "meeting-followup")
+            runner = FakeCommandRunner(target_repo, no_changes=True)
+            submitter = GhCliProposalSubmitter(aiws_root=aiws_root, runner=runner)
+
+            result = submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(result["status"], "no_changes_to_submit")
+            self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"])["status"], "staged")
+
+    def test_gh_submitter_reuses_existing_pr_only_after_refreshing_body_and_marking_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                temp_root
+            )
+            self.set_proposal_target_repo(aiws_root, staged["proposal_id"], "example/review")
+            target_repo = temp_root / "target-repo"
+            target_repo.mkdir()
+            self.write_plugin(target_repo, public_skills=["meeting-followup"])
+            self.write_skill(target_repo / "example-plugin", "meeting-followup")
+            (target_repo / ".github").mkdir()
+            (target_repo / ".github" / "CODEOWNERS").write_text("* @example/ai-engineers\n")
+            runner = FakeCommandRunner(
+                target_repo,
+                existing_pr_url="https://github.com/example/review/pull/7",
+                existing_pr_is_draft=True,
+            )
+            submitter = GhCliProposalSubmitter(aiws_root=aiws_root, runner=runner)
+
+            result = submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(result["status"], "submitted_for_review")
+            command_lines = [" ".join(call[0]) for call in runner.calls]
+            self.assertTrue(any(command.startswith("gh pr ready ") for command in command_lines))
+            edit_command = next(command for command in command_lines if command.startswith("gh pr edit "))
+            self.assertIn("--body-file", edit_command)
+            self.assertNotIn("--reviewer", edit_command)
+            body_files = [
+                Path(call[0][call[0].index("--body-file") + 1])
+                for call in runner.calls
+                if call[0][:3] == ["gh", "pr", "edit"]
+            ]
+            self.assertIn("CODEOWNERS: detected", body_files[0].read_text())
+            self.assertIn("Required review role: AI engineer", body_files[0].read_text())
 
     def test_create_or_open_draft_reopens_existing_draft_without_overwriting_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1503,6 +1823,12 @@ class AiwsSkillManagerTests(unittest.TestCase):
         payload = json.loads(record_path.read_text())
         payload["last_validation_status"] = status
         record_path.write_text(json.dumps(payload))
+
+    def set_proposal_target_repo(self, aiws_root: Path, proposal_id: str, target_repo: str) -> None:
+        proposal_path = aiws_root / "state" / "skill-proposals" / f"{proposal_id}.json"
+        payload = json.loads(proposal_path.read_text())
+        payload["target_repo"] = target_repo
+        proposal_path.write_text(json.dumps(payload))
 
     def draft_record_payload(self, draft_path: Path) -> dict[str, object]:
         return {

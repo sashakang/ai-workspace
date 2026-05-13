@@ -5,12 +5,13 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import uuid
 import zipfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qsl, urlsplit
 
 
@@ -80,6 +81,10 @@ def draft_record_path(aiws_root: Path, record_id: str) -> Path:
     return aiws_root / "state" / "skill-drafts" / f"{record_id}.json"
 
 
+def draft_base_tree_path(aiws_root: Path, record_id: str) -> Path:
+    return aiws_root / "state" / "skill-drafts" / f"{record_id}.base-tree.json"
+
+
 def draft_worktree_path(aiws_root: Path, marketplace: str, plugin_id: str, origin_repo: str) -> Path:
     digest = hashlib.sha256(origin_repo.encode("utf-8")).hexdigest()[:10]
     return aiws_root / "plugins" / slug(marketplace) / f"{slug(plugin_id)}-{digest}"
@@ -131,12 +136,18 @@ def reject_existing_symlink_components(path: Path, *, label: str) -> None:
 
 
 def reject_symlinked_child_path(path: Path, root: Path, *, label: str) -> None:
+    path_absolute = path.absolute()
+    root_absolute = root.absolute()
     try:
-        relative = path.absolute().relative_to(root.absolute())
-    except ValueError as exc:
-        raise SkillManagerError(f"{label} is outside AIWS draft plugin root: {path}") from exc
+        relative = path_absolute.relative_to(root_absolute)
+        current = root_absolute
+    except ValueError:
+        try:
+            relative = path.resolve(strict=False).relative_to(root.resolve(strict=False))
+            current = root.resolve(strict=False)
+        except ValueError as exc:
+            raise SkillManagerError(f"{label} is outside AIWS draft plugin root: {path}") from exc
 
-    current = root.absolute()
     for part in relative.parts:
         current = current / part
         if current.is_symlink():
@@ -197,6 +208,69 @@ def tree_digest(root: Path) -> str:
             continue
         raise SkillManagerError(f"Unsupported draft tree entry: {path}")
     return digest.hexdigest()
+
+
+def tree_file_hashes(root: Path) -> dict[str, str]:
+    if not root.is_dir():
+        raise SkillManagerError(f"Draft path is not a directory: {root}")
+    result: dict[str, str] = {}
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        if path.is_symlink():
+            raise SkillManagerError(f"Draft path must not contain symlinks: {path}")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise SkillManagerError(f"Unsupported draft tree entry: {path}")
+        result[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return result
+
+
+def reject_tree_symlinks(root: Path, *, label: str) -> None:
+    if root.is_symlink():
+        raise SkillManagerError(f"{label} must not be a symlink: {root}")
+    if not root.is_dir():
+        raise SkillManagerError(f"{label} is not a directory: {root}")
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        if path.is_symlink():
+            raise SkillManagerError(f"{label} must not contain symlinks: {path}")
+        if not (path.is_dir() or path.is_file()):
+            raise SkillManagerError(f"{label} contains unsupported entry: {path}")
+
+
+def write_base_tree_manifest(aiws_root: Path, record_id: str, draft_path: Path) -> None:
+    path = draft_base_tree_path(aiws_root, record_id)
+    require_record_path_under(path, aiws_root / "state" / "skill-drafts")
+    write_json_atomic(path, {"files": tree_file_hashes(draft_path)})
+
+
+def load_base_tree_manifest(aiws_root: Path, record_id: str) -> dict[str, str]:
+    path = draft_base_tree_path(aiws_root, record_id)
+    require_record_path_under(path, aiws_root / "state" / "skill-drafts")
+    if not path.exists():
+        raise SkillManagerError(f"Draft base tree manifest is missing; recreate the draft before staging: {record_id}")
+    payload = load_json(path)
+    if not isinstance(payload, dict) or not isinstance(payload.get("files"), dict):
+        raise SkillManagerError(f"Draft base tree manifest is invalid: {path}")
+    files = payload["files"]
+    if not all(isinstance(key, str) and isinstance(value, str) for key, value in files.items()):
+        raise SkillManagerError(f"Draft base tree manifest is invalid: {path}")
+    return dict(files)
+
+
+def changed_paths_since_base(aiws_root: Path, record_id: str, draft_path: Path) -> list[str]:
+    base = load_base_tree_manifest(aiws_root, record_id)
+    current = tree_file_hashes(draft_path)
+    paths = sorted(set(base) | set(current))
+    return [path for path in paths if base.get(path) != current.get(path)]
+
+
+def require_changes_only_under_skill(aiws_root: Path, record_id: str, draft_path: Path, skill_id: str) -> list[str]:
+    changed = changed_paths_since_base(aiws_root, record_id, draft_path)
+    allowed_prefix = f"skills/{skill_id}/"
+    outside = [path for path in changed if not path.startswith(allowed_prefix)]
+    if outside:
+        raise SkillManagerError(f"Draft contains changes outside the managed skill folder: {outside}")
+    return changed
 
 
 def parse_skill_frontmatter(content: str) -> tuple[dict[str, str], str]:
@@ -412,6 +486,100 @@ def validate_marketplace(repo_root: Path) -> dict[str, Any]:
     return {"marketplace": marketplace.get("name"), "plugins": results}
 
 
+def default_plugin_search_roots(env: dict[str, str] | None = None) -> list[Path]:
+    env = dict(os.environ if env is None else env)
+    roots: list[Path] = []
+    configured = env.get("AIWS_PLUGIN_SEARCH_ROOTS", "")
+    roots.extend(Path(item).expanduser() for item in configured.split(os.pathsep) if item)
+    plugin_root = env.get("CLAUDE_PLUGIN_ROOT")
+    if plugin_root:
+        root = Path(plugin_root).expanduser()
+        roots.extend([root, root.parent, root.parent.parent])
+    cowork_home = env.get("COWORK_HOME")
+    if cowork_home:
+        roots.append(Path(cowork_home).expanduser())
+    roots.append(Path("~/.cowork").expanduser())
+
+    result: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root)
+        if key not in seen and root.exists():
+            result.append(root)
+            seen.add(key)
+    return result
+
+
+def discover_installed_plugins(
+    *,
+    plugin_id: str | None = None,
+    search_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    roots = [Path(root).expanduser() for root in search_roots] if search_roots is not None else default_plugin_search_roots(env)
+    searched = [str(root) for root in roots]
+    plugins: list[dict[str, Any]] = []
+    seen_roots: set[Path] = set()
+
+    for root in roots:
+        if not root.exists() or root.is_symlink():
+            continue
+        if not root.is_dir():
+            continue
+        reject_existing_symlink_components(root, label="Plugin search root")
+        manifest_paths = [root / ".claude-plugin" / "plugin.json"]
+        if root.is_dir():
+            manifest_paths.extend(root.rglob(".claude-plugin/plugin.json"))
+        for manifest_path in manifest_paths:
+            if not manifest_path.is_file() or manifest_path.is_symlink():
+                continue
+            plugin_root = manifest_path.parent.parent
+            try:
+                manifest_path.resolve().relative_to(root.resolve())
+            except (OSError, ValueError):
+                continue
+            try:
+                reject_symlinked_child_path(plugin_root, root, label="Installed plugin root")
+            except SkillManagerError:
+                continue
+            try:
+                resolved_root = plugin_root.resolve()
+            except OSError:
+                continue
+            if resolved_root in seen_roots:
+                continue
+            seen_roots.add(resolved_root)
+            try:
+                manifest = load_json(manifest_path)
+            except SkillManagerError:
+                continue
+            name = manifest.get("name") if isinstance(manifest, dict) else None
+            version = manifest.get("version") if isinstance(manifest, dict) else None
+            if not isinstance(name, str) or not isinstance(version, str):
+                continue
+            if plugin_id is not None and name != plugin_id:
+                continue
+            plugins.append(
+                {
+                    "plugin_id": name,
+                    "base_version": version,
+                    "source_plugin_root": str(resolved_root),
+                    "origin_marketplace": plugin_root.parent.name or "cowork-upload",
+                    "origin_ref": "cowork-upload",
+                    "base_commit": "uploaded",
+                }
+            )
+
+    plugins.sort(key=lambda item: item["source_plugin_root"])
+    if plugin_id is not None and not plugins:
+        status = "installed_plugin_not_found"
+    elif plugin_id is not None and len(plugins) > 1:
+        status = "ambiguous_installed_plugin"
+    else:
+        status = "ok"
+    return {"status": status, "searched_roots": searched, "plugins": plugins}
+
+
 def create_draft_record(
     aiws_root: Path,
     *,
@@ -619,6 +787,7 @@ def create_or_open_draft(
     base_version: str,
     base_commit: str,
 ) -> DraftRecord:
+    reject_tree_symlinks(source_plugin_root, label="Source plugin tree")
     validation = validate_plugin(source_plugin_root, expected_name=plugin_id, expected_version=base_version)
     skill_names = {skill["name"] for skill in validation["skills"]}
     if skill_id not in skill_names:
@@ -638,7 +807,10 @@ def create_or_open_draft(
         if existing_draft_path != expected_draft_path.resolve():
             raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
         if existing_draft_path.exists():
-            return refresh_modified_status(aiws_root, record_id)
+            refreshed = refresh_modified_status(aiws_root, record_id)
+            if not draft_base_tree_path(aiws_root, record_id).exists() and not refreshed.modified:
+                write_base_tree_manifest(aiws_root, record_id, existing_draft_path)
+            return refreshed
 
     if expected_draft_path.exists():
         raise SkillManagerError(f"Draft path already exists without a usable record: {expected_draft_path}")
@@ -646,6 +818,7 @@ def create_or_open_draft(
     expected_draft_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source_plugin_root, expected_draft_path)
     base_tree_digest = tree_digest(expected_draft_path)
+    write_base_tree_manifest(aiws_root, record_id, expected_draft_path)
 
     record = DraftRecord(
         plugin_id=plugin_id,
@@ -714,6 +887,128 @@ def refresh_modified_status(aiws_root: Path, record_id: str) -> DraftRecord:
     return refreshed
 
 
+def draft_skill_root(aiws_root: Path, record_id: str) -> tuple[DraftRecord, Path, Path]:
+    record = safely_identify_draft_record(aiws_root, record_id)
+    plugins_root = aiws_root / "plugins"
+    draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")
+    expected_draft_path = require_path_under(
+        draft_worktree_path(aiws_root, record.origin_marketplace, record.plugin_id, record.origin_repo),
+        plugins_root,
+        label="Expected draft path",
+    )
+    if draft_path != expected_draft_path:
+        raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
+    skill_root = require_path_under(draft_path / "skills" / record.skill_id, plugins_root, label="Draft skill path")
+    if not skill_root.is_dir():
+        raise SkillManagerError(f"Draft skill path is not a directory: {skill_root}")
+    return record, draft_path, skill_root
+
+
+def resolve_draft_skill_file(aiws_root: Path, record_id: str, relative_path: str) -> tuple[DraftRecord, Path, Path]:
+    relative_path = require_non_blank_string(relative_path, "relative_path")
+    path = Path(relative_path)
+    if path.is_absolute() or ".." in path.parts:
+        raise SkillManagerError(f"Draft file path is outside the managed skill folder: {relative_path}")
+    record, _draft_path, skill_root = draft_skill_root(aiws_root, record_id)
+    allowed_prefix = Path("skills") / record.skill_id
+    try:
+        suffix = path.relative_to(allowed_prefix)
+    except ValueError as exc:
+        raise SkillManagerError(f"Draft file path is outside the managed skill folder: {relative_path}") from exc
+    if not suffix.parts:
+        raise SkillManagerError(f"Draft file path must identify a file under the managed skill folder: {relative_path}")
+    target = skill_root / suffix
+    reject_symlinked_child_path(target, skill_root, label="Draft file path")
+    resolved = target.resolve(strict=False)
+    try:
+        resolved.relative_to(skill_root.resolve())
+    except ValueError as exc:
+        raise SkillManagerError(f"Draft file path is outside the managed skill folder: {relative_path}") from exc
+    return record, skill_root, resolved
+
+
+def list_draft_files(aiws_root: Path, record_id: str) -> dict[str, Any]:
+    record, _draft_path, skill_root = draft_skill_root(aiws_root, record_id)
+    files: list[str] = []
+    for path in sorted(skill_root.rglob("*"), key=lambda item: item.relative_to(skill_root).as_posix()):
+        if path.is_symlink():
+            raise SkillManagerError(f"Draft path must not contain symlinks: {path}")
+        if path.is_file():
+            files.append((Path("skills") / record.skill_id / path.relative_to(skill_root)).as_posix())
+        elif not path.is_dir():
+            raise SkillManagerError(f"Unsupported draft tree entry: {path}")
+    return {"status": "ok", "record_id": record_id, "plugin_id": record.plugin_id, "skill_id": record.skill_id, "files": files}
+
+
+def read_draft_file(aiws_root: Path, record_id: str, relative_path: str) -> dict[str, Any]:
+    record, _skill_root, target = resolve_draft_skill_file(aiws_root, record_id, relative_path)
+    if not target.is_file():
+        raise SkillManagerError(f"Draft file not found: {relative_path}")
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise SkillManagerError(f"Draft file is not valid UTF-8 text: {relative_path}") from exc
+    return {
+        "status": "ok",
+        "record_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "relative_path": relative_path,
+        "content": content,
+    }
+
+
+def write_draft_file(aiws_root: Path, record_id: str, relative_path: str, content: str) -> dict[str, Any]:
+    if not isinstance(content, str):
+        raise SkillManagerError("content must be a string.")
+    record, skill_root, target = resolve_draft_skill_file(aiws_root, record_id, relative_path)
+    reject_existing_symlink_components(target.parent, label="Draft file parent")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists() and not target.is_file():
+        raise SkillManagerError(f"Draft file path is not a file: {relative_path}")
+    if target.is_symlink():
+        raise SkillManagerError(f"Draft file path must not be a symlink: {relative_path}")
+    temp_path = target.with_suffix(target.suffix + ".tmp")
+    if temp_path.exists() and temp_path.is_symlink():
+        raise SkillManagerError(f"Draft file temporary path must not be a symlink: {relative_path}")
+    temp_path.write_text(content, encoding="utf-8")
+    temp_path.replace(target)
+    refreshed = refresh_modified_status(aiws_root, record_id)
+    return {
+        "status": "written",
+        "record_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "relative_path": relative_path,
+        "modified": refreshed.modified,
+        "skill_root": str(skill_root),
+    }
+
+
+def delete_draft_file(aiws_root: Path, record_id: str, relative_path: str) -> dict[str, Any]:
+    record, skill_root, target = resolve_draft_skill_file(aiws_root, record_id, relative_path)
+    if not target.exists():
+        raise SkillManagerError(f"Draft file not found: {relative_path}")
+    if target.is_symlink():
+        raise SkillManagerError(f"Draft file path must not be a symlink: {relative_path}")
+    if not target.is_file():
+        raise SkillManagerError(f"Draft file path is not a file: {relative_path}")
+    target.unlink()
+    parent = target.parent
+    while parent != skill_root and parent.exists() and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+    refreshed = refresh_modified_status(aiws_root, record_id)
+    return {
+        "status": "deleted",
+        "record_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "relative_path": relative_path,
+        "modified": refreshed.modified,
+    }
+
+
 def package_path_for_record(package_output_dir: Path, record_id: str) -> Path:
     return package_output_dir / f"{record_id}.zip"
 
@@ -753,11 +1048,17 @@ def path_is_under_claude_memory_data(path: Path) -> bool:
     return False
 
 
+def path_is_at_or_under_dot_claude(path: Path) -> bool:
+    return ".claude" in [part.lower() for part in path.absolute().parts]
+
+
 def reject_disallowed_package_output_dir(aiws_root: Path, package_output_dir: Path) -> None:
     disallowed_roots = (aiws_root / "memory", aiws_root / "imports", aiws_root / "exports")
     for root in disallowed_roots:
         if path_is_at_or_under(package_output_dir, root):
             raise SkillManagerError(f"Package output directory is under a disallowed package output directory: {root}")
+    if path_is_at_or_under_dot_claude(package_output_dir):
+        raise SkillManagerError("Package output directory is under a disallowed package output directory: .claude")
     if path_is_under_claude_memory_data(package_output_dir):
         raise SkillManagerError(
             "Package output directory is under a disallowed package output directory: .claude/plugins/data/*memory*"
@@ -956,6 +1257,18 @@ def stage_proposal(
         raise SkillManagerError(f"Draft record {record_id} does not differ from its base tree.")
 
     try:
+        require_changes_only_under_skill(aiws_root, record_id, draft_path, record.skill_id)
+    except Exception:
+        persist_stage_validation_result(
+            aiws_root,
+            record_id,
+            status="failed",
+            current_tree_digest=current_tree_digest,
+            modified=modified,
+        )
+        raise
+
+    try:
         validation = validate_plugin(draft_path, expected_name=record.plugin_id, expected_version=record.base_version)
         skill_names = {skill["name"] for skill in validation["skills"]}
         if record.skill_id not in skill_names:
@@ -1068,6 +1381,295 @@ def submitted_review_response(proposal: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
+
+
+def default_command_runner(
+    args: list[str],
+    *,
+    cwd: Path | None = None,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["GH_PROMPT_DISABLED"] = "1"
+    stdin = subprocess.DEVNULL if input_text is None else None
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        input=input_text,
+        stdin=stdin,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    )
+
+
+def require_command_success(result: subprocess.CompletedProcess[str], *, action: str) -> subprocess.CompletedProcess[str]:
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        if detail:
+            raise SkillManagerError(f"{action} failed: {detail}")
+        raise SkillManagerError(f"{action} failed with exit code {result.returncode}.")
+    return result
+
+
+def require_target_repo(value: Any) -> str:
+    target_repo = require_non_blank_string(value, "target_repo")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", target_repo):
+        raise SkillManagerError("target_repo must use owner/repo format.")
+    return target_repo
+
+
+def git_worktree_root(aiws_root: Path, target_repo: str, proposal_id: str) -> Path:
+    owner, repo = target_repo.split("/", 1)
+    return aiws_root / "state" / "git-worktrees" / f"{owner}__{repo}" / proposal_id
+
+
+def require_aiws_owned_scratch_path(path: Path, aiws_root: Path, *, label: str) -> Path:
+    scratch_root = aiws_root / "state" / "git-worktrees"
+    reject_existing_symlink_components(path.parent, label=f"{label} parent")
+    if path.exists() and path.is_symlink():
+        raise SkillManagerError(f"{label} must not be a symlink: {path}")
+    try:
+        path.absolute().relative_to(scratch_root.absolute())
+    except ValueError as exc:
+        raise SkillManagerError(f"{label} is outside AIWS git scratch root: {path}") from exc
+    return path
+
+
+def find_target_plugin_root(repo_dir: Path, plugin_id: str) -> Path:
+    candidates = [repo_dir, repo_dir / plugin_id]
+    for candidate in candidates:
+        manifest_path = plugin_manifest_path(candidate)
+        if not manifest_path.is_file() or manifest_path.is_symlink():
+            continue
+        try:
+            manifest = load_json(manifest_path)
+        except SkillManagerError:
+            continue
+        if isinstance(manifest, dict) and manifest.get("name") == plugin_id:
+            return candidate
+    raise SkillManagerError(f"Target repository does not contain plugin {plugin_id!r} at root or {plugin_id}/.")
+
+
+def copy_skill_folder(source_skill_root: Path, target_skill_root: Path) -> None:
+    if not source_skill_root.is_dir():
+        raise SkillManagerError(f"Source skill folder is missing: {source_skill_root}")
+    if not target_skill_root.is_dir():
+        raise SkillManagerError(f"Target skill folder is missing: {target_skill_root}")
+    reject_existing_symlink_components(target_skill_root.parent, label="Target skill folder parent")
+    if target_skill_root.is_symlink():
+        raise SkillManagerError(f"Target skill folder must not be a symlink: {target_skill_root}")
+    for path in source_skill_root.rglob("*"):
+        if path.is_symlink():
+            raise SkillManagerError(f"Source skill folder must not contain symlinks: {path}")
+    for path in target_skill_root.rglob("*"):
+        if path.is_symlink():
+            raise SkillManagerError(f"Target skill folder must not contain symlinks: {path}")
+    shutil.rmtree(target_skill_root)
+    shutil.copytree(source_skill_root, target_skill_root)
+
+
+def detect_codeowners(repo_dir: Path) -> str:
+    candidates = [
+        repo_dir / "CODEOWNERS",
+        repo_dir / ".github" / "CODEOWNERS",
+        repo_dir / "docs" / "CODEOWNERS",
+    ]
+    return "detected" if any(path.is_file() for path in candidates) else "not_detected"
+
+
+def write_pr_body(path: Path, payload: dict[str, Any], *, codeowners_status: str) -> None:
+    lines = [
+        f"AIWS proposal: {payload['proposal_id']}",
+        "",
+        f"Plugin: {payload['plugin_id']}",
+        f"Skill: {payload['skill_id']}",
+        f"Target scope: {payload['target_scope']}",
+        f"Target repo: {payload['target_repo']}",
+        f"Validation digest: {payload['validation_tree_digest']}",
+        f"CODEOWNERS: {codeowners_status}",
+        "Required review role: AI engineer",
+        "",
+        "Summary:",
+        str(payload.get("summary", "")).strip(),
+        "",
+        "Rationale:",
+        str(payload.get("rationale", "")).strip(),
+        "",
+        "Reviewer assignment is managed by GitHub repository policy.",
+    ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def update_existing_pr_metadata(
+    runner: "GhCliProposalSubmitter",
+    *,
+    target_repo: str,
+    pr_url: str,
+    is_draft: bool,
+    body_path: Path,
+) -> None:
+    runner.run(
+        [
+            "gh",
+            "pr",
+            "edit",
+            pr_url,
+            "--repo",
+            target_repo,
+            "--body-file",
+            str(body_path),
+        ],
+        action="Update existing proposal pull request body",
+    )
+    if is_draft:
+        runner.run(
+            [
+                "gh",
+                "pr",
+                "ready",
+                pr_url,
+                "--repo",
+                target_repo,
+            ],
+            action="Mark existing proposal pull request ready for review",
+        )
+
+
+class GhCliProposalSubmitter:
+    def __init__(self, *, aiws_root: Path, runner: CommandRunner | None = None) -> None:
+        self.aiws_root = aiws_root
+        self.runner = runner or default_command_runner
+
+    def run(
+        self,
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+        action: str,
+    ) -> subprocess.CompletedProcess[str]:
+        return require_command_success(self.runner(args, cwd=cwd, input_text=input_text), action=action)
+
+    def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
+        proposal_id = require_non_blank_string(payload.get("proposal_id"), "proposal_id")
+        plugin_id = require_non_blank_string(payload.get("plugin_id"), "plugin_id")
+        skill_id = require_non_blank_string(payload.get("skill_id"), "skill_id")
+        branch_name = require_non_blank_string(payload.get("branch_name"), "branch_name")
+        target_repo = require_target_repo(payload.get("target_repo"))
+        draft_path = Path(require_non_blank_string(payload.get("draft_path"), "draft_path"))
+        validation_tree_digest = require_non_blank_string(
+            payload.get("validation_tree_digest"), "validation_tree_digest"
+        )
+
+        repo_api = self.run(["gh", "api", f"repos/{target_repo}"], action="Check GitHub repository access")
+        try:
+            repo_meta = json.loads(repo_api.stdout or "{}")
+        except json.JSONDecodeError as exc:
+            raise SkillManagerError("GitHub repository metadata was not valid JSON.") from exc
+        default_branch = require_non_blank_string(repo_meta.get("default_branch"), "default_branch")
+        permissions = repo_meta.get("permissions")
+        if isinstance(permissions, dict) and permissions.get("push") is False:
+            raise SkillManagerError(f"Authenticated GitHub user does not have push permission for {target_repo}.")
+
+        worktree_root = require_aiws_owned_scratch_path(
+            git_worktree_root(self.aiws_root, target_repo, proposal_id),
+            self.aiws_root,
+            label="Git scratch path",
+        )
+        if worktree_root.exists():
+            shutil.rmtree(worktree_root)
+        worktree_root.mkdir(parents=True, exist_ok=True)
+        repo_dir = worktree_root / "repo"
+
+        self.run(["gh", "repo", "clone", target_repo, str(repo_dir)], action="Clone target repository")
+        plugin_root = find_target_plugin_root(repo_dir, plugin_id)
+        target_skill_root = plugin_root / "skills" / skill_id
+        source_skill_root = draft_path / "skills" / skill_id
+        copy_skill_folder(source_skill_root, target_skill_root)
+
+        self.run(["git", "checkout", "-B", branch_name], cwd=repo_dir, action="Create proposal branch")
+        status = self.run(["git", "status", "--porcelain"], cwd=repo_dir, action="Check proposal diff")
+        if not status.stdout.strip():
+            return {
+                "status": "no_changes_to_submit",
+                "branch_name": branch_name,
+                "validation_tree_digest": validation_tree_digest,
+            }
+
+        relative_skill_path = target_skill_root.relative_to(repo_dir).as_posix()
+        self.run(["git", "add", relative_skill_path], cwd=repo_dir, action="Stage proposal skill changes")
+        self.run(
+            ["git", "commit", "-m", f"AIWS proposal {proposal_id}: update {plugin_id}/{skill_id}"],
+            cwd=repo_dir,
+            action="Commit proposal changes",
+        )
+        self.run(
+            ["git", "push", "--force-with-lease", "origin", f"{branch_name}:{branch_name}"],
+            cwd=repo_dir,
+            action="Push proposal branch",
+        )
+
+        existing = self.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--repo",
+                target_repo,
+                "--head",
+                branch_name,
+                "--state",
+                "open",
+                "--json",
+                "url,isDraft",
+            ],
+            action="Check existing proposal pull request",
+        )
+        try:
+            existing_prs = json.loads(existing.stdout or "[]")
+        except json.JSONDecodeError as exc:
+            raise SkillManagerError("GitHub PR list output was not valid JSON.") from exc
+        body_path = worktree_root / "pull-request-body.md"
+        write_pr_body(body_path, payload, codeowners_status=detect_codeowners(repo_dir))
+        if isinstance(existing_prs, list) and existing_prs and isinstance(existing_prs[0], dict):
+            pr_url = require_non_blank_string(existing_prs[0].get("url"), "pr_url")
+            update_existing_pr_metadata(
+                self,
+                target_repo=target_repo,
+                pr_url=pr_url,
+                is_draft=bool(existing_prs[0].get("isDraft")),
+                body_path=body_path,
+            )
+            return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
+
+        pr_create = self.run(
+            [
+                "gh",
+                "pr",
+                "create",
+                "--repo",
+                target_repo,
+                "--base",
+                default_branch,
+                "--head",
+                branch_name,
+                "--title",
+                str(payload.get("summary", "")).strip() or f"AIWS proposal {proposal_id}",
+                "--body-file",
+                str(body_path),
+            ],
+            action="Create proposal pull request",
+        )
+        pr_url = require_non_blank_string(pr_create.stdout.strip(), "pr_url")
+        return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
+
+
 def submit_pr(
     aiws_root: Path,
     proposal_id: str,
@@ -1115,6 +1717,7 @@ def submit_pr(
     )
     if current_tree_digest != validation_tree_digest:
         raise SkillManagerError(f"Draft {record_id} changed since staging; restage before submit.")
+    require_changes_only_under_skill(aiws_root, record_id, draft_path, record.skill_id)
 
     validation = validate_plugin(draft_path, expected_name=record.plugin_id, expected_version=record.base_version)
     skill_names = {skill["name"] for skill in validation["skills"]}
@@ -1132,6 +1735,18 @@ def submit_pr(
         "required_review_roles": review_roles,
     }
     submitter_result = call_proposal_submitter(submitter, submitter_payload)
+    if submitter_result.get("status") == "no_changes_to_submit":
+        return {
+            "status": "no_changes_to_submit",
+            "status_label": "No changes to submit",
+            "proposal_id": proposal["proposal_id"],
+            "draft_id": proposal["draft_id"],
+            "plugin_id": proposal["plugin_id"],
+            "skill_id": proposal["skill_id"],
+            "target_scope": proposal["target_scope"],
+            "target_repo": proposal["target_repo"],
+            "branch_name": branch_name,
+        }
     try:
         submitted_branch_name = require_non_blank_string(submitter_result.get("branch_name"), "branch_name")
         pr_url = require_non_blank_string(submitter_result.get("pr_url"), "pr_url")

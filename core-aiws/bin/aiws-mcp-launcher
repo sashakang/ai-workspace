@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  echo "AIWS MCP launcher error: CLAUDE_PLUGIN_ROOT is not set, so the bundled aiws-mcp server cannot be found." >&2
+  exit 127
+fi
+
+if ! command -v uvx >/dev/null 2>&1; then
+  echo "AIWS MCP launcher error: uvx is required to start the bundled aiws-mcp server. Install uv from https://docs.astral.sh/uv/ and reopen Cowork." >&2
+  exit 127
+fi
+
+exec uvx --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve
