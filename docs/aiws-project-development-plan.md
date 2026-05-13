@@ -165,7 +165,7 @@ Acceptance criteria:
 
 Current status: the Cowork skill-management bridge now proves the lifecycle behavior for a technical pilot, but it is not yet the Phase 2B end-user package because the launcher depends on `uvx`.
 
-Current testing scenario: `docs/cowork-skills-management-phase2-test-plan.md` covers the Phase 2A path from marketplace-installed `core-aiws` and `aiws-productivity` through `meeting-followup`, draft creation, safe draft edits, `aiws.skills.validate_draft`, and side-effect checks.
+Current testing scenario: `docs/cowork-skills-management-phase2-test-plan.md` covers the Phase 2A path from marketplace-installed `core-aiws` and `aiws-productivity` through `meeting-followup`, draft creation, safe draft edits, `aiws.skills.validate_draft`, and side-effect checks. Current blocker: the Cowork session does not expose `aiws.skills.create_or_open_draft` or `aiws.skills.validate_draft` as callable tools, so the draft-management scenarios are blocked until the installed `core-aiws` package registers the AIWS tool surface in Cowork.
 
 ### Phase 3: Shared Memory Sync Foundation
 

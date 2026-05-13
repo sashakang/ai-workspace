@@ -36,6 +36,28 @@ For each operation, this plan gives:
 
 If Cowork cannot reach the named tool, mark the test `BLOCKED` and record the exact error.
 
+## Current Blocker Pattern
+
+If ToolSearch or Cowork tool discovery shows no callable tools for:
+
+```text
+aiws.skills.create_or_open_draft
+aiws.skills.validate_draft
+```
+
+then the Phase 2A draft-management scenarios are `BLOCKED`.
+
+Do not replace these tools with a manual `/tmp` plugin copy, schema-only validation, shell script, or direct filesystem reconstruction. Those can be useful diagnostics, but they do not validate the Cowork draft-management path.
+
+Record the blocker as:
+
+```text
+Cowork cannot expose or reach the AIWS draft-management tool surface.
+aiws.skills.create_or_open_draft: unavailable
+aiws.skills.validate_draft: unavailable
+Result: BLOCKED
+```
+
 ## Placeholders
 
 Replace these before testing:

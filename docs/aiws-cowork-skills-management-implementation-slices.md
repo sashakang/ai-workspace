@@ -10,6 +10,8 @@ The implementation must stay aligned with `core-aiws/contracts/skill-management.
 
 The current tester-facing Phase 2A scenario is tracked in `docs/cowork-skills-management-phase2-test-plan.md`.
 
+Current Cowork runtime blocker: the user reported that the Cowork session did not expose `aiws.skills.create_or_open_draft` or `aiws.skills.validate_draft` as callable tools. ToolSearch returned no AIWS draft-management schemas. Until the installed `core-aiws` package registers those tools in Cowork, Phase 2A runtime scenarios that require draft creation or validation are blocked. Do not count manual `/tmp` copies, schema-only validation, CLI-only execution, or direct filesystem reconstruction as Cowork runtime validation.
+
 ## Session Rules
 
 - Owner for every slice: developer session.
