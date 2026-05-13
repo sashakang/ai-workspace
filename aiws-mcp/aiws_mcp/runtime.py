@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import skill_manager
 from .builtins import BUILTIN_SKILLS, RESOURCES
 
 
@@ -1162,6 +1163,136 @@ class AiwsRuntime:
             return
         raise ValueError(f"Unsupported host kind: {host_kind}")
 
+    def discover_installed_plugins(
+        self,
+        *,
+        plugin_id: str | None = None,
+        search_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
+    ) -> dict[str, Any]:
+        return skill_manager.discover_installed_plugins(
+            plugin_id=plugin_id,
+            search_roots=search_roots,
+            env=self.env,
+        )
+
+    def create_or_open_draft(
+        self,
+        *,
+        plugin_id: str,
+        skill_id: str,
+        target_repo: str,
+        source_plugin_root: str | Path | None = None,
+        origin_repo: str | None = None,
+        origin_marketplace: str | None = None,
+        origin_ref: str | None = None,
+        base_version: str | None = None,
+        base_commit: str | None = None,
+        search_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
+    ) -> dict[str, Any]:
+        discovered: dict[str, Any] | None = None
+        if source_plugin_root is None:
+            discovered = self.discover_installed_plugins(plugin_id=plugin_id, search_roots=search_roots)
+            matches = discovered.get("plugins", [])
+            if discovered.get("status") != "ok" or len(matches) != 1:
+                raise ValueError(f"{discovered.get('status')}: cannot select one installed plugin for {plugin_id!r}.")
+            selected = matches[0]
+            source_plugin_root = selected["source_plugin_root"]
+            origin_marketplace = origin_marketplace or selected.get("origin_marketplace")
+            origin_ref = origin_ref or selected.get("origin_ref")
+            base_version = base_version or selected.get("base_version")
+            base_commit = base_commit or selected.get("base_commit")
+
+        source_root = Path(source_plugin_root).expanduser()
+        if base_version is None:
+            base_version = skill_manager.validate_plugin(source_root, expected_name=plugin_id)["version"]
+        resolved_origin_repo = origin_repo or target_repo
+        resolved_origin_marketplace = origin_marketplace or "cowork-upload"
+        record = skill_manager.create_or_open_draft(
+            self.root,
+            source_plugin_root=source_root,
+            plugin_id=plugin_id,
+            skill_id=skill_id,
+            origin_marketplace=resolved_origin_marketplace,
+            origin_repo=resolved_origin_repo,
+            origin_ref=origin_ref or "cowork-upload",
+            base_version=base_version,
+            base_commit=base_commit or "uploaded",
+        )
+        record_id = skill_manager.draft_id(plugin_id, skill_id, resolved_origin_repo)
+        return {
+            "status": "draft_opened",
+            "record_id": record_id,
+            "discovery": discovered,
+            **record.to_json(),
+        }
+
+    def list_draft_files(self, draft_id: str) -> dict[str, Any]:
+        return skill_manager.list_draft_files(self.root, draft_id)
+
+    def read_draft_file(self, draft_id: str, relative_path: str) -> dict[str, Any]:
+        return skill_manager.read_draft_file(self.root, draft_id, relative_path)
+
+    def write_draft_file(self, draft_id: str, relative_path: str, content: str) -> dict[str, Any]:
+        return skill_manager.write_draft_file(self.root, draft_id, relative_path, content)
+
+    def delete_draft_file(self, draft_id: str, relative_path: str) -> dict[str, Any]:
+        return skill_manager.delete_draft_file(self.root, draft_id, relative_path)
+
+    def refresh_draft(self, draft_id: str) -> dict[str, Any]:
+        record = skill_manager.refresh_modified_status(self.root, draft_id)
+        return {"status": "ok", "record_id": draft_id, **record.to_json()}
+
+    def activate_draft(
+        self,
+        draft_id: str,
+        *,
+        host_kind: str,
+        package_output_dir: str | Path | None,
+    ) -> dict[str, Any]:
+        if package_output_dir is None:
+            raise ValueError("package_output_dir is required.")
+        return skill_manager.activate_draft(
+            self.root,
+            draft_id,
+            host_kind,
+            Path(package_output_dir).expanduser(),
+        )
+
+    def stage_proposal(
+        self,
+        draft_id: str,
+        *,
+        target_scope: str,
+        target_repo: str,
+        summary: str,
+        rationale: str,
+    ) -> dict[str, Any]:
+        return skill_manager.stage_proposal(
+            self.root,
+            draft_id,
+            target_scope,
+            target_repo,
+            summary,
+            rationale,
+        )
+
+    def submit_for_review(
+        self,
+        proposal_id: str,
+        *,
+        allowed_target_repos: list[str] | tuple[str, ...] | set[str] | None = None,
+    ) -> dict[str, Any]:
+        submitter_cls = getattr(skill_manager, "GhCliProposalSubmitter", None)
+        if submitter_cls is None:
+            raise RuntimeError("GhCliProposalSubmitter is not available in aiws_mcp.skill_manager.")
+        submitter = submitter_cls(aiws_root=self.root)
+        return skill_manager.submit_pr(
+            self.root,
+            proposal_id,
+            submitter,
+            allowed_target_repos=allowed_target_repos,
+        )
+
     def stage_change(
         self,
         *,
@@ -1176,6 +1307,7 @@ class AiwsRuntime:
         bundle_path: str | None = None,
         evidence: str | None = None,
     ) -> dict[str, Any]:
+        """Legacy host-local staged write surface; Cowork skill proposals use stage_proposal."""
         host = self.ensure_host(host_kind=host_kind, host_id=host_id)
         proposal_id = "skillchg_" + uuid.uuid4().hex[:12]
         proposal_path = (

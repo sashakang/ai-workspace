@@ -129,7 +129,7 @@ sequenceDiagram
   - The same logical skill may exist in multiple scoped repos. These are scoped variants, not one shared file.
   - Duplicate visible skill variants fail closed unless the caller or an explicit organization policy pins one variant.
   - `core-aiws` owns the internal skill-management bridge for editable drafts, draft activation, GitHub updates, and PR submission. It is not a separate user-facing plugin.
-  - Editable draft state is recorded under `~/.aiws/state/skill-drafts/`; editable files live under `~/.aiws/plugins/<marketplace-slug>/<plugin-id>`.
+  - Editable draft state is recorded under `~/.aiws/state/skill-drafts/`; editable files live under `~/.aiws/plugins/<marketplace-slug>/<plugin-id>-<origin-repo-sha10>`, where `origin-repo-sha10 = sha256(origin_repo)[:10]`. The origin hash prevents collisions when different source repos use the same plugin ID, while visible skill identity remains `plugin_id + skill_id`, so no duplicate visible skills are created.
   - Managed skill folders remain compatible with Codex `skill-creator`: `SKILL.md` frontmatter contains only `name` and `description`, and the folder name matches `name`.
   - Required manifest fields: `skill_id`, `scope`, `version`, `artifact_kind`, `entrypoint`, `supported_hosts`, `required_tools`, `artifact_ref`, `integrity_hash`.
 
