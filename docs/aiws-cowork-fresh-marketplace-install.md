@@ -1,12 +1,12 @@
 # AIWS Cowork GitHub Marketplace Install
 
-This guide covers the intended GitHub marketplace-registration path for installing AIWS from a fresh Cowork setup. Cowork is the primary host for this path, but this path is not currently available in the tested Cowork build/account combination.
+This guide covers the primary Cowork marketplace path for installing AIWS from a fresh Cowork setup.
 
 For architecture and project scope, see [AIWS Skills-Only Cowork Marketplace Architecture](./aiws-skills-cowork-marketplace.md) and [AIWS Project Development Plan](./aiws-project-development-plan.md).
 
-Current status: the GitHub marketplace registration path is blocked in Cowork build 1.6608.2 for the tested Personal account. The Cowork-supported Team import path has runtime proof through `Organization settings -> Plugins -> Add plugin -> Upload a file`; see [AIWS Cowork Plugin Import Install](./aiws-cowork-plugin-import-install.md) and [AIWS Cowork Plugin Import Validation PASS](./aiws-cowork-plugin-import-validation-pass.md).
+Current status: the Personal marketplace path is now the primary journey. The user reported that Cowork installed the marketplace plugins and generated `meeting-followup` nodes correctly. The older Team ZIP import path remains a fallback and diagnostic path; see [AIWS Cowork Plugin Import Install](./aiws-cowork-plugin-import-install.md) and [AIWS Cowork Plugin Import Validation PASS](./aiws-cowork-plugin-import-validation-pass.md).
 
-Do not treat this GitHub marketplace guide as the active Phase 2 prerequisite. Phase 2 proceeds from the validated Cowork-supported import path.
+Phase 2 proceeds from marketplace-installed Cowork plugins by default. Use manual ZIP import only when marketplace access is unavailable or when explicitly testing the fallback path.
 
 If you are testing on a laptop with existing Claude Code memory, complete [AIWS Cowork Laptop Test Safety](./aiws-cowork-laptop-test-safety.md) first. The Cowork install test must not delete, move, refresh, or repair Claude Code memory.
 
@@ -25,12 +25,18 @@ Use this path when you are installing AIWS for your own Cowork account.
 
 1. Open Cowork.
 2. Go to the Personal plugin marketplace area.
-3. Add the AIWS marketplace from its GitHub marketplace repo.
+3. Add the AIWS marketplace from GitHub:
+
+```text
+sashakang/ai-workspace
+```
+
 4. Install `core-aiws`.
 5. Install one domain plugin, starting with `aiws-productivity`.
 6. Open the Cowork skill or plugin surface and confirm that `meeting-followup` is visible.
+7. Invoke `meeting-followup` with a harmless test prompt and confirm that Cowork generates the expected nodes.
 
-Verification needed: existing docs say Cowork exposes a Personal marketplace flow with an "Add marketplace from GitHub" action, but the exact current UI labels and menu path still need direct Cowork verification.
+The exact current Cowork labels and menu path should still be recorded for each validation run because Cowork UI text may vary by account type or build.
 
 ## Team Or Enterprise Path
 
@@ -42,7 +48,7 @@ Use this path when an organization manages plugins for a team.
 4. In Cowork, install or enable the available plugins if your organization requires a user-level install step.
 5. Confirm that `meeting-followup` is visible in your Cowork skill or plugin surface.
 
-Verified Team import path: `Organization settings -> Plugins -> Add plugin -> Upload a file` accepts individual plugin ZIPs with `.claude-plugin/plugin.json` at archive root. Public GitHub marketplace registration remains a separate blocked path.
+Fallback Team import path: `Organization settings -> Plugins -> Add plugin -> Upload a file` accepts individual plugin ZIPs with `.claude-plugin/plugin.json` at archive root. Use this path only when marketplace install is unavailable or when explicitly validating the fallback.
 
 ## Runtime Evidence To Collect
 

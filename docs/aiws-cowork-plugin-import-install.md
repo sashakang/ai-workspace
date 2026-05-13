@@ -1,10 +1,10 @@
 # AIWS Cowork Plugin Import Install
 
-This guide covers the Cowork-supported plugin import path for Phase 1 validation.
+This guide covers the fallback Cowork-supported ZIP import path for Phase 1 validation.
 
-This is not the GitHub marketplace registration path. The GitHub marketplace path is currently blocked in Cowork build 1.6608.2 for the tested Personal account, as recorded in [AIWS Phase 1 Blocked](./aiws-phase1-blocked.md).
+This is not the primary marketplace install path. Marketplace install is now the primary user journey after the user reported that Cowork installed the AIWS marketplace plugins and generated `meeting-followup` nodes correctly.
 
-This path can count as a clean Cowork-supported install if Cowork performs the plugin import through its own UI or supported import mechanism. It does not count as clean if the tester edits RPM files, reconstructs marketplace entries, copies files into Cowork runtime folders, or restores old plugin state.
+Use this path when marketplace access is unavailable, when validating Team ZIP upload behavior, or when explicitly testing fallback recovery. This path can count as a clean Cowork-supported fallback install if Cowork performs the plugin import through its own UI or supported import mechanism. It does not count as clean if the tester edits RPM files, reconstructs marketplace entries, copies files into Cowork runtime folders, or restores old plugin state.
 
 Runtime status: passed on 2026-05-11 for a Team account in Cowork build 1.6608.2. See [AIWS Cowork Plugin Import Validation PASS](./aiws-cowork-plugin-import-validation-pass.md).
 

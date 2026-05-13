@@ -1,13 +1,13 @@
-# Cowork Clean Import Test Plan
+# Cowork Manual ZIP Import Fallback Test Plan
 
 **Date:** 2026-05-13  
-**Scope:** Validate the clean Cowork plugin import path for `core-aiws` and `aiws-productivity`.
+**Scope:** Validate the fallback Cowork ZIP import path for `core-aiws` and `aiws-productivity`.
 
-This test checks the user-facing Cowork import flow. It does not test GitHub marketplace registration, because that path is currently blocked. It also does not test memory sync.
+This test checks the user-facing Cowork ZIP import flow. Marketplace install is now the primary user journey. Use this plan only when marketplace access is unavailable, when testing Team ZIP upload behavior, or when explicitly validating the fallback path. It does not test memory sync.
 
 ## Goal
 
-Confirm that a Cowork user can install AIWS skills through Cowork's supported plugin upload flow and invoke `meeting-followup`, without touching existing Claude Code memory or manually editing Cowork runtime state.
+Confirm that a Cowork user can install AIWS skills through Cowork's supported plugin upload flow and invoke `meeting-followup`, without touching existing Claude Code memory or manually editing Cowork runtime state. This is a fallback to marketplace install, not the preferred path for normal users.
 
 ## Safety Rules
 

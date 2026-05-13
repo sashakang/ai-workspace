@@ -1,6 +1,6 @@
 # AIWS Project Development Plan
 
-Updated: 2026-05-12
+Updated: 2026-05-13
 
 ## Product Direction
 
@@ -8,13 +8,13 @@ AI Workspace is a local-first system for managing reusable AI skills across host
 
 The primary host goal is Cowork. Claude Code may be used as an intermediate implementation target when it reduces delivery risk for Cowork, especially where Claude Code already provides working plugin, memory, or marketplace behavior that can be adapted. Codex remains an important development and validation host, but it is not the primary product target for the next cycle.
 
-The first user journey to optimize is a clean Cowork-supported install of AIWS skills. The intended GitHub marketplace registration path is still the target product path, but it is currently blocked in Cowork build 1.6608.2 for the tested Personal account. The working path today is the Cowork Team import flow: `Organization settings -> Plugins -> Add plugin -> Upload a file`. That flow accepted individual ZIPs for `core-aiws` and `aiws-productivity`; `meeting-followup` was visible and invocable. Skill creation, editing, promotion, and richer team workflows now build on top of this proven Cowork-supported import path while GitHub marketplace registration remains tracked separately as blocked.
+The first user journey to optimize is a clean Cowork-supported marketplace install of AIWS skills. The Personal marketplace path is now the primary product path: the user reported that Cowork can add the marketplace, install the plugins, and generate `meeting-followup` nodes correctly. Manual Cowork ZIP import remains a validated fallback path for Team accounts and recovery testing, but it is no longer the primary user journey.
 
 Customer constraints have loosened around GitHub use, but the user experience should still stay Cowork-first. Normal users should stage and submit skill improvements through friendly Cowork UI actions. GitHub is the backend review and source-control system: repo maintainers and skill maintainers review, comment on, and merge pull requests in GitHub. Branches, commits, remotes, and tokens should remain backend details unless the user explicitly asks for them.
 
 The target Cowork user path must not assume Python, `uvx`, GitHub CLI, or terminal fluency on the user's machine. A technical pilot may temporarily use a plugin-provided MCP launcher backed by `uvx`, but that is not the final end-user install model. Before AIWS is called end-user ready for Cowork, the runtime bridge must be packaged so that the user installs through Cowork and operates through Cowork without separately installing Python, `uvx`, `gh`, or running shell commands.
 
-There is an urgent current-user need from a group of Cowork users who need practical skills management now. The plan should therefore treat Team ZIP import as the first usable install gate, then immediately deliver a narrow Cowork skills-management MVP before broader memory sync or MCP alignment work. GitHub marketplace registration should not block Phase 2.
+There is an urgent current-user need from a group of Cowork users who need practical skills management now. The plan should therefore treat marketplace install as the first usable install gate, then immediately deliver a narrow Cowork skills-management MVP before broader memory sync or MCP alignment work. Manual ZIP import stays available as a fallback when marketplace access, permissions, or service behavior blocks a tester.
 
 Memory sync across hosts is a required infrastructure capability. It should be implemented as one shared infrastructure layer, not as separate memory systems per host. Hosts may expose different adapters or local surfaces, but AIWS should preserve one coherent memory model.
 
@@ -61,7 +61,7 @@ Use three explicit states when planning implementation:
 
 ### Phase 1: Cowork Install Gate
 
-Deliver the simplest credible Cowork user journey: start from a clean Cowork setup, install `core-aiws` plus one domain plugin through a Cowork-supported plugin install mechanism, and confirm that a starter skill is available in Cowork. The proven path is Team ZIP import through `Organization settings -> Plugins -> Add plugin -> Upload a file`. The GitHub marketplace registration path remains a target path but is currently blocked. Phase 1 does not include local MCP control-plane behavior, memory sync, direct writes to `~/.cowork`, GitHub submission, or managed draft lifecycle work.
+Deliver the simplest credible Cowork user journey: start from a clean Cowork setup, add the AIWS marketplace, install `core-aiws` plus one domain plugin through Cowork's marketplace/plugin UI, and confirm that a starter skill is available in Cowork. The primary path is Personal marketplace install from `sashakang/ai-workspace`, followed by installing `core-aiws` and `aiws-productivity`. Manual ZIP import through `Organization settings -> Plugins -> Add plugin -> Upload a file` remains a fallback path. Phase 1 does not include local MCP control-plane behavior, memory sync, direct writes to `~/.cowork`, GitHub submission, or managed draft lifecycle work.
 
 The developer should validate the concrete Cowork marketplace artifact shape from `docs/aiws-skills-cowork-marketplace.md`. Current read-only repo validation found the marketplace manifest at:
 
@@ -83,39 +83,39 @@ plugins/
 
 `marketplace.json` must include `name`, `owner`, and `plugins`; each plugin entry must include `name`, `source`, `version`, and `description`; and each plugin must have a matching `.claude-plugin/plugin.json`. The Phase 1 validation gates are marketplace and plugin manifests, plugin contracts, skill folders using Codex `skill-creator` compatibility rules, and version alignment across marketplace entries, plugin manifests, and contracts. Skill folders must include `SKILL.md` with only `name` and `description` frontmatter, and the skill folder name must match the frontmatter `name`. MCP config validation is part of the later control-plane and release-readiness work, not the Cowork install gate.
 
-Current status: the GitHub marketplace registration path is blocked in Cowork build 1.6608.2 for the tested Personal account. A Cowork-supported Team import path has runtime proof: `Organization settings -> Plugins -> Add plugin -> Upload a file` accepted individual ZIPs for `core-aiws` and `aiws-productivity`, and `meeting-followup` was visible and invocable. See `docs/aiws-phase1-blocked.md` and `docs/aiws-cowork-plugin-import-validation-pass.md`.
+Current status: the Personal marketplace path has user-reported runtime proof: Cowork installed the AIWS plugins from the marketplace and generated `meeting-followup` nodes correctly. A Cowork-supported Team import fallback also has runtime proof: `Organization settings -> Plugins -> Add plugin -> Upload a file` accepted individual ZIPs for `core-aiws` and `aiws-productivity`, and `meeting-followup` was visible and invocable. See `docs/aiws-cowork-fresh-marketplace-install.md`, `docs/aiws-cowork-runtime-validation-checklist.md`, and `docs/aiws-cowork-plugin-import-validation-pass.md`.
 
-Expected developer evidence for the proven Team import path:
+Expected developer evidence for the primary marketplace path:
 
-- the exact plugin ZIP artifacts used for validation
-- the inspected plugin manifest paths used by those ZIPs
-- the Cowork import UI label and exact menu or settings path used
-- the archive layout Cowork accepts
-- proof that Cowork imports the plugin packages through its supported UI
+- the exact marketplace repo/path submitted to Cowork
+- the Cowork marketplace UI label and exact menu or settings path used
+- proof that Cowork adds the marketplace through its supported UI
+- the accepted marketplace source layout
+- proof that Cowork installs `core-aiws` and `aiws-productivity` from the marketplace
 - the installed plugin IDs
 - the visible Cowork skill IDs, including `core-aiws` and `aiws-productivity/meeting-followup`
 - proof that `meeting-followup` can be invoked in Cowork
 - a sanitized `installed_plugins.json` if Cowork exposes one
-- runtime logs or errors from the Cowork import and skill invocation attempt
+- runtime logs or errors from marketplace add, plugin install, skill discovery, and skill invocation
 - validation command output or equivalent logs for manifests, contracts, skill folders, and version alignment
 - a screenshot, copied Cowork surface text, or other direct proof that `meeting-followup` is visible and usable in Cowork
 
 Acceptance criteria:
 
-- From a clean Cowork setup, a user can install AIWS through a Cowork-supported path without manual runtime edits.
-- A user can install `core-aiws` plus one domain plugin from that supported path.
+- From a clean Cowork setup, a user can add the AIWS marketplace and install AIWS without manual runtime edits.
+- A user can install `core-aiws` plus one domain plugin from that marketplace path.
 - A starter skill, starting with `meeting-followup`, is visible and usable in Cowork after the install.
 - The install path does not require manual file copying, symlinks, or repo cloning by a normal user.
 - Duplicate skill identity behavior is clear and fails closed when scope is ambiguous.
 - The flow is documented for a non-dev user.
 
-Blocked path:
+Fallback path:
 
-- GitHub marketplace registration through a Personal account is blocked in Cowork build 1.6608.2 because no functional `Add marketplace from GitHub` input was available. This is recorded in `docs/aiws-phase1-blocked.md` and must not be treated as a Phase 2 dependency.
+- Manual Cowork ZIP import is kept as a fallback and diagnostic path. It is documented in `docs/cowork-clean-import-test-plan.md` and `docs/aiws-cowork-plugin-import-install.md`. It should not replace marketplace install as the primary journey unless marketplace access is blocked for a tester.
 
 ### Phase 2: Urgent Cowork Skills-Management MVP
 
-After the Cowork-supported install/import path is reliable, immediately deliver the smallest Cowork skills-management MVP that lets current users edit or open a draft, validate it, activate the modified local skill, stage a proposed improvement, and submit it for maintainer review from Cowork. This lifecycle work follows the installed Cowork plugin package directly; it does not depend on GitHub marketplace registration, memory sync, or the MCP control plane being complete.
+After the Cowork marketplace install path is reliable, immediately deliver the smallest Cowork skills-management MVP that lets current users edit or open a draft, validate it, activate the modified local skill, stage a proposed improvement, and submit it for maintainer review from Cowork. This lifecycle work follows the installed Cowork plugin package directly; it does not depend on memory sync or the MCP control plane being complete.
 
 Phase 2 has two runtime levels:
 
@@ -292,15 +292,15 @@ The Discord protocol should stay lightweight but structured. Task IDs and explic
 
 ## Immediate Next Steps
 
-Task: Lock the Cowork Team import path as the current install gate.
-Context: GitHub marketplace registration is blocked, but Cowork Team ZIP import has passed with `core-aiws` and `aiws-productivity`. Phase 2 should build on the proven import path, not wait for marketplace registration.
+Task: Lock the Cowork marketplace path as the current primary install gate.
+Context: Cowork marketplace install is now the primary user journey. The user reported that Cowork installed the AIWS marketplace plugins and generated `meeting-followup` nodes correctly. Cowork Team ZIP import has also passed with `core-aiws` and `aiws-productivity`, but it is now the fallback path.
 Owner: Developer session
-Expected output: User-facing import guide and validation record for installing `core-aiws` and `aiws-productivity` through `Organization settings -> Plugins -> Add plugin -> Upload a file`.
-Acceptance: The guide names the exact artifacts, archive layout, Cowork UI path, expected plugin IDs/skills to verify, safety boundaries, and blocked GitHub marketplace-registration caveat. It excludes local MCP, memory sync, draft editing, GitHub submission, RPM edits, and old registration restore from the install flow.
-Evidence: `docs/aiws-cowork-plugin-import-install.md`, `docs/aiws-cowork-plugin-import-validation-pass.md`, import artifact paths, Cowork runtime proof that `meeting-followup` was visible and invocable, and validation command output.
+Expected output: User-facing marketplace install guide and validation record for adding `sashakang/ai-workspace`, installing `core-aiws` and `aiws-productivity`, and invoking `meeting-followup` from Cowork. The existing ZIP import guide remains as fallback documentation.
+Acceptance: The guide names the exact marketplace repo/path, Cowork marketplace UI path, expected plugin IDs/skills to verify, accepted source layout, safety boundaries, and fallback ZIP import path. It excludes local MCP, memory sync, draft editing, GitHub submission, RPM edits, and old registration restore from the marketplace install flow.
+Evidence: `docs/aiws-cowork-fresh-marketplace-install.md`, `docs/aiws-cowork-runtime-validation-checklist.md`, user-reported Cowork marketplace runtime proof that `meeting-followup` nodes were generated correctly, and fallback evidence in `docs/aiws-cowork-plugin-import-validation-pass.md`.
 
 Task: Capture lifecycle constraints for modified skills.
-Context: Phase 2 is an urgent Cowork skills-management MVP. Current users need to edit or open drafts, validate them, activate modified local skills, and stage proposals immediately after Cowork-supported plugin import, without waiting for GitHub marketplace registration, memory sync, or MCP control-plane alignment.
+Context: Phase 2 is an urgent Cowork skills-management MVP. Current users need to edit or open drafts, validate them, activate modified local skills, and stage proposals immediately after marketplace-installed Cowork plugins are available. Manual ZIP import remains a fallback install source only. Phase 2 should not wait for memory sync or MCP control-plane alignment.
 Owner: Developer session
 Expected output: Product and technical notes for draft creation, validation, activation, update conflict handling, and proposal staging.
 Acceptance: The notes preserve one user-facing skill identity, use `Modified locally` status, store draft registry entries under `~/.aiws/state/skill-drafts/`, store editable files under `~/.aiws/plugins/<marketplace-slug>/<plugin-id>-<origin-repo-sha10>`, activate modified local skills without duplicate visible skill identity, stage proposals through `stage_proposal` under `~/.aiws/state/skill-proposals/` rather than silently invoking `submit_pr`, expose submission as a separate Cowork UI action, never mutate managed marketplace or organization plugin files, fail closed on updates when an active modified draft exists, and offer only the three approved update choices.

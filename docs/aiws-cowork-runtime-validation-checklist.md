@@ -2,9 +2,9 @@
 
 This checklist is for a developer or tester with direct Cowork access validating the GitHub marketplace-registration path for AIWS.
 
-Current status: this GitHub marketplace-registration path is blocked in Cowork build 1.6608.2 for the tested Personal account. The working Phase 1 install gate is now the Cowork Team plugin import path documented in [AIWS Cowork Plugin Import Install](./aiws-cowork-plugin-import-install.md) and validated in [AIWS Cowork Plugin Import Validation PASS](./aiws-cowork-plugin-import-validation-pass.md).
+Current status: this marketplace path is now the primary Phase 1 install gate. The user reported that Cowork installed the AIWS marketplace plugins and generated `meeting-followup` nodes correctly. Use this checklist to capture the full runtime evidence for that path. The Cowork Team plugin import path remains a fallback documented in [AIWS Cowork Plugin Import Install](./aiws-cowork-plugin-import-install.md) and validated in [AIWS Cowork Plugin Import Validation PASS](./aiws-cowork-plugin-import-validation-pass.md).
 
-This checklist remains useful only if the GitHub marketplace path becomes available later. It is not the active prerequisite for Phase 2.
+This checklist is the active marketplace-install validation surface for Phase 1. Phase 2 proceeds from marketplace-installed plugins by default.
 
 Use this checklist alongside:
 

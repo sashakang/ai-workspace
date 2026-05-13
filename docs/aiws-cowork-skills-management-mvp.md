@@ -4,7 +4,7 @@
 
 This note captures the urgent Cowork skills-management MVP for current users after a clean Cowork-supported AIWS install. It follows Phase 2 in `docs/aiws-project-development-plan.md` and depends on the Phase 1 install gate being usable first: a user installs `core-aiws` and a domain plugin through Cowork, then manages an installed skill from that package.
 
-Current install status: GitHub marketplace registration is blocked in Cowork build 1.6608.2 for the tested Personal account. The proven path is the Cowork Team upload/import flow: `Organization settings -> Plugins -> Add plugin -> Upload a file`, using individual ZIPs for `core-aiws` and `aiws-productivity`. Phase 2 should build on that proven import path and must not wait for GitHub marketplace registration.
+Current install status: the Personal marketplace path is now the primary journey. The user reported that Cowork installed the AIWS marketplace plugins and generated `meeting-followup` nodes correctly. The Cowork Team upload/import flow, `Organization settings -> Plugins -> Add plugin -> Upload a file`, remains a validated fallback using individual ZIPs for `core-aiws` and `aiws-productivity`.
 
 The MVP is intentionally narrow. It covers creating or opening a draft from an installed skill, validating the draft, activating a modified local skill, staging a proposed improvement, submitting it for maintainer review from Cowork, tracking local modification state, and handling update conflicts safely. GitHub can be used as the backend review system, but normal users should not need to use GitHub UI directly. The MVP does not wait for broader memory sync, complete `aiws-mcp` alignment, or the final target control plane, but it must remain compatible with the target architecture in `docs/aiws-target-architecture.md`.
 
@@ -21,7 +21,7 @@ Use these documents as the governing references:
 
 ## MVP User Journey
 
-The user starts from an installed Cowork skill, such as `aiws-productivity/meeting-followup`, installed through a Cowork-supported plugin path. The MVP must not start from a cloned repository, a raw filesystem path, RPM reconstruction, or manual Cowork runtime edits.
+The user starts from an installed Cowork skill, such as `aiws-productivity/meeting-followup`, installed through the Cowork marketplace path by default. The fallback ZIP upload path is acceptable only when marketplace access is unavailable or explicitly under test. The MVP must not start from a cloned repository, a raw filesystem path, RPM reconstruction, or manual Cowork runtime edits.
 
 1. Create or open a draft from the installed skill.
 2. Edit the draft under the AIWS draft workspace.

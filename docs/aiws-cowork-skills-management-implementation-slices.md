@@ -2,7 +2,7 @@
 
 This document turns the urgent Phase 2 Cowork skills-management MVP in `docs/aiws-cowork-skills-management-mvp.md` into small implementation slices for a developer session. It is a planning document only. Do not implement code from this file directly without first checking the referenced contracts and tests.
 
-Phase 2 now starts from the proven Cowork Team upload/import path, not from GitHub marketplace registration. GitHub marketplace registration is blocked in the tested Cowork build/account combination and must not block these slices. The installed source package for the MVP may be an uploaded Cowork plugin ZIP, as long as Cowork owns the install operation and AIWS does not edit runtime RPM state by hand.
+Phase 2 now starts from the Cowork Personal marketplace path. The user reported that Cowork can install the AIWS plugins from the marketplace and generate `meeting-followup` nodes correctly. The proven Cowork Team upload/import path remains a fallback, not the primary journey. The installed source package for the MVP should normally be marketplace-installed; it may be an uploaded Cowork plugin ZIP only when marketplace access is unavailable or the fallback path is explicitly under test. In both cases, Cowork must own the install operation and AIWS must not edit runtime RPM state by hand.
 
 The current `core-aiws` MCP bridge is a Phase 2A technical pilot when it depends on `uvx` to launch `aiws-mcp`. That dependency is acceptable only for maintainers and technical testers. The Phase 2B target package for normal Cowork users must not require Python, `uvx`, GitHub CLI, shell commands, or any manual runtime setup outside Cowork.
 

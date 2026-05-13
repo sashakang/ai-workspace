@@ -8,9 +8,9 @@
 
 ## Scope
 
-This validates the Cowork-supported plugin import path, not the GitHub marketplace registration path.
+This validates the Cowork-supported ZIP import path, not the GitHub marketplace registration path.
 
-The GitHub marketplace registration path remains blocked for the tested Cowork build/account combination. See [AIWS Phase 1 Blocked](./aiws-phase1-blocked.md).
+At the time of this 2026-05-11 Team ZIP import test, the Personal marketplace registration path had been blocked in a separate Personal-account test. That historical blocker is recorded in [AIWS Phase 1 Blocked](./aiws-phase1-blocked.md). Marketplace install later became the primary user journey after the user reported that Cowork installed the marketplace plugins and generated `meeting-followup` nodes correctly.
 
 ## Import Path
 
@@ -110,4 +110,4 @@ Cowork assigns manually uploaded plugins to a marketplace named `My Uploads`.
 
 This path is a clean Cowork-supported import path for Team accounts because Cowork performs the install through its own UI and no runtime state is edited by hand.
 
-This does not validate GitHub marketplace registration. That remains a separate blocked path.
+This report does not validate GitHub marketplace registration. It preserves the fallback ZIP import PASS result.
