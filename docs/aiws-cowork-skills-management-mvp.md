@@ -8,6 +8,8 @@ Current install status: GitHub marketplace registration is blocked in Cowork bui
 
 The MVP is intentionally narrow. It covers creating or opening a draft from an installed skill, validating the draft, activating a modified local skill, staging a proposed improvement, submitting it for maintainer review from Cowork, tracking local modification state, and handling update conflicts safely. GitHub can be used as the backend review system, but normal users should not need to use GitHub UI directly. The MVP does not wait for broader memory sync, complete `aiws-mcp` alignment, or the final target control plane, but it must remain compatible with the target architecture in `docs/aiws-target-architecture.md`.
 
+Runtime status has two levels. The current MCP-backed `core-aiws` bridge is a technical pilot path because it starts `aiws-mcp` through `uvx`. It can validate the lifecycle semantics with AIWS maintainers and technical testers, but it is not the target Cowork user experience. The target MVP package must not require normal users to install Python, install `uvx`, configure GitHub CLI, or run terminal commands.
+
 ## Source Documents
 
 Use these documents as the governing references:
@@ -31,6 +33,8 @@ The user starts from an installed Cowork skill, such as `aiws-productivity/meeti
 8. Let repo or skill maintainers review, comment on, and merge the resulting proposal in GitHub.
 
 The MVP should use product-language targets such as `Personal`, `PNC skills`, `Company skills`, and `Public skills`. Branches, commits, remotes, pull request creation, and package rebuild details are backend concerns unless the user explicitly asks for them.
+
+Normal-user operations must stay inside Cowork. Any Python, `uvx`, `gh`, or shell requirement belongs only to a technical pilot checklist and must be removed or hidden behind a self-contained package before broader customer rollout.
 
 ## Local State
 
@@ -182,5 +186,6 @@ The MVP is done when a current Cowork user can:
 - stage a proposed improvement with provenance and review notes
 - submit a staged proposal for maintainer review from Cowork
 - update safely, with active modified draft conflicts limited to the three approved choices
+- install and use the skill-management workflow without installing Python, `uvx`, GitHub CLI, or running terminal commands
 
-The MVP is not done if it mutates managed marketplace or organization plugin files in place, creates a second visible copy of the same logical skill, hides local modification state, requires normal users to use GitHub UI for submission, or lets update flows overwrite active local edits without explicit user choice.
+The technical pilot is useful but not end-user complete while it depends on `uvx` or local GitHub CLI. The MVP is not done if it mutates managed marketplace or organization plugin files in place, creates a second visible copy of the same logical skill, hides local modification state, requires normal users to use GitHub UI for submission, requires normal users to install Python/`uvx`/`gh`, or lets update flows overwrite active local edits without explicit user choice.

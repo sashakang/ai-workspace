@@ -4,6 +4,8 @@ This document turns the urgent Phase 2 Cowork skills-management MVP in `docs/aiw
 
 Phase 2 now starts from the proven Cowork Team upload/import path, not from GitHub marketplace registration. GitHub marketplace registration is blocked in the tested Cowork build/account combination and must not block these slices. The installed source package for the MVP may be an uploaded Cowork plugin ZIP, as long as Cowork owns the install operation and AIWS does not edit runtime RPM state by hand.
 
+The current `core-aiws` MCP bridge is a Phase 2A technical pilot when it depends on `uvx` to launch `aiws-mcp`. That dependency is acceptable only for maintainers and technical testers. The Phase 2B target package for normal Cowork users must not require Python, `uvx`, GitHub CLI, shell commands, or any manual runtime setup outside Cowork.
+
 The implementation must stay aligned with `core-aiws/contracts/skill-management.md`. The main implementation surfaces to inspect are `aiws-mcp/aiws_mcp/skill_manager.py` and `aiws-mcp/aiws_mcp/runtime.py`, with tests in `tests/test_aiws_skill_manager.py`, `tests/test_aiws_mcp.py`, and `tests/test_aiws_productivity_plugin.py`.
 
 ## Session Rules
@@ -12,6 +14,7 @@ The implementation must stay aligned with `core-aiws/contracts/skill-management.
 - Keep changes small enough to review in one focused pass.
 - Do not mutate managed marketplace or organization plugin files in place.
 - Keep normal user flows product-language first: `Personal`, `PNC skills`, `Company skills`, and `Public skills`.
+- Do not treat `uvx`, Python, GitHub CLI, or terminal setup as acceptable requirements for normal users. If a slice depends on them, label it technical-pilot only.
 - Branches, commits, package rebuilds, and pull requests are backend details unless the user explicitly asks. Normal users stage and submit through Cowork UI; repo and skill maintainers review and merge in GitHub.
 - AI-engineering reviewer rule: every slice needs a brief reviewer note that explains the AI-facing behavior, the state transition, and why the change cannot silently overwrite user edits or expose duplicate skill identities.
 - Validation-only and dry-run paths must not repair, backfill, delete, activate, update, stage, submit, or upload anything.
@@ -126,6 +129,16 @@ Evidence: A developer can run the relevant suite locally and see focused failure
 
 Likely files, modules, and contracts to inspect: `tests/test_aiws_skill_manager.py`, `tests/test_aiws_mcp.py`, `tests/test_aiws_productivity_plugin.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `aiws-mcp/aiws_mcp/runtime.py`, `.claude-plugin/marketplace.json`, `aiws-productivity/.claude-plugin/plugin.json`, and `aiws-productivity/contracts/aiws-productivity.contract.json`.
 
+## Slice 10: Dependency-Free Cowork Runtime Package
+
+Owner: developer session.
+
+Expected output: The Cowork import artifact can start the AIWS skill-management bridge for a normal Cowork user without requiring user-installed Python, `uvx`, GitHub CLI, or shell commands.
+
+Acceptance: The package either includes a self-contained runtime bridge or uses a Cowork-guaranteed runtime/connector. Installing the package through Cowork is enough for the user to access the skill-management tools. Any remaining `uvx`, Python, or local `gh` dependency is clearly marked as technical-pilot only and blocks Phase 2B acceptance. GitHub review submission must either use a user-visible Cowork/GitHub connection, an organization bot/App, or another supported non-terminal auth path; users must not paste tokens into chat.
+
+Evidence: Add a dependency audit for the Cowork package, a startup smoke test for the packaged runtime, and a manual Cowork validation report proving the tools appear after upload on a machine that has no separately installed Python/`uvx`/`gh` dependency used by AIWS. If Cowork cannot support that yet, record the path as blocked rather than passing the end-user MVP.
+
 ## Suggested Developer Session Order
 
 1. Implement Slice 4, modified-state tracking, first. The registry already has `modified` and `last_validation_status`, and draft create/open plus write-root safety are already partially covered. Computing and persisting modified state unlocks activation status, proposal metadata, and conflict handling.
@@ -133,7 +146,8 @@ Likely files, modules, and contracts to inspect: `tests/test_aiws_skill_manager.
 3. Wire activation identity behavior and `Modified locally` status.
 4. Add local proposal-record staging as a distinct operation from submit/upload.
 5. Add explicit Cowork submit-for-review behavior that can create or update a GitHub PR behind the scenes.
-6. Finish update conflict choice handling and Cowork-facing labels.
-7. Run the focused unit tests and add missing fixtures where coverage is still thin.
+6. Remove or hide technical-pilot runtime dependencies by delivering the dependency-free Cowork runtime package.
+7. Finish update conflict choice handling and Cowork-facing labels.
+8. Run the focused unit tests and add missing fixtures where coverage is still thin.
 
 The final implementation review should check the AI-engineering reviewer rule for every slice: the behavior must be understandable to an AI agent operating through the skill-management surface, state transitions must be explicit, and no flow may quietly overwrite local work or expose two visible copies of the same logical skill.

@@ -12,6 +12,8 @@ The first user journey to optimize is a clean Cowork-supported install of AIWS s
 
 Customer constraints have loosened around GitHub use, but the user experience should still stay Cowork-first. Normal users should stage and submit skill improvements through friendly Cowork UI actions. GitHub is the backend review and source-control system: repo maintainers and skill maintainers review, comment on, and merge pull requests in GitHub. Branches, commits, remotes, and tokens should remain backend details unless the user explicitly asks for them.
 
+The target Cowork user path must not assume Python, `uvx`, GitHub CLI, or terminal fluency on the user's machine. A technical pilot may temporarily use a plugin-provided MCP launcher backed by `uvx`, but that is not the final end-user install model. Before AIWS is called end-user ready for Cowork, the runtime bridge must be packaged so that the user installs through Cowork and operates through Cowork without separately installing Python, `uvx`, `gh`, or running shell commands.
+
 There is an urgent current-user need from a group of Cowork users who need practical skills management now. The plan should therefore treat Team ZIP import as the first usable install gate, then immediately deliver a narrow Cowork skills-management MVP before broader memory sync or MCP alignment work. GitHub marketplace registration should not block Phase 2.
 
 Memory sync across hosts is a required infrastructure capability. It should be implemented as one shared infrastructure layer, not as separate memory systems per host. Hosts may expose different adapters or local surfaces, but AIWS should preserve one coherent memory model.
@@ -115,6 +117,11 @@ Blocked path:
 
 After the Cowork-supported install/import path is reliable, immediately deliver the smallest Cowork skills-management MVP that lets current users edit or open a draft, validate it, activate the modified local skill, stage a proposed improvement, and submit it for maintainer review from Cowork. This lifecycle work follows the installed Cowork plugin package directly; it does not depend on GitHub marketplace registration, memory sync, or the MCP control plane being complete.
 
+Phase 2 has two runtime levels:
+
+- **Phase 2A technical pilot bridge:** acceptable for AIWS maintainers and technical testers. The current `core-aiws` MCP bridge may use `uvx` to start `aiws-mcp`, and GitHub submission may depend on local authenticated tooling while the lifecycle behavior is being proven. This validates draft/edit/stage/submit semantics, but it is not the target user experience.
+- **Phase 2B end-user Cowork package:** required before broader customer rollout. A normal Cowork user must not install Python, install `uvx`, configure `gh`, run terminal commands, or understand the MCP server runtime. The Cowork package must either include a self-contained runtime bridge or use a Cowork-guaranteed runtime/connector so the workflow starts and runs from Cowork alone.
+
 For this urgent MVP, staging means calling the contract-owned `stage_proposal(draft_id, target_scope, target_repo, summary, rationale)` operation to write a local proposal record with provenance, the concrete backend review repository, and review notes under `~/.aiws/state/skill-proposals/`. `target_scope` is the Cowork/user-facing destination label and policy scope; `target_repo` is the concrete repository used later by submit-for-review. Staging must not be silently treated as PR submission. Submission is a separate explicit Cowork UI action that may create or update a GitHub pull request behind the scenes. Normal users should see statuses such as `Draft`, `Modified locally`, `Ready to submit`, `Submitted for review`, `Changes requested`, and `Merged`, not raw git mechanics.
 
 GitHub is now an acceptable collaboration backend for the customer experiment. The product boundary is still clear: Cowork owns the normal user workflow for staging and submitting; GitHub owns maintainer review, comments, approvals, and merges. Direct push is not part of the normal user flow. Pull requests are created by an explicit submit action and should target the appropriate unit, company, public, or personal skills repository based on the selected target scope.
@@ -153,6 +160,10 @@ Acceptance criteria:
 - Repo maintainers and skill maintainers can review and merge the resulting proposal in GitHub.
 - Duplicate skill identity fails closed when scope is ambiguous.
 - Managed marketplace or organization plugin files are never mutated in place.
+- Phase 2A is accepted only as a technical pilot if it still requires `uvx`, Python-managed execution, or local GitHub CLI.
+- Phase 2B is accepted only when normal users can install and operate the workflow from Cowork without Python, `uvx`, `gh`, shell commands, or manual runtime setup.
+
+Current status: the Cowork skill-management bridge now proves the lifecycle behavior for a technical pilot, but it is not yet the Phase 2B end-user package because the launcher depends on `uvx`.
 
 ### Phase 3: Shared Memory Sync Foundation
 
@@ -183,7 +194,9 @@ Acceptance criteria:
 
 Align the Cowork install, skill lifecycle, and memory paths with `aiws-mcp` so AIWS has one control-plane direction after the supported Cowork install/import path and initial lifecycle constraints are proven. Managed lifecycle behavior, including materialization state, staged skill changes, host surfaces, and future draft flows, moves behind `aiws-mcp` or an equivalent host adapter. This phase must not retroactively make Phase 1 depend on local MCP.
 
-The concrete control-plane boundary is the local Python stdio MCP server `aiws-mcp` described in `docs/aiws-local-mcp-skills-mvp-plan.md`. It owns these tool surfaces:
+The concrete technical control-plane boundary is currently the local Python stdio MCP server `aiws-mcp` described in `docs/aiws-local-mcp-skills-mvp-plan.md`. That is acceptable as an implementation and pilot boundary, but the target Cowork package must not expose Python as a user prerequisite. The production Cowork path must either bundle this control plane as a self-contained executable/runtime artifact or move it behind a Cowork-supported runtime/connector that is already available to the user.
+
+`aiws-mcp` owns these tool surfaces:
 
 ```text
 aiws.skills.search
@@ -220,6 +233,8 @@ Acceptance criteria:
 - The MCP runtime can represent installed, materialized, and staged skills consistently.
 - The current plugin/helper path and MCP-first path are documented as current state, transitional state, or target state.
 - Tests cover the Cowork-relevant skill lifecycle at the control-plane boundary.
+- The Cowork end-user package has no user-installed Python, `uvx`, `gh`, or terminal prerequisite.
+- Technical-pilot dependencies are clearly labeled and cannot be mistaken for the target install path.
 
 ### Phase 5: Release Readiness
 
@@ -231,6 +246,7 @@ Acceptance criteria:
 - Release validation includes plugin contracts, skill compatibility, MCP config checks, and host adapter expectations.
 - Runtime/generated files are clearly excluded from source control.
 - Install docs distinguish developer workflows from normal user workflows.
+- Release docs include a dependency audit that separately lists technical-pilot requirements and target end-user requirements.
 
 ## Project Management Model
 
