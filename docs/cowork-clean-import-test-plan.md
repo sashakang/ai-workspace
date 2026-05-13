@@ -24,7 +24,7 @@ Confirm that a Cowork user can install AIWS skills through Cowork's supported pl
 Expected ZIP files:
 
 ```text
-dist/cowork-import/core-aiws-0.3.5.zip
+dist/cowork-import/core-aiws-0.3.6.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -37,7 +37,7 @@ python scripts/build_cowork_import.py
 The command should print:
 
 ```text
-dist/cowork-import/core-aiws-0.3.5.zip
+dist/cowork-import/core-aiws-0.3.6.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -61,7 +61,7 @@ For a normal pilot user, the maintainer can provide these ZIP files directly. Th
 Organization settings -> Plugins -> Add plugin -> Upload a file
 ```
 
-6. Upload `core-aiws-0.3.5.zip`.
+6. Upload `core-aiws-0.3.6.zip`.
 7. Confirm `core-aiws` appears as installed or active.
 8. Upload `aiws-productivity-0.2.1.zip`.
 9. Confirm `aiws-productivity` appears as installed or active.
@@ -142,7 +142,7 @@ Import UI path:
 Import action label:
 
 Artifacts tested:
-- core-aiws-0.3.5.zip:
+- core-aiws-0.3.6.zip:
 - aiws-productivity-0.2.1.zip:
 
 Installed plugins:

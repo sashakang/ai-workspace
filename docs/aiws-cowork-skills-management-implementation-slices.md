@@ -10,7 +10,7 @@ The implementation must stay aligned with `core-aiws/contracts/skill-management.
 
 The current tester-facing Phase 2A scenario is tracked in `docs/cowork-skills-management-phase2-test-plan.md`.
 
-Previous Cowork runtime blocker: the user reported that the Cowork session did not expose `aiws.skills.create_or_open_draft` or `aiws.skills.validate_draft` as callable tools. ToolSearch returned no AIWS draft-management schemas. `core-aiws` version `0.3.5` now bundles the AIWS MCP bridge source and should be retested through the Cowork marketplace install before this blocker is treated as resolved. Do not count manual `/tmp` copies, schema-only validation, CLI-only execution, or direct filesystem reconstruction as Cowork runtime validation.
+Previous Cowork runtime blocker: the user reported that the Cowork session did not expose `aiws.skills.create_or_open_draft` or `aiws.skills.validate_draft` as callable tools. ToolSearch returned no AIWS draft-management schemas. `core-aiws` version `0.3.6` now bundles the AIWS MCP bridge source and includes the Scenario D draft-record safety fix, so retest through the Cowork marketplace install before treating the blocker as resolved. Do not count manual `/tmp` copies, schema-only validation, CLI-only execution, or direct filesystem reconstruction as Cowork runtime validation.
 
 ## Session Rules
 
