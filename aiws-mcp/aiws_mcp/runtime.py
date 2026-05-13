@@ -1285,9 +1285,10 @@ class AiwsRuntime:
         *,
         allowed_target_repos: list[str] | tuple[str, ...] | set[str] | None = None,
     ) -> dict[str, Any]:
-        submitter_cls = getattr(skill_manager, "GhCliProposalSubmitter", None)
+        submitter_name = "GhCliProposalSubmitter" if shutil.which("gh") else "GithubHandoffProposalSubmitter"
+        submitter_cls = getattr(skill_manager, submitter_name, None)
         if submitter_cls is None:
-            raise RuntimeError("GhCliProposalSubmitter is not available in aiws_mcp.skill_manager.")
+            raise RuntimeError(f"{submitter_name} is not available in aiws_mcp.skill_manager.")
         submitter = submitter_cls(aiws_root=self.root)
         return skill_manager.submit_pr(
             self.root,

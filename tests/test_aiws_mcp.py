@@ -209,6 +209,10 @@ class AiwsMcpSkillTests(unittest.TestCase):
             def __init__(self, *, aiws_root: Path) -> None:
                 self.aiws_root = aiws_root
 
+        class FakeGithubHandoffProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
         captured: dict[str, object] = {}
 
         def fake_submit_pr(aiws_root: Path, proposal_id: str, submitter: object, **kwargs: object) -> dict[str, object]:
@@ -225,6 +229,13 @@ class AiwsMcpSkillTests(unittest.TestCase):
 
         with (
             patch.object(runtime_module.skill_manager, "GhCliProposalSubmitter", FakeGhCliProposalSubmitter, create=True),
+            patch.object(
+                runtime_module.skill_manager,
+                "GithubHandoffProposalSubmitter",
+                FakeGithubHandoffProposalSubmitter,
+                create=True,
+            ),
+            patch.object(runtime_module.shutil, "which", return_value="/usr/bin/gh"),
             patch.object(runtime_module.skill_manager, "submit_pr", side_effect=fake_submit_pr),
         ):
             result = self.runtime.submit_for_review(
@@ -236,6 +247,57 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(captured["aiws_root"], self.root.resolve())
         self.assertEqual(captured["proposal_id"], "skillprop_123")
         self.assertIsInstance(captured["submitter"], FakeGhCliProposalSubmitter)
+        self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_submit_for_review_uses_handoff_submitter_when_gh_is_missing(self) -> None:
+        class FakeGhCliProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        class FakeGithubHandoffProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        captured: dict[str, object] = {}
+
+        def fake_submit_pr(aiws_root: Path, proposal_id: str, submitter: object, **kwargs: object) -> dict[str, object]:
+            captured["aiws_root"] = aiws_root
+            captured["proposal_id"] = proposal_id
+            captured["submitter"] = submitter
+            captured["kwargs"] = kwargs
+            return {
+                "status": "submit_handoff_required",
+                "reason_code": "github_cli_unavailable",
+                "proposal_id": proposal_id,
+                "target_repo": "example/review",
+                "branch_name": "aiws/skill-proposals/skillprop_123",
+                "required_review_roles": ["AI engineer"],
+                "terminal": False,
+                "no_pr_created": True,
+                "actions": [],
+            }
+
+        with (
+            patch.object(runtime_module.skill_manager, "GhCliProposalSubmitter", FakeGhCliProposalSubmitter, create=True),
+            patch.object(
+                runtime_module.skill_manager,
+                "GithubHandoffProposalSubmitter",
+                FakeGithubHandoffProposalSubmitter,
+                create=True,
+            ),
+            patch.object(runtime_module.shutil, "which", return_value=None),
+            patch.object(runtime_module.skill_manager, "submit_pr", side_effect=fake_submit_pr),
+        ):
+            result = self.runtime.submit_for_review(
+                "skillprop_123",
+                allowed_target_repos=["example/review"],
+            )
+
+        self.assertEqual(result["status"], "submit_handoff_required")
+        self.assertEqual(captured["aiws_root"], self.root.resolve())
+        self.assertEqual(captured["proposal_id"], "skillprop_123")
+        self.assertIsInstance(captured["submitter"], FakeGithubHandoffProposalSubmitter)
         self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
         self.assert_no_memory_or_claude_writes()
 

@@ -95,7 +95,7 @@ Use a temporary AIWS package directory, not a Claude memory path. Example:
 
 ## Install Starting Point
 
-Start from Cowork marketplace install. For this Phase 2A retest, `core-aiws` must be refreshed to version `0.3.6` or newer, because earlier installs either did not bundle the AIWS MCP bridge or did not include the Scenario D draft-record safety fix.
+Start from Cowork marketplace install. For this Phase 2A retest, `core-aiws` must be refreshed to version `0.3.7` or newer, because earlier installs either did not bundle the AIWS MCP bridge or did not include the Scenario D draft-record safety fix.
 
 1. Open Cowork.
 2. Add the AIWS marketplace:
@@ -489,7 +489,21 @@ aiws.skills.submit_for_review(
 )
 ```
 
-Expected result:
+Expected Cowork technical-pilot result when `gh` is unavailable in the Cowork runtime:
+
+```text
+status: submit_handoff_required
+reason_code: github_cli_unavailable
+proposal_id: <proposal_id>
+target_repo: <test review repository>
+branch_name: aiws/skill-proposals/<proposal_id>
+required_review_roles includes AI engineer
+terminal: false
+no_pr_created: true
+actions: maintainer handoff or future Cowork-compatible GitHub adapter required
+```
+
+Expected developer-local result when authenticated `gh` is available:
 
 ```text
 status: submitted_for_review
@@ -561,7 +575,8 @@ Mark lifecycle continuation as `PASS` only if the tested continuation scenarios 
 - staging does not create a branch, commit, push, pull request, package, or Cowork runtime mutation
 - if submit-for-review is tested, the call uses `allowed_target_repos`
 - if submit-for-review is tested, it fails closed when the stored target repo is not allowed
-- if submit-for-review is tested and succeeds, proposal state records `required_review_roles` including `AI engineer`
+- if submit-for-review is tested without `gh`, it returns `submit_handoff_required`, does not mark the proposal submitted, and includes `required_review_roles` with `AI engineer`
+- if submit-for-review is tested with authenticated `gh` and succeeds, proposal state records `required_review_roles` including `AI engineer`
 
 ## Fail Or Block Criteria
 

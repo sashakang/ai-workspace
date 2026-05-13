@@ -1755,6 +1755,45 @@ class GhCliProposalSubmitter:
         return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
 
 
+class GithubHandoffProposalSubmitter:
+    def __init__(self, *, aiws_root: Path) -> None:
+        self.aiws_root = aiws_root
+
+    def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
+        proposal_id = require_non_blank_string(payload.get("proposal_id"), "proposal_id")
+        draft_id_value = require_non_blank_string(payload.get("draft_id"), "draft_id")
+        target_repo = require_non_blank_string(payload.get("target_repo"), "target_repo")
+        branch_name = require_non_blank_string(payload.get("branch_name"), "branch_name")
+        raw_review_roles = payload.get("required_review_roles")
+        required_review_roles = normalize_review_roles(
+            raw_review_roles if isinstance(raw_review_roles, (list, tuple)) else None
+        )
+
+        return {
+            "status": "submit_handoff_required",
+            "status_label": "GitHub submit handoff required",
+            "reason_code": "github_cli_unavailable",
+            "proposal_id": proposal_id,
+            "draft_id": draft_id_value,
+            "target_repo": target_repo,
+            "branch_name": branch_name,
+            "required_review_roles": required_review_roles,
+            "terminal": False,
+            "no_pr_created": True,
+            "actions": [
+                {
+                    "type": "github_submit_handoff",
+                    "label": "Submit through a Cowork-compatible GitHub adapter, bot, or maintainer handoff",
+                    "reason_code": "github_cli_unavailable",
+                    "target_repo": target_repo,
+                    "branch_name": branch_name,
+                    "required_review_roles": required_review_roles,
+                    "terminal": False,
+                }
+            ],
+        }
+
+
 def submit_pr(
     aiws_root: Path,
     proposal_id: str,
@@ -1831,6 +1870,41 @@ def submit_pr(
             "target_scope": proposal["target_scope"],
             "target_repo": proposal["target_repo"],
             "branch_name": branch_name,
+        }
+    if submitter_result.get("status") == "submit_handoff_required":
+        try:
+            handoff_branch_name = require_non_blank_string(submitter_result.get("branch_name"), "branch_name")
+            handoff_target_repo = require_non_blank_string(submitter_result.get("target_repo"), "target_repo")
+            handoff_proposal_id = require_non_blank_string(submitter_result.get("proposal_id"), "proposal_id")
+            handoff_draft_id = require_non_blank_string(submitter_result.get("draft_id"), "draft_id")
+        except SkillManagerError as exc:
+            raise SkillManagerError("submitter returned invalid handoff metadata.") from exc
+        if (
+            handoff_branch_name != branch_name
+            or handoff_target_repo != target_repo
+            or handoff_proposal_id != proposal_id
+            or handoff_draft_id != proposal["draft_id"]
+        ):
+            raise SkillManagerError("submitter returned invalid handoff metadata.")
+        return {
+            **submitter_result,
+            "status": "submit_handoff_required",
+            "status_label": str(submitter_result.get("status_label") or "GitHub submit handoff required"),
+            "reason_code": str(submitter_result.get("reason_code") or "github_cli_unavailable"),
+            "proposal_id": proposal["proposal_id"],
+            "draft_id": proposal["draft_id"],
+            "plugin_id": proposal["plugin_id"],
+            "skill_id": proposal["skill_id"],
+            "target_scope": proposal["target_scope"],
+            "target_repo": target_repo,
+            "branch_name": branch_name,
+            "required_review_roles": normalize_review_roles(
+                submitter_result["required_review_roles"]
+                if isinstance(submitter_result.get("required_review_roles"), (list, tuple))
+                else review_roles
+            ),
+            "terminal": False,
+            "no_pr_created": True,
         }
     try:
         submitted_branch_name = require_non_blank_string(submitter_result.get("branch_name"), "branch_name")

@@ -28,6 +28,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     draft_id,
     draft_worktree_path,
     GhCliProposalSubmitter,
+    GithubHandoffProposalSubmitter,
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     load_draft_record,
     list_draft_files,
@@ -64,6 +65,16 @@ class FakeProposalSubmitter:
             "branch_name": payload["branch_name"],
             "pr_url": "https://github.com/example/review/pull/123",
         }
+
+
+class RecordingHandoffSubmitter(GithubHandoffProposalSubmitter):
+    def __init__(self, *, aiws_root: Path) -> None:
+        super().__init__(aiws_root=aiws_root)
+        self.calls: list[dict[str, object]] = []
+
+    def submit(self, payload: dict[str, object]) -> dict[str, object]:
+        self.calls.append(payload)
+        return super().submit(payload)
 
 
 class FakeCommandRunner:
@@ -1603,6 +1614,112 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
             with self.assertRaisesRegex(SkillManagerError, "target_repo is not allowed"):
                 submit_pr(aiws_root, staged["proposal_id"], submitter, allowed_target_repos=["other-repo"])
+
+            self.assertEqual(submitter.calls, [])
+
+    def test_submit_pr_no_gh_handoff_preserves_staged_proposal_after_gates_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            before = self.proposal_payload(aiws_root, staged["proposal_id"])
+            submitter = RecordingHandoffSubmitter(aiws_root=aiws_root)
+
+            result = submit_pr(aiws_root, staged["proposal_id"], submitter, allowed_target_repos=["review-repo"])
+
+            expected_branch = f"aiws/skill-proposals/{staged['proposal_id']}"
+            self.assertEqual(result["status"], "submit_handoff_required")
+            self.assertEqual(result["reason_code"], "github_cli_unavailable")
+            self.assertEqual(result["proposal_id"], staged["proposal_id"])
+            self.assertEqual(result["draft_id"], record_id)
+            self.assertEqual(result["target_repo"], "review-repo")
+            self.assertEqual(result["branch_name"], expected_branch)
+            self.assertFalse(result["terminal"])
+            self.assertTrue(result["no_pr_created"])
+            self.assertIn("AI engineer", result["required_review_roles"])
+            self.assertGreaterEqual(len(result["actions"]), 1)
+            self.assertEqual(len(submitter.calls), 1)
+            self.assertEqual(submitter.calls[0]["branch_name"], expected_branch)
+            self.assertIn("AI engineer", submitter.calls[0]["required_review_roles"])
+            self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"]), before)
+
+    def test_submit_pr_no_gh_handoff_rejects_allowlist_mismatch_before_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            submitter = RecordingHandoffSubmitter(aiws_root=aiws_root)
+
+            with self.assertRaisesRegex(SkillManagerError, "target_repo is not allowed"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter, allowed_target_repos=["other-repo"])
+
+            self.assertEqual(submitter.calls, [])
+            self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"])["status"], "staged")
+
+    def test_submit_pr_no_gh_handoff_rejects_digest_divergence_before_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            self.edit_draft_skill(record, "\nEdit after staging.\n")
+            submitter = RecordingHandoffSubmitter(aiws_root=aiws_root)
+
+            with self.assertRaisesRegex(SkillManagerError, "changed since staging"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(submitter.calls, [])
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["status"], "staged")
+            self.assertIsNone(proposal["branch_name"])
+            self.assertIsNone(proposal["pr_url"])
+
+    def test_submit_pr_no_gh_handoff_rejects_non_staged_proposal_before_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            proposal_path = Path(staged["proposal_path"])
+            proposal = json.loads(proposal_path.read_text())
+            proposal["status"] = "draft"
+            proposal_path.write_text(json.dumps(proposal))
+            submitter = RecordingHandoffSubmitter(aiws_root=aiws_root)
+
+            with self.assertRaisesRegex(SkillManagerError, "not staged for review"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(submitter.calls, [])
+
+    def test_submit_pr_no_gh_handoff_rejects_failed_validation_before_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            proposal_path = Path(staged["proposal_path"])
+            proposal = json.loads(proposal_path.read_text())
+            proposal["validation_status"] = "failed"
+            proposal_path.write_text(json.dumps(proposal))
+            submitter = RecordingHandoffSubmitter(aiws_root=aiws_root)
+
+            with self.assertRaisesRegex(SkillManagerError, "validation status is not passed"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(submitter.calls, [])
+
+    def test_submit_pr_no_gh_handoff_rejects_out_of_scope_changes_before_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            draft_path = Path(record.draft_path)
+            (draft_path / "plugin.yaml").write_text("name: outside-skill\n")
+            proposal_path = Path(staged["proposal_path"])
+            proposal = json.loads(proposal_path.read_text())
+            proposal["validation_tree_digest"] = tree_digest(draft_path)
+            proposal_path.write_text(json.dumps(proposal))
+            submitter = RecordingHandoffSubmitter(aiws_root=aiws_root)
+
+            with self.assertRaisesRegex(SkillManagerError, "outside the managed skill folder"):
+                submit_pr(aiws_root, staged["proposal_id"], submitter)
 
             self.assertEqual(submitter.calls, [])
 
