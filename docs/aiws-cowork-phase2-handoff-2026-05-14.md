@@ -16,11 +16,11 @@ aiws-productivity: 0.2.1
 
 ## Executive Summary
 
-Phase 2A has moved from a blocked concept to a working technical pilot for Cowork skill lifecycle management. A Cowork user can now install AIWS through the marketplace, open a draft from an installed skill, edit the draft safely, validate it, build an activation package fallback, stage a local proposal, and reach a safe submit-for-review handoff when Cowork lacks `gh`.
+Phase 2A has moved from a blocked concept to a validated technical pilot for Cowork skill lifecycle management. A Cowork user can now install AIWS through the marketplace, open a draft from an installed skill, edit the draft safely, validate it, build an activation package fallback, stage a local proposal, submit it for review through authenticated host `gh`, and complete the maintainer merge loop in GitHub. When `gh` is unavailable, the current implementation returns a safe submit-for-review handoff instead of pretending a PR was created.
 
-The implementation is not yet the final end-user Cowork experience. It still depends on `uvx` to launch the bundled AIWS MCP bridge, and real GitHub PR creation from Cowork still needs a Cowork-compatible GitHub adapter, bot, or connector-backed submitter. The latest implementation intentionally returns `submit_handoff_required` instead of pretending that a PR was created when `gh` is unavailable.
+The implementation is not yet the final end-user Cowork experience. It still depends on `uvx` to launch the bundled AIWS MCP bridge, and real GitHub PR creation currently depends on authenticated host `gh`. That dependency is acceptable for the Phase 2A technical pilot, but should eventually move to a Cowork-compatible GitHub adapter, bot, or connector-backed submitter.
 
-The most important product result is that the lifecycle is now honest and safe. Draft edits do not mutate installed marketplace plugins. Validation and staging preserve user work. Negative tests fail closed. Submission no longer crashes with a raw `gh: command not found`; it returns a structured handoff after all normal submit gates pass.
+The most important product result is that the lifecycle is now honest and safe. Draft edits do not mutate installed marketplace plugins. Validation and staging preserve user work. Negative tests fail closed. Submission creates a real PR when authenticated host `gh` is available, and no longer crashes with a raw `gh: command not found` when it is not.
 
 ## Role And Operating Model
 
@@ -363,15 +363,15 @@ The proposal record contains validation data, but users should not need filesyst
 
 ### Scenario H: Submit Staged Proposal For Review
 
-Status before latest fix: **BLOCKED**
+Status: **PASS**
 
-Observed in Cowork:
+Earlier blocked behavior:
 
 ```text
 gh: command not found
 ```
 
-Root cause:
+Earlier root cause:
 
 - `submit_for_review` depended on local GitHub CLI
 - Cowork sandbox did not have `gh`
@@ -385,7 +385,7 @@ visibility: PRIVATE
 athanasiosbot has access
 ```
 
-Latest implementation in `9571ceb`:
+Implementation in `9571ceb`:
 
 - runtime selects `GhCliProposalSubmitter` only when `gh` exists
 - runtime selects `GithubHandoffProposalSubmitter` when `gh` is missing
@@ -401,7 +401,29 @@ Latest implementation in `9571ceb`:
   - plugin validates
   - skill exists
 
-Expected Cowork retest on `core-aiws 0.3.7`:
+Retest result on `core-aiws 0.3.7` with authenticated host `gh`:
+
+```text
+proposal_id: skillprop_72c14672145f43ad8bb372a162c852cd
+target_repo: sashakang/aiws-skill-tests
+branch_name: aiws/skill-proposals/skillprop_72c14672145f43ad8bb372a162c852cd
+pr_url: https://github.com/sashakang/aiws-skill-tests/pull/1
+PR state: ready, not draft
+validation/digest gate: passed
+installed marketplace plugin files touched: no
+~/.claude memory touched: no
+Cowork runtime files mutated: no
+```
+
+Maintainer loop:
+
+```text
+PR #1 was reviewed through AI engineer and code reviewer gates.
+PR #1 was merged.
+merge commit: 25c1e2ad6792dcc58bb3640d2c70e969998891ba
+```
+
+Expected behavior when `gh` is unavailable:
 
 ```text
 status: submit_handoff_required
@@ -413,23 +435,19 @@ proposal remains staged
 branch_name/pr_url are not persisted as submitted metadata
 ```
 
-This is not real PR creation. It is an honest safe handoff until a Cowork-compatible GitHub adapter exists.
+The no-`gh` result is not real PR creation. It is an honest safe handoff until a Cowork-compatible GitHub adapter exists.
 
 ## Known Gaps And Follow-Up Work
 
 ### Must Do Next
 
-1. **Retest Scenario H on Cowork with `core-aiws 0.3.7`.**
+1. **Decide the next product slice: Phase 2B runtime packaging or production-grade GitHub submit adapter.**
 
-   Expected result is `submit_handoff_required`, not a raw `gh` failure.
+   Host `gh` is acceptable for Phase 2A, but not the final nontechnical Cowork user experience. Runtime packaging is needed before normal users can operate without `uvx`; a Cowork-compatible GitHub adapter or bot path is needed before submit-for-review no longer depends on host `gh`.
 
-2. **Record the new Scenario H result in the Phase 2 test evidence.**
+2. **Optionally add a force-handoff test mode.**
 
-   If the result matches the expected structured handoff, Phase 2A can be considered technically validated except for final end-user packaging gaps.
-
-3. **Decide the next product slice: real Cowork GitHub adapter or Phase 2B runtime packaging.**
-
-   The adapter is needed for real PR creation from Cowork. Runtime packaging is needed before normal users can operate without `uvx`.
+   Since `gh` is present on the current Mac host, the no-`gh` path is hard to test manually from this machine. Automated tests already cover it, but a controlled `AIWS_GITHUB_SUBMIT_MODE=handoff` style test switch could make future Cowork QA easier.
 
 ### Product/API Improvements
 
@@ -438,7 +456,7 @@ These are not blockers for Phase 2A safety, but they should be prioritized befor
 - `stage_proposal` should return validation status and validation digest in its response.
 - `delete_draft_file` should probably block deletion of the canonical `SKILL.md` or return a clearer user-facing warning.
 - `validate_draft` should return structured failed validation results where possible, instead of relying on hard tool errors.
-- `submit_handoff_required` should distinguish intended branch name from created branch. The current branch name is deterministic and useful for handoff, but no branch is created.
+- `submit_handoff_required` should distinguish intended branch name from created branch. The current branch name is deterministic and useful for handoff, but no branch is created in that mode.
 - `list_staged_changes` appeared empty even when `submit_for_review` could resolve a proposal by ID. Investigate scope/filtering.
 - Cowork tool discovery should expose installed `core-aiws` version directly in AIWS responses, so testers do not need to inspect files.
 
@@ -447,7 +465,7 @@ These are not blockers for Phase 2A safety, but they should be prioritized befor
 These are the main remaining gaps between Phase 2A and the final normal-user Cowork experience:
 
 - `core-aiws` still launches through `uvx`.
-- Real PR creation still depends on either `gh` or a future Cowork-compatible GitHub adapter.
+- Real PR creation currently depends on authenticated host `gh`; eventually it should move to a Cowork-compatible GitHub adapter or bot path.
 - Direct Cowork activation is not supported; activation currently returns a package-upload fallback.
 - The current package is a technical pilot, not a dependency-free end-user runtime.
 - Memory sync is not part of Phase 2A validation and remains a later phase.
@@ -497,9 +515,9 @@ Marketplace metadata must show:
 0.3.8
 ```
 
-## Recommended Next Cowork Prompt
+## Scenario H Retest Prompt Archive
 
-After updating Cowork marketplace and reinstalling/updating `core-aiws` to `0.3.7`, rerun Scenario H with the staged proposal.
+This prompt was used to validate Scenario H after updating Cowork marketplace and reinstalling/updating `core-aiws` to `0.3.7`.
 
 ```text
 Run Scenario H: Submit Staged Proposal For Review.
@@ -543,7 +561,16 @@ Afterward, tell me:
 16. any errors or manual follow-up needed
 ```
 
-Expected current result:
+Expected result when authenticated host `gh` is available:
+
+```text
+status: submitted_for_review
+branch_name: aiws/skill-proposals/<proposal_id>
+pr_url: <review PR URL>
+required_review_roles includes AI engineer
+```
+
+Expected result when `gh` is unavailable:
 
 ```text
 status: submit_handoff_required
@@ -700,4 +727,3 @@ Research Cowork-compatible GitHub submit adapter options, then implement the sma
 ```
 
 Do not build against assumptions. The next research task must prove whether the GitHub connector is callable from the AIWS MCP runtime.
-
