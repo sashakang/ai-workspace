@@ -95,7 +95,7 @@ Use a temporary AIWS package directory, not a Claude memory path. Example:
 
 ## Install Starting Point
 
-Start from Cowork marketplace install:
+Start from Cowork marketplace install. For this Phase 2A retest, `core-aiws` must be refreshed to version `0.3.5` or newer, because earlier installs did not bundle the AIWS MCP bridge that exposes draft-management tools.
 
 1. Open Cowork.
 2. Add the AIWS marketplace:

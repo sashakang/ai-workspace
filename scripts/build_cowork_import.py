@@ -36,7 +36,6 @@ def build_core_aiws_package(repo_root: Path, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     core_root = repo_root / "core-aiws"
-    server_root = repo_root / "aiws-mcp"
     manifest_path = core_root / ".claude-plugin" / "plugin.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     package_path = output_dir / f"{manifest['name']}-{manifest['version']}.zip"
@@ -44,9 +43,6 @@ def build_core_aiws_package(repo_root: Path, output_dir: Path) -> Path:
     with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as package:
         for source in _iter_files(core_root):
             _write_file(package, source, source.relative_to(core_root))
-
-        for source in _iter_files(server_root):
-            _write_file(package, source, Path("servers") / "aiws-mcp" / source.relative_to(server_root))
 
     return package_path
 

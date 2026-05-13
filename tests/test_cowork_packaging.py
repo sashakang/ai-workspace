@@ -21,6 +21,7 @@ from scripts.build_cowork_import import (  # noqa: E402
     build_cowork_import_packages,
     build_productivity_package,
     launcher_check,
+    _iter_files,
 )
 
 
@@ -31,7 +32,7 @@ class CoworkPackagingTests(unittest.TestCase):
 
         self.assertEqual(
             {package.name for package in package_paths},
-            {"core-aiws-0.3.4.zip", "aiws-productivity-0.2.1.zip"},
+            {"core-aiws-0.3.5.zip", "aiws-productivity-0.2.1.zip"},
         )
 
     def test_core_package_includes_mcp_config_launcher_and_server_source(self) -> None:
@@ -39,9 +40,13 @@ class CoworkPackagingTests(unittest.TestCase):
             package_path = build_core_aiws_package(REPO_ROOT, Path(temp))
 
             with zipfile.ZipFile(package_path) as package:
-                names = set(package.namelist())
+                archived_names = package.namelist()
+                names = set(archived_names)
                 mcp = json.loads(package.read(".mcp.json"))
 
+        self.assertEqual(len(archived_names), len(names))
+        server_entries = [name for name in archived_names if name.startswith("servers/aiws-mcp/")]
+        self.assertEqual(len(server_entries), len(set(server_entries)))
         self.assertIn(".claude-plugin/plugin.json", names)
         self.assertIn(".mcp.json", names)
         self.assertIn("bin/aiws-mcp-launcher", names)
@@ -51,6 +56,21 @@ class CoworkPackagingTests(unittest.TestCase):
         self.assertFalse(any(name.startswith("servers/aiws-mcp/dist/") for name in names))
         self.assertEqual(mcp["mcpServers"]["aiws"]["command"], "sh")
         self.assertIn("${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-launcher", mcp["mcpServers"]["aiws"]["args"])
+
+    def test_bundled_mcp_server_source_matches_root_source(self) -> None:
+        root_server = REPO_ROOT / "aiws-mcp"
+        bundled_server = REPO_ROOT / "core-aiws" / "servers" / "aiws-mcp"
+
+        root_files = [source.relative_to(root_server) for source in _iter_files(root_server)]
+        bundled_files = [source.relative_to(bundled_server) for source in _iter_files(bundled_server)]
+
+        self.assertEqual(bundled_files, root_files)
+        for relative_path in root_files:
+            self.assertEqual(
+                (bundled_server / relative_path).read_bytes(),
+                (root_server / relative_path).read_bytes(),
+                str(relative_path),
+            )
 
     def test_productivity_package_is_flat_importable_plugin(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
