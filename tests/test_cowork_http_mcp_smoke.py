@@ -162,9 +162,11 @@ class CoworkHttpMcpSmokeTests(unittest.TestCase):
 
         self.assertIn("Use the aiws-cowork-http-mcp-smoke-claude-shape smoke-check skill.", experiment_readme)
         self.assertIn("Use the aiws-cowork-http-mcp-smoke-cowork-array smoke-check skill.", experiment_readme)
-        self.assertIn("remote HTTP MCP registration through uploaded plugins", phase_plan)
-        self.assertIn("executable packaging is no longer the primary next slice", phase_plan)
-        self.assertIn("Claude docs MCP search/read tools", phase_plan)
+        self.assertIn("Cowork's supported managed/custom connector path", phase_plan)
+        self.assertIn("Uploaded-plugin `.mcp.json` stdio/HTTP experiments are closed evidence", phase_plan)
+        self.assertIn("Executable packaging and uploaded-plugin runtime experiments are paused", phase_plan)
+        self.assertIn("aiws.health.ping", phase_plan)
+        self.assertIn("aiws.runtime.info", phase_plan)
 
 
 def _server_names(value: Any) -> set[str]:

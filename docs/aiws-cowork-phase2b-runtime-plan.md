@@ -73,6 +73,22 @@ GitHub submission should move separately from host `gh` toward a GitHub App, bot
 
 Build the smallest hosted AIWS control-plane proof with FastMCP or the official MCP Python SDK, then register it through Cowork's supported managed/custom connector path.
 
+Local proof artifact:
+
+- Module: `aiws-mcp/aiws_mcp/phase2b_proof.py`
+- Local run command, after installing the package dependencies in the active environment: `python -m aiws_mcp.phase2b_proof --transport streamable-http`
+- Expected local MCP endpoint for the SDK default streamable HTTP server: `http://localhost:8000/mcp`
+- The module intentionally exposes only `aiws.health.ping` and `aiws.runtime.info`.
+- The pure payload functions can be tested without a live MCP client or installed MCP SDK.
+
+Cowork connector test:
+
+1. Deploy or run the proof server through a hosted/remote HTTP path that Cowork can register.
+2. Register that URL through Cowork's supported managed/custom MCP connector path.
+3. Confirm Cowork exposes exactly `aiws.health.ping` and `aiws.runtime.info`.
+4. Call both tools and verify their payloads report `memory_tools_exposed: false` and `managed_plugin_mutation: false`.
+5. Confirm no `aiws.skills.*`, memory, lifecycle, draft, proposal, submit, GitHub, or host-local mutation tools appear.
+
 Acceptance:
 
 - Cowork registers the hosted AIWS proof through a supported managed/custom connector path.
