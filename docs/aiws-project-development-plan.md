@@ -8,7 +8,7 @@ AI Workspace is a local-first system for managing reusable AI skills across host
 
 The primary host goal is Cowork. Claude Code may be used as an intermediate implementation target when it reduces delivery risk for Cowork, especially where Claude Code already provides working plugin, memory, or marketplace behavior that can be adapted. Codex remains an important development and validation host, but it is not the primary product target for the next cycle.
 
-The first user journey to optimize is a clean Cowork-supported marketplace install of AIWS skills. The Personal marketplace path is now the primary product path: the user reported that Cowork can add the marketplace, install the plugins, and generate `meeting-followup` nodes correctly. Manual Cowork ZIP import remains a validated fallback path for Team accounts and recovery testing, but it is no longer the primary user journey.
+The first user journey to optimize is a clean Cowork-supported marketplace install of AIWS skills. The Personal marketplace path is now the primary product path: the 2026-05-14 canonical Cowork user test passed with marketplace `sashakang/ai-workspace`, installed plugin IDs `core-aiws@ai-workspace` and `aiws-productivity@ai-workspace`, visible skill `aiws-productivity:meeting-followup`, successful skill invocation, and user-driven Cowork UI updates that kept `meeting-followup` visible. See [Cowork Canonical User Test Report](./cowork-canonical-user-test-report-2026-05-14.md). Manual Cowork ZIP import remains a validated fallback path for Team accounts and recovery testing, but it is no longer the primary user journey.
 
 Customer constraints have loosened around GitHub use, but the user experience should still stay Cowork-first. Normal users should stage and submit skill improvements through friendly Cowork UI actions. GitHub is the backend review and source-control system: repo maintainers and skill maintainers review, comment on, and merge pull requests in GitHub. Branches, commits, remotes, and tokens should remain backend details unless the user explicitly asks for them.
 
@@ -31,6 +31,8 @@ AIWS owns:
 - shared memory contracts and host-to-host memory sync rules
 - reusable process capabilities such as SOP and `aiws-improve`
 - project documentation, acceptance criteria, and release readiness
+
+Cowork owns normal-user plugin install, update, and activation for Cowork. AIWS may validate source, stage changes, prepare proposal records, materialize to AIWS-owned cache or adapter roots, and build package artifacts, but it must not directly mutate Cowork installed plugin folders or RPM/runtime state. The canonical Cowork user path must not require repo cloning, terminal commands, manual runtime edits, direct writes under `~/.cowork/plugins`, or `~/.claude` edits.
 
 AIWS does not own the Discord MCP implementation. Discord MCP is global infrastructure and should live outside this repository. This project may use Discord as the team communication medium, but the product should treat it as an external communication surface, similar to GitHub, Slack, or another host-provided connector.
 
@@ -90,7 +92,7 @@ plugins/
 
 `marketplace.json` must include `name`, `owner`, and `plugins`; each plugin entry must include `name`, `source`, `version`, and `description`; and each plugin must have a matching `.claude-plugin/plugin.json`. The Phase 1 validation gates are marketplace and plugin manifests, plugin contracts, skill folders using Codex `skill-creator` compatibility rules, and version alignment across marketplace entries, plugin manifests, and contracts. Skill folders must include `SKILL.md` with only `name` and `description` frontmatter, and the skill folder name must match the frontmatter `name`. MCP config validation is part of the later control-plane and release-readiness work, not the Cowork install gate.
 
-Current status: the Personal marketplace path has user-reported runtime proof: Cowork installed the AIWS plugins from the marketplace and generated `meeting-followup` nodes correctly. A Cowork-supported Team import fallback also has runtime proof: `Organization settings -> Plugins -> Add plugin -> Upload a file` accepted individual ZIPs for `core-aiws` and `aiws-productivity`, and `meeting-followup` was visible and invocable. See `docs/aiws-cowork-fresh-marketplace-install.md`, `docs/aiws-cowork-runtime-validation-checklist.md`, and `docs/aiws-cowork-plugin-import-validation-pass.md`.
+Current status: the Personal marketplace path has canonical user-test runtime proof: Cowork installed the AIWS marketplace `sashakang/ai-workspace`, installed `core-aiws@ai-workspace` and `aiws-productivity@ai-workspace`, exposed `aiws-productivity:meeting-followup`, invoked it successfully, and kept it visible after user-driven Cowork UI updates. Cowork did not expose plugin-level versions through `list_plugins`; one skill-level signal showed `aiws-improve` as `v1.0.0`. The invocation found a non-blocking `meeting-followup` date normalization issue: on Thursday, May 14, 2026, "Friday" should have resolved to May 15, 2026, but the output used 2026-05-16. Track that as a skill/model output finding, not an install blocker. A Cowork-supported Team import fallback also has runtime proof: `Organization settings -> Plugins -> Add plugin -> Upload a file` accepted individual ZIPs for `core-aiws` and `aiws-productivity`, and `meeting-followup` was visible and invocable. See [Cowork Canonical User Test Report](./cowork-canonical-user-test-report-2026-05-14.md), [AIWS Cowork GitHub Marketplace Install](./aiws-cowork-fresh-marketplace-install.md), [AIWS Cowork GitHub Marketplace Runtime Validation Checklist](./aiws-cowork-runtime-validation-checklist.md), and [AIWS Cowork Plugin Import Validation PASS](./aiws-cowork-plugin-import-validation-pass.md).
 
 Expected developer evidence for the primary marketplace path:
 
@@ -112,7 +114,7 @@ Acceptance criteria:
 - From a clean Cowork setup, a user can add the AIWS marketplace and install AIWS without manual runtime edits.
 - A user can install `core-aiws` plus one domain plugin from that marketplace path.
 - A starter skill, starting with `meeting-followup`, is visible and usable in Cowork after the install.
-- The install path does not require manual file copying, symlinks, or repo cloning by a normal user.
+- The install and update path does not require manual file copying, symlinks, repo cloning, terminal commands, manual RPM/runtime edits, direct `~/.cowork/plugins` writes, or `~/.claude` edits by a normal user.
 - Duplicate skill identity behavior is clear and fails closed when scope is ambiguous.
 - The flow is documented for a non-dev user.
 
@@ -236,6 +238,8 @@ aiws.runtime.info
 It must not expose memory tools, private skills, drafts, proposal records, source content, mutate managed Cowork plugin files, or write into marketplace or organization plugin packages.
 
 Host identity is the boundary between the shared AIWS runtime and each host. Each host persists `~/.aiws/hosts/<host-id>/host.json`; `host-kind` is `claude-code`, `cowork`, or `codex`; and if `--host-id` is omitted, the default identity is derived from `host-kind` plus the hash of the canonical resolved host config root. Later commands may use `--host-id` alone. Missing host registration, conflicting CLI values, or duplicate shared skill IDs without pinned scope/version must fail closed.
+
+The 2026-05-14 Cowork host-surface check passed only after `host_kind: cowork` was supplied. It returned `host_id: cowork-db8a0e250a1c`, `capability_exposure: plugin-package`, and `direct_host_install_supported: false`. Writable AIWS-owned surfaces were host identity, staged skill changes, materialized skill cache, adapter output, and package uploads. The installed Cowork plugin directory `~/.cowork/plugins` was read-only. This confirms the package boundary: AIWS can prepare package/upload artifacts and adapter output, while Cowork owns installation and update.
 
 Materialization may write only under:
 

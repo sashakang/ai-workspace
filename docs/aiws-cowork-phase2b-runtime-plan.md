@@ -6,6 +6,8 @@ Updated: 2026-05-14
 
 Phase 2A is validated as a technical pilot. Cowork can install the AIWS marketplace plugins, expose the AIWS draft-management tools from `core-aiws`, create and edit a draft, validate it, stage a proposal, submit it for review with authenticated host `gh`, create a GitHub PR, and complete maintainer review. That proves the lifecycle semantics.
 
+The 2026-05-14 canonical Cowork user test also passed for the normal install/use/update path. Cowork installed marketplace `sashakang/ai-workspace`, installed `core-aiws@ai-workspace` and `aiws-productivity@ai-workspace`, exposed `aiws-productivity:meeting-followup`, invoked the skill successfully, updated the marketplace/plugins through the Cowork UI, and kept `meeting-followup` visible after update. See [Cowork Canonical User Test Report](./cowork-canonical-user-test-report-2026-05-14.md).
+
 Phase 2B is the end-user runtime gap. The current `core-aiws` package still starts the AIWS MCP bridge through:
 
 ```text
@@ -40,6 +42,7 @@ External evidence:
 
 Closed Cowork runtime evidence:
 
+- The canonical Cowork user test returned `capability_exposure: plugin-package` and `direct_host_install_supported: false` from `aiws.host.surfaces` when called with `host_kind: cowork`. Cowork installed plugin folders were read-only; package upload and AIWS adapter/cache roots were writable.
 - Uploaded-plugin `.mcp.json` stdio experiments loaded the visible smoke skill, but Cowork did not expose the bundled `aiws.smoke.ping` MCP tool.
 - Uploaded-plugin HTTP MCP experiments are treated as evidence about uploaded-plugin runtime registration, not the forward path for AIWS Phase 2B.
 - Executable packaging and uploaded-plugin runtime experiments are paused unless Cowork documents or proves a supported local runtime path.
@@ -48,7 +51,7 @@ Closed Cowork runtime evidence:
 
 Install through Cowork, operate through Cowork.
 
-The user should install `core-aiws` and a skill plugin from the Cowork marketplace, then use draft/edit/validate/stage/submit behavior without knowing that an AIWS control-plane runtime exists. If something cannot be completed from Cowork yet, the product must return a clear non-terminal status, not ask the user to install developer tooling.
+The user should install `core-aiws` and a skill plugin from the Cowork marketplace, then use draft/edit/validate/stage/submit behavior without knowing that an AIWS control-plane runtime exists. Cowork owns install, update, and activation through marketplace or package upload. AIWS owns validation, staging, proposal records, adapter/cache materialization, and package preparation. If something cannot be completed from Cowork yet, the product must return a clear non-terminal status, not ask the user to install developer tooling.
 
 ## Recommended Architecture
 
@@ -77,6 +80,8 @@ The proof must not expose memory tools, private skills, drafts, proposal records
 The draft-management workflow still depends on local state: editable drafts under `~/.aiws/plugins/`, proposal state under `~/.aiws/state/skill-proposals/`, validation of local files, and later package/artifact generation. The hosted proof therefore cannot be the private-skills path until there is a clear auth, permissions, tenancy, and local-state design. For now, the Claude Code workshop owns maintainer/private skill maintenance.
 
 Cowork marketplace/upload plugins remain the skills and user-facing UX surface. They should carry skills, prompts, and Cowork-facing guidance. The AIWS MCP/control-plane runtime is a separate deployable surface registered through the supported connector path.
+
+The current package boundary is explicit: AIWS must not directly mutate `~/.cowork/plugins` or Cowork RPM/runtime state. When AIWS prepares an updated skill or adapter output, the Cowork-facing action is package upload, marketplace update, or another Cowork-supported install/update surface. The normal user path must not require repo cloning, terminal commands, manual runtime edits, direct installed-plugin edits, or `~/.claude` edits.
 
 GitHub submission should move separately from host `gh` toward a GitHub App, bot, API, or Cowork-compatible adapter path. Local `gh` is acceptable for Phase 2A and maintainer testing, but it must not be a normal-user dependency.
 
@@ -234,6 +239,8 @@ Acceptance:
 - The AIWS control-plane tools appear through the supported Cowork connector path.
 - Draft create/open, edit, validate, stage proposal, and submit or handoff all work through Cowork.
 - Submit with no `gh` returns a truthful non-terminal handoff or uses the new non-CLI adapter if available.
+- Managed plugin files and Cowork installed plugin folders remain read-only to AIWS.
+- Skill updates prepared by AIWS flow through Cowork-owned marketplace/package upload or another supported Cowork install/update surface.
 - The report explicitly records that Python, `uv`, `uvx`, and `gh` were not used by AIWS.
 
 ### Slice 2B.9: Non-CLI GitHub Submitter
@@ -255,6 +262,8 @@ Keep this separate from the FastMCP proof. Local `gh` remains Phase 2A technical
 Reviewers should approve this plan only if these statements are true:
 
 - The plan does not pretend Phase 2A is end-user ready.
+- The canonical Cowork user path does not require repo clone, terminal use, manual RPM/runtime edits, direct installed-plugin edits, or `~/.claude` edits.
+- Cowork owns install/update; AIWS prepares, stages, validates, materializes to AIWS-owned roots, and packages.
 - The near-term private/non-public skills path is the Claude Code skill workshop, not MCP running inside Claude Code and not hosted remote MCP.
 - The hosted FastMCP or official MCP Python SDK AIWS control-plane server through Cowork's supported managed/custom connector path is parked as secondary/future proof work.
 - Cowork marketplace/upload plugins remain the skills and user-facing UX surface.

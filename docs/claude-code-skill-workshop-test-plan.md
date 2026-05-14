@@ -5,6 +5,8 @@
 
 This is not a normal Cowork user flow. Cowork remains the user-facing place to install and use packaged skills. Cowork edit UX is still a target, but it is deferred. This plan tests the maintainer/operator path where Claude Code works directly with local source, validation commands, package builds, and handoff artifacts.
 
+The normal Cowork path is covered by [Cowork Canonical User Test Report](./cowork-canonical-user-test-report-2026-05-14.md). That test passed for marketplace install, `meeting-followup` use, and Cowork UI package updates. This workshop must not turn repo clone, terminal use, package build commands, manual runtime edits, direct installed-plugin edits, or `~/.claude` edits into normal-user requirements.
+
 No hosted remote MCP must expose private skills, private memory, drafts, proposal records, source content, or package internals. Private source work must stay local unless the maintainer explicitly asks for a push, release, upload, or publication step.
 
 ## What You Are Testing
@@ -100,6 +102,7 @@ dist/cowork-import/
 - Do not edit Cowork RPM files or manifests by hand.
 - Do not copy plugin folders directly into Cowork runtime directories.
 - Do not edit installed Cowork marketplace plugin files in place.
+- Do not treat `~/.cowork/plugins` as an AIWS write target. Cowork owns install and update through marketplace/package upload.
 - Do not push, create a branch, create a tag, create a release, open a pull request, or publish a package unless the user explicitly asks.
 - Keep source edits for this plan inside `aiws-productivity/skills/meeting-followup/`.
 - Package inspection may read ZIP member names and selected public plugin files, but it must not upload ZIP contents to a hosted service.
