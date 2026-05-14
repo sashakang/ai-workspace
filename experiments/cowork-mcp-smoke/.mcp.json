@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "aiws-cowork-mcp-smoke": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-smoke",
+      "args": []
+    }
+  }
+}

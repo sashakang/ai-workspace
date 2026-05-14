@@ -1,0 +1,7 @@
+{
+  "name": "aiws-cowork-mcp-smoke",
+  "version": "0.1.0",
+  "description": "Test-only plugin for validating Cowork launches a bundled executable MCP server.",
+  "author": "AIWS",
+  "license": "UNLICENSED"
+}

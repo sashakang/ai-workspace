@@ -71,6 +71,16 @@ Acceptance:
 
 This slice is a proof step. It should not touch the production skill manager until Cowork proves it can run a bundled executable.
 
+Local smoke package added for this slice:
+
+- Source: `experiments/cowork-mcp-smoke/`
+- Builder: `python -m scripts.build_cowork_mcp_smoke`
+- Output: `dist/cowork-smoke/aiws-cowork-mcp-smoke-<version>-<platform>-<arch>.zip`
+- Runtime command in `.mcp.json`: `${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-smoke`
+- Smoke tool: `aiws.smoke.ping`
+
+Maintainers compile the tiny executable into the ZIP. The Cowork user installs the ZIP only; they should not compile anything or provide Python, `uv`, `uvx`, `gh`, Git, or shell access for the smoke runtime. Report whether Cowork preserves executable permissions and exposes/calls `aiws.smoke.ping`.
+
 ### Slice 2B.2: Package `aiws-mcp` As A Self-Contained Runtime
 
 Package the existing `aiws-mcp serve` bridge into a platform-specific executable, starting with macOS because the current testing path is on macOS.
