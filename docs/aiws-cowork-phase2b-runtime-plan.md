@@ -6,6 +6,8 @@ Updated: 2026-05-14
 
 Phase 2A is validated as a technical pilot. Cowork can install the AIWS marketplace plugins, expose the AIWS draft-management tools from `core-aiws`, create and edit a draft, validate it, stage a proposal, submit it for review with authenticated host `gh`, create a GitHub PR, and complete maintainer review. That proves the lifecycle semantics.
 
+The regular Cowork user draft/edit/validate/stage/submit path is also proven end to end for `aiws-productivity:meeting-followup`. The 2026-05-14 test opened draft `aiws-productivity--meeting-followup--de0e75a572` from installed plugin version `0.2.1`, edited only the draft copy under `~/.aiws/plugins/...`, staged proposal `skillprop_ed458362021141179dbdb85a9df73794`, and submitted PR #2 to `sashakang/aiws-skill-tests`. The PR is open and non-draft. Installed plugin files, marketplace files, `~/.claude`, and Cowork runtime files were untouched. The caveat is reviewer routing: `Required review role: AI engineer` appeared in the PR body, but GitHub had no CODEOWNERS or reviewer policy to request or enforce that review.
+
 The 2026-05-14 canonical Cowork user test also passed for the normal install/use/update path. Cowork installed marketplace `sashakang/ai-workspace`, installed `core-aiws@ai-workspace` and `aiws-productivity@ai-workspace`, exposed `aiws-productivity:meeting-followup`, invoked the skill successfully, updated the marketplace/plugins through the Cowork UI, and kept `meeting-followup` visible after update. See [Cowork Canonical User Test Report](./cowork-canonical-user-test-report-2026-05-14.md).
 
 Phase 2B is the end-user runtime gap. The current `core-aiws` package still starts the AIWS MCP bridge through:
@@ -84,6 +86,8 @@ Cowork marketplace/upload plugins remain the skills and user-facing UX surface. 
 The current package boundary is explicit: AIWS must not directly mutate `~/.cowork/plugins` or Cowork RPM/runtime state. When AIWS prepares an updated skill or adapter output, the Cowork-facing action is package upload, marketplace update, or another Cowork-supported install/update surface. The normal user path must not require repo cloning, terminal commands, manual runtime edits, direct installed-plugin edits, or `~/.claude` edits.
 
 GitHub submission should move separately from host `gh` toward a GitHub App, bot, API, or Cowork-compatible adapter path. Local `gh` is acceptable for Phase 2A and maintainer testing, but it must not be a normal-user dependency.
+
+Reviewer routing should stay hybrid. AIWS owns required-role metadata in proposal records and PR bodies, deterministic branch/PR identity, and clear reporting when enforcement is missing. GitHub owns reviewer assignment and approval enforcement through repo policy such as CODEOWNERS, branch protection, repository rules, or a reviewer automation that maintainers control. AIWS should detect and report `CODEOWNERS: not_detected` or equivalent missing enforcement as a caveat, not ask normal Cowork users to choose GitHub reviewers.
 
 ## Implementation Slices
 
@@ -257,6 +261,26 @@ Acceptance:
 
 Keep this separate from the FastMCP proof. Local `gh` remains Phase 2A technical-pilot evidence only and is not a normal-user submission path.
 
+### Slice 2B.10: Enforceable Reviewer Routing
+
+Make reviewer routing enforceable without asking normal Cowork users to map GitHub reviewers or teams.
+
+Recommended Gate 1 candidate plan:
+
+- AIWS keeps required reviewer role metadata, including `AI engineer`, in proposal records and PR bodies.
+- AIWS keeps deterministic branch and PR behavior with `aiws/skill-proposals/<proposal_id>`.
+- GitHub repository policy enforces assignment and approval through CODEOWNERS, branch protection, repository rules, or maintainer-owned reviewer automation.
+- AIWS detects and reports missing enforcement signals such as `CODEOWNERS: not_detected` and empty review requests.
+- Missing enforcement remains a caveat until the target repository has policy in place.
+
+Acceptance:
+
+- A submitted proposal reports whether reviewer enforcement is present, absent, or unknown.
+- Missing CODEOWNERS or reviewer policy does not block proposal creation, but it is visible in the Cowork-facing result and proposal state.
+- The PR body still includes `Required review role: AI engineer`.
+- Normal Cowork users do not select GitHub users or teams.
+- The docs and UI do not claim reviewer routing is enforced unless GitHub policy actually enforces it.
+
 ## Gate 1 Questions
 
 Reviewers should approve this plan only if these statements are true:
@@ -274,6 +298,8 @@ Reviewers should approve this plan only if these statements are true:
 - The plan preserves local draft and proposal state under `~/.aiws/`.
 - The plan keeps managed marketplace and organization plugin files read-only.
 - The plan includes AI engineer reviewer routing for submit-for-review.
+- The plan treats reviewer routing as enforceable only when GitHub repository policy or maintainer-owned automation exists.
+- The plan reports missing CODEOWNERS/reviewer enforcement as a caveat instead of asking normal Cowork users to map reviewers.
 - The plan keeps `uvx` and `gh` as technical-pilot paths until replaced, not as normal-user requirements.
 
 ## Phase 2B Exit Criteria

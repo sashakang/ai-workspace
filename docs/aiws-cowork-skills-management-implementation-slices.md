@@ -14,7 +14,7 @@ The implementation must stay aligned with `core-aiws/contracts/skill-management.
 
 The current tester-facing Phase 2A scenario is tracked in `docs/cowork-skills-management-phase2-test-plan.md`.
 
-Previous Cowork runtime blocker: the user reported that the Cowork session did not expose `aiws.skills.create_or_open_draft` or `aiws.skills.validate_draft` as callable tools. ToolSearch returned no AIWS draft-management schemas. `core-aiws` version `0.3.7` now bundles the AIWS MCP bridge source, includes the Scenario D draft-record safety fix, and returns a safe submit-for-review handoff when `gh` is unavailable. Cowork runtime testing on 2026-05-14 validated the full Phase 2A A-H lifecycle with host `gh` present, including PR creation and maintainer merge in the private test repo. Do not count manual `/tmp` copies, schema-only validation, CLI-only execution, or direct filesystem reconstruction as Cowork runtime validation.
+Previous Cowork runtime blocker: the user reported that the Cowork session did not expose `aiws.skills.create_or_open_draft` or `aiws.skills.validate_draft` as callable tools. ToolSearch returned no AIWS draft-management schemas. `core-aiws` version `0.3.7` now bundles the AIWS MCP bridge source, includes the Scenario D draft-record safety fix, and returns a safe submit-for-review handoff when `gh` is unavailable. Cowork runtime testing on 2026-05-14 validated the full Phase 2A A-H lifecycle with host `gh` present, including PR creation and maintainer merge in the private test repo. A later regular Cowork user test proved the draft/edit/validate/stage/submit path end to end for `aiws-productivity:meeting-followup`, including draft `aiws-productivity--meeting-followup--de0e75a572`, proposal `skillprop_ed458362021141179dbdb85a9df73794`, and PR #2 in `sashakang/aiws-skill-tests`. Reviewer routing remains a caveat because the PR body carried `Required review role: AI engineer`, but the repository had no CODEOWNERS or reviewer policy, so GitHub requested no reviewer or team. Do not count manual `/tmp` copies, schema-only validation, CLI-only execution, or direct filesystem reconstruction as Cowork runtime validation.
 
 ## Session Rules
 
@@ -102,7 +102,7 @@ Expected output: A staged proposal can be submitted from Cowork through a user-f
 
 Acceptance: Submission requires an existing staged proposal, a still-valid draft, the proposal's stored target repository, and an explicit user action. It creates or updates a reviewable GitHub pull request or equivalent review item when an adapter is available, records the branch name and PR URL in the proposal state only after a real review item exists, and returns a Cowork-facing status such as `Submitted for review`. If only the no-`gh` handoff is available, it returns `submit_handoff_required`, includes required reviewer roles including `AI engineer`, and does not mark the proposal submitted or write branch/PR metadata. Review metadata must not be written to the draft record because one draft can have multiple proposals to different target repos. Submission must use deterministic branch identity `aiws/skill-proposals/<proposal_id>` for retry safety and refuse drafts whose current tree no longer matches the staged validation digest. It must not direct-push to protected branches, mutate managed plugin files in place, or submit a draft whose validation has failed. Repo and skill maintainers review, comment on, request changes, and merge in GitHub.
 
-Evidence: Tests should prove submission reads an existing staged proposal, refuses missing or failed-validation proposals, rejects post-stage draft edits, records PR metadata only on the proposal, includes `AI engineer` reviewer routing, returns already-submitted metadata without duplicate submitter calls, keeps git mechanics out of the normal user response, and does not run during staging. GitHub integration can be mocked or adapter-owned; do not require live GitHub for unit tests.
+Evidence: Tests should prove submission reads an existing staged proposal, refuses missing or failed-validation proposals, rejects post-stage draft edits, records PR metadata only on the proposal, includes `AI engineer` reviewer-role metadata, returns already-submitted metadata without duplicate submitter calls, keeps git mechanics out of the normal user response, and does not run during staging. GitHub integration can be mocked or adapter-owned; do not require live GitHub for unit tests. Live runtime evidence should separately report whether GitHub reviewer enforcement is present, missing, or unknown.
 
 Likely files, modules, and contracts to inspect: `core-aiws/contracts/skill-management.md`, `docs/aiws-cowork-skills-management-mvp.md`, `aiws-mcp/aiws_mcp/skill_manager.py`, `aiws-mcp/aiws_mcp/runtime.py`, `tests/test_aiws_skill_manager.py`, and any future GitHub adapter surface.
 
@@ -172,6 +172,18 @@ Acceptance: The lifecycle works through Cowork and the supported control-plane p
 
 Evidence: Manual Cowork validation report, connector/runtime logs, proposal state records, and mocked or adapter-owned GitHub submission tests. Do not count Phase 2A `uvx` bridge runs, uploaded-plugin runtime smoke tests, CLI-only execution, or host `gh` as Phase 2B evidence.
 
+## Slice 13: Enforceable Reviewer Routing
+
+Owner: developer session.
+
+Expected output: AIWS keeps required reviewer role metadata for proposals and PRs while GitHub repository policy enforces assignment and approval. Normal Cowork users do not map GitHub reviewers or teams.
+
+Recommended Gate 1 candidate plan: use a hybrid model. AIWS writes required roles such as `AI engineer` into proposal state and PR body, keeps deterministic branch/PR behavior, and detects whether enforcement exists. GitHub enforces reviewer assignment and approval through CODEOWNERS, branch protection, repository rules, or maintainer-owned automation. If CODEOWNERS or reviewer policy is absent, AIWS reports the missing enforcement as a caveat and does not claim routing is enforced.
+
+Acceptance: Submission reports reviewer enforcement as present, absent, or unknown. Missing CODEOWNERS or empty review requests are visible in Cowork-facing status and proposal state. The PR body still includes `Required review role: AI engineer`. The implementation does not require normal users to choose GitHub accounts, teams, or repository policy details.
+
+Evidence: Unit tests for reviewer-enforcement status parsing and proposal-state reporting, plus one live GitHub validation against a repo with no policy and one against a repo with enforced policy when that repo is available.
+
 ## Suggested Developer Session Order
 
 1. Implement Slice 4, modified-state tracking, first. The registry already has `modified` and `last_validation_status`, and draft create/open plus write-root safety are already partially covered. Computing and persisting modified state unlocks activation status, proposal metadata, and conflict handling.
@@ -183,5 +195,6 @@ Evidence: Manual Cowork validation report, connector/runtime logs, proposal stat
 7. Design any connector-backed draft lifecycle only after the security model is clear enough to protect private skills, memory, drafts, proposal records, and source content.
 8. Implement or resume lifecycle work through the clean Cowork path as appropriate, including local proposal-record staging as distinct from submit/upload and update conflict choice handling.
 9. Add GitHub App, bot, API, or Cowork-compatible submit-for-review behavior later than the workshop and runtime/security design; normal-user GitHub CLI submission must be replaced.
+10. Add enforceable reviewer-routing detection and reporting after the submit adapter path is clear. Keep the hybrid boundary: AIWS carries required-role metadata, while GitHub repository policy enforces reviewer assignment and approval.
 
 The final implementation review should check the AI-engineering reviewer rule for every slice: the behavior must be understandable to an AI agent operating through the skill-management surface, state transitions must be explicit, and no flow may quietly overwrite local work or expose two visible copies of the same logical skill.
