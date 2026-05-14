@@ -40,11 +40,15 @@ The user should install `core-aiws` and a skill plugin from the Cowork marketpla
 
 ## Recommended Architecture
 
-Use a bundled local runtime bridge for Phase 2B.
+Resolve the Cowork runtime registration path before investing further in the bundled local runtime bridge.
 
 The draft-management workflow is local by design: it reads installed plugin packages, writes editable drafts under `~/.aiws/plugins/`, writes proposal state under `~/.aiws/state/skill-proposals/`, validates local files, and builds local Cowork package artifacts. A remote connector alone cannot replace that without changing the trust and storage model of the product.
 
-The target package should include a self-contained `aiws-mcp` executable built from the existing Python bridge. The launcher should prefer that bundled executable and keep the `uvx` path only as an explicit technical-pilot fallback.
+However, the Cowork uploaded-plugin path has now blocked the bundled stdio executable smoke proof. That makes remote HTTP MCP registration through uploaded plugins the next proof; executable packaging is no longer the primary next slice until HTTP MCP registration or a host/connector-owned runtime is resolved.
+
+If Cowork proves that uploaded plugins can register remote HTTP MCP connectors, AIWS can use that result to decide whether a remote or host-owned bridge is viable for end users. If Cowork cannot register remote HTTP MCP connectors from uploaded plugins either, the next viable direction is a Cowork-supported host/connector runtime rather than more executable packaging work.
+
+If a host-supported local executable path later becomes available, the target package should include a self-contained `aiws-mcp` executable built from the existing Python bridge. The launcher should prefer that bundled executable and keep the `uvx` path only as an explicit technical-pilot fallback.
 
 Recommended launcher order:
 
@@ -97,9 +101,55 @@ This removes the earlier `MCP-only/no skills` variable: adding a visible skill m
 
 Keep `experiments/cowork-mcp-smoke/` as a reusable diagnostic artifact. The next research direction is Cowork-supported MCP transport shape before packaging the real `aiws-mcp`, likely an HTTP MCP server with `type: "http"` or a host/connector-owned runtime rather than an uploaded plugin attempting to register a bundled stdio command.
 
-### Slice 2B.2: Package `aiws-mcp` As A Self-Contained Runtime
+### Slice 2B.2: Remote HTTP MCP Uploaded-Plugin Smoke Test
+
+Build two static upload-only plugins that point to the official public Claude docs HTTP MCP endpoint and prove whether Cowork registers remote HTTP MCP servers declared by uploaded plugins.
+
+Endpoint:
+
+```text
+https://code.claude.com/docs/mcp
+```
+
+Acceptance:
+
+- Both packages upload through Cowork without bundled executables, stdio commands, Python, `uv`, `uvx`, `gh`, Git, shell runtime dependencies, secrets, auth headers, or source server code.
+- Each package has a visible `skills/smoke-check/SKILL.md` skill.
+- Variant A uses the Claude documented `.mcp.json` top-level `mcpServers` object shape with `type: "http"` and `url: "https://code.claude.com/docs/mcp"`.
+- Variant B uses the Cowork top-level server-object array shape with `name`, `url`, and `transport: "http"`, matching the Cowork 3P docs statement that plugin `.mcp.json` uses the same object format as `managedMcpServers`.
+- Cowork exposes Claude docs MCP search/read tools from the uploaded plugin's declared server.
+- A harmless Claude docs MCP search/read call succeeds from Cowork.
+- No `aiws.smoke.ping` result is expected; that was the old bundled stdio executable proof.
+
+Local smoke packages added for this slice:
+
+- Source: `experiments/cowork-http-mcp-smoke/`
+- Builder: `python -m scripts.build_cowork_http_mcp_smoke`
+- Output: `dist/cowork-http-smoke/`
+- Variant A package: `aiws-cowork-http-mcp-smoke-claude-shape-0.1.0.zip`
+- Variant A MCP server: `aiws-cowork-http-smoke-claude-docs`
+- Variant B package: `aiws-cowork-http-mcp-smoke-cowork-array-0.1.0.zip`
+- Variant B MCP server: `aiws-cowork-http-smoke-cowork-array-docs`
+
+Cowork prompt for Variant A:
+
+```text
+Use the aiws-cowork-http-mcp-smoke-claude-shape smoke-check skill. Check whether Cowork registered the remote Claude docs HTTP MCP server named aiws-cowork-http-smoke-claude-docs from this uploaded plugin. Look for Claude docs MCP tools, especially docs search/read tools. Do not look for aiws.smoke.ping. Report which Claude docs tools are visible and call one harmless docs search/read tool if available.
+```
+
+Cowork prompt for Variant B:
+
+```text
+Use the aiws-cowork-http-mcp-smoke-cowork-array smoke-check skill. Check whether Cowork registered the remote Claude docs HTTP MCP server named aiws-cowork-http-smoke-cowork-array-docs from this uploaded plugin. This plugin uses the Cowork top-level array HTTP MCP shape. Look for Claude docs MCP tools, especially docs search/read tools. Do not look for aiws.smoke.ping. Report which Claude docs tools are visible and call one harmless docs search/read tool if available.
+```
+
+This slice decides whether uploaded plugins can register remote HTTP MCP connectors at all. It does not claim AIWS production runtime readiness.
+
+### Slice 2B.3: Package `aiws-mcp` As A Self-Contained Runtime
 
 Package the existing `aiws-mcp serve` bridge into a platform-specific executable, starting with macOS because the current testing path is on macOS.
+
+This is no longer the primary next slice. Resume it only if Cowork documents or demonstrates an uploaded-plugin or host-owned runtime path that can actually register the packaged server.
 
 Acceptance:
 
@@ -109,7 +159,7 @@ Acceptance:
 - The build output records platform, architecture, build command, binary size, and cold-start result.
 - The existing source-bundled `servers/aiws-mcp` path remains available for maintainers until the binary path is proven stable.
 
-### Slice 2B.3: Update Launcher And Packaging Tests
+### Slice 2B.4: Update Launcher And Packaging Tests
 
 Update the launcher, import builder, and tests so dependency-free runtime is the default expectation.
 
@@ -129,7 +179,7 @@ Likely files:
 - `tests/test_cowork_packaging.py`
 - `docs/cowork-skills-management-phase2-test-plan.md`
 
-### Slice 2B.4: Cowork Runtime Validation On A Clean User Machine
+### Slice 2B.5: Cowork Runtime Validation On A Clean User Machine
 
 Run the A-H lifecycle again on a machine where AIWS does not rely on user-installed Python, `uv`, `uvx`, or `gh`.
 
@@ -141,7 +191,7 @@ Acceptance:
 - Submit with no `gh` returns a truthful non-terminal handoff or uses the new non-CLI adapter if available.
 - The report explicitly records that Python, `uv`, `uvx`, and `gh` were not used by AIWS.
 
-### Slice 2B.5: Non-CLI GitHub Submitter
+### Slice 2B.6: Non-CLI GitHub Submitter
 
 Replace normal-user reliance on host `gh` with a GitHub App, bot, or Cowork-compatible GitHub connection.
 
@@ -160,7 +210,8 @@ This can follow the runtime package work. Local `gh` is acceptable until the dep
 Reviewers should approve this plan only if these statements are true:
 
 - The plan does not pretend Phase 2A is end-user ready.
-- The first proof is Cowork launching a bundled executable, not a speculative full packaging rewrite.
+- The first proof was Cowork launching a bundled executable, and that uploaded-plugin stdio shape is now blocked.
+- The next proof is remote HTTP MCP registration through uploaded plugins, not more executable packaging work before the Cowork runtime path is known.
 - The plan preserves local draft and proposal state under `~/.aiws/`.
 - The plan keeps managed marketplace and organization plugin files read-only.
 - The plan includes AI engineer reviewer routing for submit-for-review.

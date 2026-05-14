@@ -1,0 +1,7 @@
+{
+  "name": "aiws-cowork-http-mcp-smoke-cowork-array",
+  "version": "0.1.0",
+  "description": "Test-only plugin for validating Cowork remote HTTP MCP registration with a Cowork array-shape compatibility hypothesis.",
+  "author": "AIWS",
+  "license": "UNLICENSED"
+}

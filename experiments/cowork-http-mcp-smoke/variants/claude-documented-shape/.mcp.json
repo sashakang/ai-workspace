@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "aiws-cowork-http-smoke-claude-docs": {
+      "type": "http",
+      "url": "https://code.claude.com/docs/mcp"
+    }
+  }
+}

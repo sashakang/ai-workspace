@@ -1,0 +1,7 @@
+{
+  "name": "aiws-cowork-http-mcp-smoke-claude-shape",
+  "version": "0.1.0",
+  "description": "Test-only plugin for validating Cowork remote HTTP MCP registration with the Claude documented mcpServers shape.",
+  "author": "AIWS",
+  "license": "UNLICENSED"
+}
