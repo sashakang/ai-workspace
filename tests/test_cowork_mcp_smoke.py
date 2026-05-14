@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.build_cowork_mcp_smoke import (  # noqa: E402
     EXECUTABLE_RELATIVE,
     SMOKE_PLUGIN_RELATIVE,
+    STATIC_PACKAGE_DIRS,
     STATIC_PACKAGE_FILES,
     build_smoke_package,
     create_package_root,
@@ -48,8 +49,18 @@ class CoworkMcpSmokeTests(unittest.TestCase):
 
         manifest = json.loads((smoke_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["name"], "aiws-cowork-mcp-smoke")
-        self.assertEqual(manifest["version"], "0.1.0")
+        self.assertEqual(manifest["version"], "0.1.1")
         self.assertTrue((smoke_root / "src" / "aiws_mcp_smoke.c").is_file())
+
+        for relative_dir in STATIC_PACKAGE_DIRS:
+            self.assertTrue((smoke_root / relative_dir).is_dir(), str(relative_dir))
+
+        skill_path = smoke_root / "skills" / "smoke-check" / "SKILL.md"
+        skill_text = skill_path.read_text(encoding="utf-8")
+        self.assertTrue(skill_text.startswith("---\n"))
+        self.assertIn("name: smoke-check", skill_text)
+        self.assertIn("description: Test-only skill", skill_text)
+        self.assertIn("aiws.smoke.ping", skill_text)
 
     def test_package_root_and_zip_preserve_executable_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -72,10 +83,31 @@ class CoworkMcpSmokeTests(unittest.TestCase):
                 ".claude-plugin/plugin.json",
                 ".mcp.json",
                 "README.md",
+                "skills/smoke-check/SKILL.md",
                 str(EXECUTABLE_RELATIVE),
             },
         )
         self.assertEqual(mode, 0o755)
+
+    def test_package_excludes_source_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            fake_executable = temp_path / "fake-aiws-mcp-smoke"
+            fake_executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_executable.chmod(0o755)
+
+            package_root = create_package_root(REPO_ROOT, temp_path / "package", fake_executable)
+            package_path = temp_path / "smoke.zip"
+            write_zip(package_root, package_path)
+
+            with zipfile.ZipFile(package_path) as package:
+                names = set(package.namelist())
+                manifest = json.loads(package.read(".claude-plugin/plugin.json"))
+
+        self.assertEqual(manifest["version"], "0.1.1")
+        self.assertIn("skills/smoke-check/SKILL.md", names)
+        self.assertNotIn("src/aiws_mcp_smoke.c", names)
+        self.assertFalse(any(name.startswith("src/") for name in names))
 
     @unittest.skipIf(detect_c_compiler() is None, "No C compiler available for smoke binary build")
     def test_build_package_and_binary_self_test_when_compiler_exists(self) -> None:

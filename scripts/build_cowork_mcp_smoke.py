@@ -19,6 +19,7 @@ STATIC_PACKAGE_FILES = (
     Path(".mcp.json"),
     Path("README.md"),
 )
+STATIC_PACKAGE_DIRS = (Path("skills"),)
 EXECUTABLE_RELATIVE = Path("bin/aiws-mcp-smoke")
 
 
@@ -70,6 +71,11 @@ def create_package_root(repo_root: Path, package_root: Path, executable_path: Pa
         target = package_root / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(smoke_root / relative_path, target)
+
+    for relative_dir in STATIC_PACKAGE_DIRS:
+        source_dir = smoke_root / relative_dir
+        if source_dir.exists():
+            shutil.copytree(source_dir, package_root / relative_dir)
 
     executable_target = package_root / EXECUTABLE_RELATIVE
     executable_target.parent.mkdir(parents=True, exist_ok=True)

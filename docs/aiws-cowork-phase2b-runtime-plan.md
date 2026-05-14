@@ -77,9 +77,25 @@ Local smoke package added for this slice:
 - Builder: `python -m scripts.build_cowork_mcp_smoke`
 - Output: `dist/cowork-smoke/aiws-cowork-mcp-smoke-<version>-<platform>-<arch>.zip`
 - Runtime command in `.mcp.json`: `${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-smoke`
+- Version `0.1.1` includes the minimal visible skill `skills/smoke-check/SKILL.md` so Cowork can enable the plugin through a normal skill surface before the MCP transport is judged.
 - Smoke tool: `aiws.smoke.ping`
 
 Maintainers compile the tiny executable into the ZIP. The Cowork user installs the ZIP only; they should not compile anything or provide Python, `uv`, `uvx`, `gh`, Git, or shell access for the smoke runtime. Report whether Cowork preserves executable permissions and exposes/calls `aiws.smoke.ping`.
+
+Slice 2B.1 v0.1.1 runtime result: **BLOCKED** for bundled stdio executable MCP server registration in the Cowork uploaded-plugin path.
+
+Observed Cowork evidence:
+
+- The v0.1.1 plugin ZIP uploaded successfully.
+- The `aiws-cowork-mcp-smoke:smoke-check` skill is visible in Cowork.
+- Cowork can read `skills/smoke-check/SKILL.md` at the expected installed-plugin path.
+- ToolSearch for `aiws smoke ping` returns no matching tool.
+- No MCP server launch error surfaced to the user.
+- `aiws.smoke.ping` is absent.
+
+This removes the earlier `MCP-only/no skills` variable: adding a visible skill made the plugin load through Cowork's normal skill surface, but the bundled MCP tool still did not appear. The result should not be read as proof that every executable runtime approach is impossible. It only shows that this specific uploaded-plugin shape, where `.mcp.json` starts a bundled stdio executable command at `${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-smoke`, was not registered by the Cowork upload runtime.
+
+Keep `experiments/cowork-mcp-smoke/` as a reusable diagnostic artifact. The next research direction is Cowork-supported MCP transport shape before packaging the real `aiws-mcp`, likely an HTTP MCP server with `type: "http"` or a host/connector-owned runtime rather than an uploaded plugin attempting to register a bundled stdio command.
 
 ### Slice 2B.2: Package `aiws-mcp` As A Self-Contained Runtime
 
@@ -154,4 +170,4 @@ Reviewers should approve this plan only if these statements are true:
 
 Phase 2B is complete only when a normal Cowork user can install and use the skill-management workflow without Python, `uv`, `uvx`, GitHub CLI, terminal commands, manual plugin-file edits, or manual MCP setup.
 
-If Cowork cannot launch a bundled executable or provide a guaranteed runtime, Phase 2B is blocked. In that case, Phase 2A remains the honest technical-pilot path and the project should not call the Cowork skills-management workflow end-user ready.
+If Cowork cannot launch a bundled executable, support an HTTP MCP transport, or provide a guaranteed host/connector-owned runtime, Phase 2B is blocked. In that case, Phase 2A remains the honest technical-pilot path and the project should not call the Cowork skills-management workflow end-user ready.
