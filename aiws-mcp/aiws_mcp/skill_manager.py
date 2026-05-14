@@ -1430,11 +1430,8 @@ def proposal_branch_name(proposal_id: str) -> str:
 
 def normalize_review_roles(required_review_roles: list[str] | tuple[str, ...] | None) -> list[str]:
     if required_review_roles is None:
-        return ["AI engineer"]
-    roles = [require_non_blank_string(role, "required_review_roles") for role in required_review_roles]
-    if "AI engineer" not in roles:
-        roles.append("AI engineer")
-    return roles
+        return []
+    return [require_non_blank_string(role, "required_review_roles") for role in required_review_roles]
 
 
 def call_proposal_submitter(submitter: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1578,7 +1575,6 @@ def write_pr_body(path: Path, payload: dict[str, Any], *, codeowners_status: str
         f"Target repo: {payload['target_repo']}",
         f"Validation digest: {payload['validation_tree_digest']}",
         f"CODEOWNERS: {codeowners_status}",
-        "Required review role: AI engineer",
         "",
         "Summary:",
         str(payload.get("summary", "")).strip(),
@@ -1586,7 +1582,7 @@ def write_pr_body(path: Path, payload: dict[str, Any], *, codeowners_status: str
         "Rationale:",
         str(payload.get("rationale", "")).strip(),
         "",
-        "Reviewer assignment is managed by GitHub repository policy.",
+        "Review and merge are managed by the target repository's maintainers and policies.",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -1768,8 +1764,15 @@ class GithubHandoffProposalSubmitter:
         required_review_roles = normalize_review_roles(
             raw_review_roles if isinstance(raw_review_roles, (list, tuple)) else None
         )
-
-        return {
+        action = {
+            "type": "github_submit_handoff",
+            "label": "Submit through a Cowork-compatible GitHub adapter, bot, or maintainer handoff",
+            "reason_code": "github_cli_unavailable",
+            "target_repo": target_repo,
+            "branch_name": branch_name,
+            "terminal": False,
+        }
+        response = {
             "status": "submit_handoff_required",
             "status_label": "GitHub submit handoff required",
             "reason_code": "github_cli_unavailable",
@@ -1777,21 +1780,15 @@ class GithubHandoffProposalSubmitter:
             "draft_id": draft_id_value,
             "target_repo": target_repo,
             "branch_name": branch_name,
-            "required_review_roles": required_review_roles,
             "terminal": False,
             "no_pr_created": True,
-            "actions": [
-                {
-                    "type": "github_submit_handoff",
-                    "label": "Submit through a Cowork-compatible GitHub adapter, bot, or maintainer handoff",
-                    "reason_code": "github_cli_unavailable",
-                    "target_repo": target_repo,
-                    "branch_name": branch_name,
-                    "required_review_roles": required_review_roles,
-                    "terminal": False,
-                }
-            ],
+            "actions": [action],
         }
+        if required_review_roles:
+            response["required_review_roles"] = required_review_roles
+            action["required_review_roles"] = required_review_roles
+
+        return response
 
 
 def submit_pr(
@@ -1856,8 +1853,10 @@ def submit_pr(
         "target_repo": target_repo,
         "draft_path": record.draft_path,
         "validation_tree_digest": validation_tree_digest,
-        "required_review_roles": review_roles,
     }
+    submitter_payload.pop("required_review_roles", None)
+    if review_roles:
+        submitter_payload["required_review_roles"] = review_roles
     submitter_result = call_proposal_submitter(submitter, submitter_payload)
     if submitter_result.get("status") == "no_changes_to_submit":
         return {
@@ -1886,7 +1885,7 @@ def submit_pr(
             or handoff_draft_id != proposal["draft_id"]
         ):
             raise SkillManagerError("submitter returned invalid handoff metadata.")
-        return {
+        handoff_response = {
             **submitter_result,
             "status": "submit_handoff_required",
             "status_label": str(submitter_result.get("status_label") or "GitHub submit handoff required"),
@@ -1898,14 +1897,21 @@ def submit_pr(
             "target_scope": proposal["target_scope"],
             "target_repo": target_repo,
             "branch_name": branch_name,
-            "required_review_roles": normalize_review_roles(
-                submitter_result["required_review_roles"]
-                if isinstance(submitter_result.get("required_review_roles"), (list, tuple))
-                else review_roles
-            ),
             "terminal": False,
             "no_pr_created": True,
         }
+        returned_review_roles = []
+        if review_roles:
+            returned_review_roles = normalize_review_roles(
+                submitter_result["required_review_roles"]
+                if isinstance(submitter_result.get("required_review_roles"), (list, tuple))
+                else review_roles
+            )
+        if returned_review_roles:
+            handoff_response["required_review_roles"] = returned_review_roles
+        else:
+            handoff_response.pop("required_review_roles", None)
+        return handoff_response
     try:
         submitted_branch_name = require_non_blank_string(submitter_result.get("branch_name"), "branch_name")
         pr_url = require_non_blank_string(submitter_result.get("pr_url"), "pr_url")
@@ -1920,10 +1926,12 @@ def submit_pr(
         "status": "submitted_for_review",
         "branch_name": submitted_branch_name,
         "pr_url": pr_url,
-        "required_review_roles": review_roles,
         "submitted_at": submitted_at,
         "updated_at": submitted_at,
     }
+    updated_proposal.pop("required_review_roles", None)
+    if review_roles:
+        updated_proposal["required_review_roles"] = review_roles
     write_proposal_record(aiws_root, proposal_id, updated_proposal)
     return submitted_review_response(updated_proposal)
 

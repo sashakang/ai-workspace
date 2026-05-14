@@ -14,6 +14,8 @@ marketplace metadata: 0.3.8
 aiws-productivity: 0.2.1
 ```
 
+**Boundary update:** This handoff is historical. Later Gate 1 approval corrected the normal Cowork submit boundary: product-level `AI engineer` reviewer-role metadata is no longer hardcoded into normal proposal payloads, handoff results, proposal state, or PR bodies. Internal AIWS development review gates still keep their AI-engineering review requirements.
+
 ## Executive Summary
 
 Phase 2A has moved from a blocked concept to a validated technical pilot for Cowork skill lifecycle management. A Cowork user can now install AIWS through the marketplace, open a draft from an installed skill, edit the draft safely, validate it, build an activation package fallback, stage a local proposal, submit it for review through authenticated host `gh`, and complete the maintainer merge loop in GitHub. When `gh` is unavailable, the current implementation returns a safe submit-for-review handoff instead of pretending a PR was created.
@@ -430,7 +432,6 @@ status: submit_handoff_required
 reason_code: github_cli_unavailable
 terminal: false
 no_pr_created: true
-required_review_roles includes AI engineer
 proposal remains staged
 branch_name/pr_url are not persisted as submitted metadata
 ```
@@ -539,7 +540,7 @@ Requirements:
 - Do not mutate installed marketplace plugin files.
 - Do not touch ~/.claude memory.
 - Do not activate the draft in Cowork.
-- Include AI engineer in reviewer routing.
+- Leave review and merge to repository maintainers and policy.
 - If no GitHub CLI or Cowork-compatible GitHub adapter is available, return a structured submit_handoff_required result.
 
 Afterward, tell me:
@@ -552,7 +553,7 @@ Afterward, tell me:
 7. PR URL, if created
 8. whether no_pr_created is true or false
 9. whether the proposal remained staged or was marked submitted
-10. whether AI engineer reviewer routing is included
+10. whether normal-flow reviewer-role metadata was omitted
 11. whether validation was rerun before submit
 12. whether the staged validation digest matched current draft state
 13. whether installed marketplace plugin files were touched
@@ -567,7 +568,6 @@ Expected result when authenticated host `gh` is available:
 status: submitted_for_review
 branch_name: aiws/skill-proposals/<proposal_id>
 pr_url: <review PR URL>
-required_review_roles includes AI engineer
 ```
 
 Expected result when `gh` is unavailable:
@@ -577,7 +577,6 @@ status: submit_handoff_required
 reason_code: github_cli_unavailable
 terminal: false
 no_pr_created: true
-required_review_roles includes AI engineer
 proposal remains staged
 ```
 
@@ -611,7 +610,7 @@ Acceptance:
 - no local `gh` requirement
 - proposal remains staged until real review item exists
 - PR metadata is written only after real PR creation/update
-- `AI engineer` review routing remains present
+- normal Cowork submission does not hardcode reviewer-role metadata
 
 ### Option 2: Dependency-Free Cowork Runtime Package
 
@@ -662,7 +661,7 @@ Do not regress these:
 - validation-only operations must not activate, stage, package, submit, or upload
 - staging must not create GitHub branches, commits, pushes, or PRs
 - submit must not mark a proposal submitted until a real review item exists
-- `AI engineer` must stay in review routing
+- normal Cowork submission must leave review and merge to repository maintainers and policy
 
 ## Important Files
 

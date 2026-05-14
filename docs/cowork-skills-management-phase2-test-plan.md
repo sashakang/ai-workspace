@@ -497,7 +497,6 @@ reason_code: github_cli_unavailable
 proposal_id: <proposal_id>
 target_repo: <test review repository>
 branch_name: aiws/skill-proposals/<proposal_id>
-required_review_roles includes AI engineer
 terminal: false
 no_pr_created: true
 actions: maintainer handoff or future Cowork-compatible GitHub adapter required
@@ -514,7 +513,8 @@ pr_url: <review PR URL>
 Expected persisted proposal state:
 
 ```text
-required_review_roles includes AI engineer
+submitted_at is recorded only after a real review item exists
+normal submit flow does not add required_review_roles
 ```
 
 Negative submit guard:
@@ -575,8 +575,8 @@ Mark lifecycle continuation as `PASS` only if the tested continuation scenarios 
 - staging does not create a branch, commit, push, pull request, package, or Cowork runtime mutation
 - if submit-for-review is tested, the call uses `allowed_target_repos`
 - if submit-for-review is tested, it fails closed when the stored target repo is not allowed
-- if submit-for-review is tested without `gh`, it returns `submit_handoff_required`, does not mark the proposal submitted, and includes `required_review_roles` with `AI engineer`
-- if submit-for-review is tested with authenticated `gh` and succeeds, proposal state records `required_review_roles` including `AI engineer`
+- if submit-for-review is tested without `gh`, it returns `submit_handoff_required`, does not mark the proposal submitted, and does not emit normal-flow reviewer-role metadata
+- if submit-for-review is tested with authenticated `gh` and succeeds, proposal state records PR metadata without normal-flow reviewer-role metadata
 
 ## Fail Or Block Criteria
 

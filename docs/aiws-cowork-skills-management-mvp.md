@@ -136,7 +136,7 @@ Staging a proposed improvement records the user's draft as a proposal for a targ
 - review notes or change summary
 - active/modified status at the time of staging
 
-Staging writes a local proposal record first. Submission comes after that record exists and should create a reviewable proposal, normally a GitHub pull request or equivalent review item. Submission must recheck that the draft tree still matches the validation digest captured during staging; if the draft changed, the user restages. Retry safety comes from deterministic branch identity `aiws/skill-proposals/<proposal_id>`, so repeat submits update or return the same review item instead of creating duplicates. Required reviewer roles include `AI engineer`. Direct push is not part of the normal current-user flow.
+Staging writes a local proposal record first. Submission comes after that record exists and should create a reviewable proposal, normally a GitHub pull request or equivalent review item. Submission must recheck that the draft tree still matches the validation digest captured during staging; if the draft changed, the user restages. Retry safety comes from deterministic branch identity `aiws/skill-proposals/<proposal_id>`, so repeat submits update or return the same review item instead of creating duplicates. Review and merge are managed by the target repository's maintainers and policies; AIWS does not hardcode reviewer roles for the normal Cowork flow. Direct push is not part of the normal current-user flow.
 
 Normal users should stay in Cowork for this sequence:
 

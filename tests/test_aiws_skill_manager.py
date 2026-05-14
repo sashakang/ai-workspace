@@ -1470,12 +1470,13 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(submitter.calls[0]["target_repo"], "review-repo")
             self.assertEqual(submitter.calls[0]["draft_path"], record.draft_path)
             self.assertEqual(submitter.calls[0]["validation_tree_digest"], tree_digest(Path(record.draft_path)))
-            self.assertIn("AI engineer", submitter.calls[0]["required_review_roles"])
+            self.assertNotIn("required_review_roles", submitter.calls[0])
 
             proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
             self.assertEqual(proposal["status"], "submitted_for_review")
             self.assertEqual(proposal["branch_name"], expected_branch)
             self.assertEqual(proposal["pr_url"], "https://github.com/example/review/pull/123")
+            self.assertNotIn("required_review_roles", proposal)
             self.assertIn("submitted_at", proposal)
 
             loaded = load_draft_record(aiws_root, record_id)
@@ -1497,6 +1498,35 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(second["branch_name"], first["branch_name"])
             self.assertEqual(second["pr_url"], first["pr_url"])
             self.assertEqual(second_submitter.calls, [])
+
+    def test_submit_pr_strips_stale_review_roles_from_normal_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            proposal_path = Path(staged["proposal_path"])
+            proposal = json.loads(proposal_path.read_text())
+            proposal["required_review_roles"] = ["AI engineer"]
+            proposal_path.write_text(json.dumps(proposal))
+            submitter = FakeProposalSubmitter()
+
+            submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertNotIn("required_review_roles", submitter.calls[0])
+            self.assertNotIn("required_review_roles", self.proposal_payload(aiws_root, staged["proposal_id"]))
+
+    def test_submit_pr_preserves_explicit_product_specific_review_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            submitter = FakeProposalSubmitter()
+
+            submit_pr(aiws_root, staged["proposal_id"], submitter, required_review_roles=["Skill maintainer"])
+
+            self.assertEqual(submitter.calls[0]["required_review_roles"], ["Skill maintainer"])
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["required_review_roles"], ["Skill maintainer"])
 
     def test_submit_pr_already_submitted_proposal_still_honors_target_repo_allowlist(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1636,11 +1666,12 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(result["branch_name"], expected_branch)
             self.assertFalse(result["terminal"])
             self.assertTrue(result["no_pr_created"])
-            self.assertIn("AI engineer", result["required_review_roles"])
+            self.assertNotIn("required_review_roles", result)
             self.assertGreaterEqual(len(result["actions"]), 1)
             self.assertEqual(len(submitter.calls), 1)
             self.assertEqual(submitter.calls[0]["branch_name"], expected_branch)
-            self.assertIn("AI engineer", submitter.calls[0]["required_review_roles"])
+            self.assertNotIn("required_review_roles", submitter.calls[0])
+            self.assertNotIn("required_review_roles", result["actions"][0])
             self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"]), before)
 
     def test_submit_pr_no_gh_handoff_rejects_allowlist_mismatch_before_handoff(self) -> None:
@@ -1799,8 +1830,11 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 for call in runner.calls
                 if call[0][:3] == ["gh", "pr", "create"]
             ]
-            self.assertIn("CODEOWNERS: not_detected", body_files[0].read_text())
-            self.assertIn("Required review role: AI engineer", body_files[0].read_text())
+            body = body_files[0].read_text()
+            self.assertIn("CODEOWNERS: not_detected", body)
+            self.assertIn("Review and merge are managed by the target repository's maintainers and policies.", body)
+            self.assertNotIn("Required review role", body)
+            self.assertNotIn("AI engineer", body)
 
     def test_gh_submitter_no_changes_keeps_proposal_staged(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1854,8 +1888,11 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 for call in runner.calls
                 if call[0][:3] == ["gh", "pr", "edit"]
             ]
-            self.assertIn("CODEOWNERS: detected", body_files[0].read_text())
-            self.assertIn("Required review role: AI engineer", body_files[0].read_text())
+            body = body_files[0].read_text()
+            self.assertIn("CODEOWNERS: detected", body)
+            self.assertIn("Review and merge are managed by the target repository's maintainers and policies.", body)
+            self.assertNotIn("Required review role", body)
+            self.assertNotIn("AI engineer", body)
 
     def test_create_or_open_draft_reopens_existing_draft_without_overwriting_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

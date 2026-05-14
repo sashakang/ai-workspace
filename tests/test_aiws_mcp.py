@@ -272,7 +272,6 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 "proposal_id": proposal_id,
                 "target_repo": "example/review",
                 "branch_name": "aiws/skill-proposals/skillprop_123",
-                "required_review_roles": ["AI engineer"],
                 "terminal": False,
                 "no_pr_created": True,
                 "actions": [],
@@ -299,6 +298,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(captured["proposal_id"], "skillprop_123")
         self.assertIsInstance(captured["submitter"], FakeGithubHandoffProposalSubmitter)
         self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
+        self.assertNotIn("required_review_roles", result)
         self.assert_no_memory_or_claude_writes()
 
     def test_clean_machine_has_sop_and_aiws_improve_without_plugins(self) -> None:

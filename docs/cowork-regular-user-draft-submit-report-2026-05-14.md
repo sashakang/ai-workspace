@@ -8,7 +8,7 @@
 
 The regular Cowork user draft/edit/stage/submit path passed end to end. Cowork started from the installed AIWS marketplace plugins, exposed the skill-management tools, opened a draft from the installed plugin, accepted a confined draft edit, validated and staged the proposal, and submitted it to GitHub for maintainer review.
 
-This proves the regular-user lifecycle behavior through Cowork for this scenario. It does not prove enforceable reviewer routing. The PR body included `Required review role: AI engineer`, but GitHub did not request a reviewer or team because the target repository had no CODEOWNERS or reviewer policy.
+This proves the regular-user lifecycle behavior through Cowork for this scenario. It does not prove enforceable reviewer routing. The PR body included `Required review role: AI engineer`, but GitHub did not request a reviewer or team because the target repository had no CODEOWNERS or reviewer policy. This reviewer-role metadata was later corrected by Gate 1: normal Cowork submission now leaves review and merge to repository maintainers and policy instead of hardcoding a product-level role.
 
 ## Setup Evidence
 
@@ -70,7 +70,6 @@ The PR state was verified with `gh`:
 
 ## Caveat
 
-Reviewer routing is metadata only in this test. AIWS correctly carried the required review role into the PR body and used deterministic branch/PR behavior, but GitHub did not enforce reviewer assignment or approval. The target repository needs CODEOWNERS, branch protection, repository rules, or an equivalent reviewer policy before AI engineer review can be treated as enforced.
+Reviewer routing was metadata only in this historical test. The later corrected boundary removes that product-level reviewer-role metadata from normal Cowork submission. GitHub repository policy now owns reviewer assignment and approval.
 
-Normal Cowork users should not be asked to map GitHub reviewers or teams. AIWS should continue to record required reviewer roles, detect and report missing enforcement such as `CODEOWNERS: not_detected`, and present the missing policy as a caveat until repository policy exists.
-
+Normal Cowork users should not be asked to map GitHub reviewers or teams. AIWS may detect and report missing enforcement such as `CODEOWNERS: not_detected`, but review and merge are managed by repository maintainers and policy.
