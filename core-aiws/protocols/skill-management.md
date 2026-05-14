@@ -6,7 +6,7 @@ Use this protocol when a user wants to install, update, edit, test, or upload an
 
 - Do not ask normal users to run bash commands.
 - Do not expose Git terms unless the user asks for advanced details.
-- Show one skill identity. If a modified draft is active, present it as `Modified locally`, not as a second skill.
+- Show one skill identity. If a draft is modified, present it as `Modified locally`; if a Cowork package has been prepared, present it as `Modified locally, pending Cowork upload`.
 - Keep memory import out of scope.
 
 ## Install Or Update
@@ -22,10 +22,10 @@ Before activation, run the release validation gate:
 - fail on marketplace/plugin/contract version drift
 - reject `.mcp.json` files with top-level `servers`
 
-If an active modified draft exists, do not silently update. Offer only:
+If a modified draft or pending Cowork upload exists, do not silently update. Offer only:
 
 ```text
-keep local modified skill active
+keep local draft and pending package
 discard local changes and update
 submit/upload first
 ```

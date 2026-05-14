@@ -124,7 +124,7 @@ Fallback path:
 
 ### Phase 2: Urgent Cowork Skills-Management MVP
 
-After the Cowork marketplace install path is reliable, immediately deliver the smallest Cowork skills-management MVP that lets current users edit or open a draft, validate it, activate the modified local skill, stage a proposed improvement, and submit it for maintainer review from Cowork. This lifecycle work follows the installed Cowork plugin package directly; it does not depend on memory sync or the MCP control plane being complete.
+After the Cowork marketplace install path is reliable, immediately deliver the smallest Cowork skills-management MVP that lets current users edit or open a draft, validate it, prepare a modified draft package for Cowork upload, stage a proposed improvement, and submit it for maintainer review from Cowork. This lifecycle work follows the installed Cowork plugin package directly; it does not depend on memory sync or the MCP control plane being complete.
 
 Phase 2 has three runtime levels:
 
@@ -136,7 +136,7 @@ For this urgent MVP, staging means calling the contract-owned `stage_proposal(dr
 
 GitHub is now an acceptable collaboration backend for the customer experiment. The product boundary is still clear: Cowork owns the normal user workflow for staging and submitting; GitHub owns maintainer review, comments, approvals, and merges. Direct push is not part of the normal user flow. Pull requests are created by an explicit submit action and should target the appropriate unit, company, public, or personal skills repository based on the selected target scope.
 
-Lifecycle behavior must preserve one user-facing skill identity. If a modified draft is active, Cowork should show the same skill with `Modified locally` status; the draft replaces the installed version in the UI/runtime, while the installed package remains available internally as fallback/cache. AIWS must not create a second visible skill with the same identity. Organization-managed plugins are read-only for members. User edits become personal drafts or proposals derived from the installed variant; AIWS must not mutate the managed plugin in place.
+Lifecycle behavior must preserve one user-facing skill identity. In the current Cowork-safe slice, AIWS does not replace the installed version in Cowork UI/runtime and does not change runtime skill resolution. A modified draft can be validated and packaged, then marked `Modified locally, pending Cowork upload` until the user uploads the package through Cowork. Future true runtime overlay or direct activation behavior requires a supported Cowork activation surface and a separate design pass. Organization-managed plugins are read-only for members. User edits become personal drafts or proposals derived from the installed variant; AIWS must not mutate the managed plugin in place.
 
 Editable draft files live under:
 
@@ -152,10 +152,10 @@ The authoritative draft registry lives under:
 ~/.aiws/state/skill-drafts/
 ```
 
-When updating from GitHub and an active modified draft exists, AIWS fails closed and offers only:
+When updating from GitHub and either a modified draft or pending Cowork upload exists, AIWS fails closed and offers only:
 
 ```text
-keep local modified skill active
+keep local draft and pending package
 discard local changes and update
 submit/upload first
 ```
@@ -164,7 +164,7 @@ Acceptance criteria:
 
 - A user can create or open a draft of an installed skill.
 - AIWS validates the draft against skill compatibility rules.
-- A modified local skill can be activated without becoming a confusing duplicate.
+- A modified local skill can be packaged for Cowork upload without becoming a confusing duplicate or changing runtime resolution.
 - The user can stage a proposed improvement through an explicit local proposal-record operation with provenance and review notes.
 - The user can explicitly submit a staged proposal from Cowork for maintainer review without using GitHub UI or GitHub CLI directly.
 - Repo maintainers and skill maintainers can review and merge the resulting proposal in GitHub.
@@ -180,7 +180,7 @@ The regular Cowork user draft/edit/validate/stage/submit path is also proven end
 
 This is not yet the full Phase 2B end-user path because the launcher still depends on `uvx`, production-grade submit must move from host `gh` to a GitHub App, bot, API, or Cowork-compatible adapter path, and review assignment needs repository policy such as CODEOWNERS or branch protection before it can be called enforced.
 
-Current testing scenario: `docs/cowork-skills-management-phase2-test-plan.md` covers the Phase 2A path from marketplace-installed `core-aiws` and `aiws-productivity` through `meeting-followup`, draft creation, safe draft edits, `aiws.skills.validate_draft`, activation fallback, proposal staging, submit-for-review, and maintainer merge. Retest with refreshed `core-aiws >= 0.3.7`; if Cowork cannot see the AIWS tools, the draft-management scenarios remain blocked.
+Current testing scenario: `docs/cowork-skills-management-phase2-test-plan.md` covers the Phase 2A path from marketplace-installed `core-aiws` and `aiws-productivity` through `meeting-followup`, draft creation, safe draft edits, `aiws.skills.validate_draft`, activation fallback, proposal staging, submit-for-review, and maintainer merge. Retest with refreshed `core-aiws >= 0.3.8`; if Cowork cannot see the AIWS tools, the draft-management scenarios remain blocked.
 
 ### Phase 3: Shared Memory Sync Foundation
 
@@ -333,10 +333,10 @@ Acceptance: The guide names the exact marketplace repo/path, Cowork marketplace 
 Evidence: `docs/aiws-cowork-fresh-marketplace-install.md`, `docs/aiws-cowork-runtime-validation-checklist.md`, user-reported Cowork marketplace runtime proof that `meeting-followup` nodes were generated correctly, and fallback evidence in `docs/aiws-cowork-plugin-import-validation-pass.md`.
 
 Task: Capture lifecycle constraints for modified skills.
-Context: Phase 2 is an urgent Cowork skills-management MVP. Current users need to edit or open drafts, validate them, activate modified local skills, and stage proposals immediately after marketplace-installed Cowork plugins are available. Manual ZIP import remains a fallback install source only. Phase 2 should not wait for memory sync or MCP control-plane alignment.
+Context: Phase 2 is an urgent Cowork skills-management MVP. Current users need to edit or open drafts, validate them, prepare modified draft packages for Cowork upload, and stage proposals immediately after marketplace-installed Cowork plugins are available. Manual ZIP import remains a fallback install source only. Phase 2 should not wait for memory sync or MCP control-plane alignment.
 Owner: Developer session
 Expected output: Product and technical notes for draft creation, validation, activation, update conflict handling, and proposal staging.
-Acceptance: The notes preserve one user-facing skill identity, use `Modified locally` status, store draft registry entries under `~/.aiws/state/skill-drafts/`, store editable files under `~/.aiws/plugins/<marketplace-slug>/<plugin-id>-<origin-repo-sha10>`, activate modified local skills without duplicate visible skill identity, stage proposals through `stage_proposal` under `~/.aiws/state/skill-proposals/` rather than silently invoking `submit_pr`, expose submission as a separate Cowork UI action, never mutate managed marketplace or organization plugin files, fail closed on updates when an active modified draft exists, and offer only the three approved update choices.
+Acceptance: The notes preserve one user-facing skill identity, use `Modified locally` and `Modified locally, pending Cowork upload` status labels, store draft registry entries under `~/.aiws/state/skill-drafts/`, store editable files under `~/.aiws/plugins/<marketplace-slug>/<plugin-id>-<origin-repo-sha10>`, store pending Cowork upload records under `~/.aiws/state/draft-activations/<host-id>/`, prepare modified draft packages without duplicate visible skill identity or runtime resolver changes, stage proposals through `stage_proposal` under `~/.aiws/state/skill-proposals/` rather than silently invoking `submit_pr`, expose submission as a separate Cowork UI action, never mutate managed marketplace or organization plugin files, fail closed on updates when a modified draft or pending upload exists, and offer only the approved update choices.
 Evidence: Doc path, reviewed lifecycle state table or equivalent, and test cases or fixtures covering draft activation and update conflict handling.
 
 Task: Move `discord-mcp-for-codex/` out of this repo.

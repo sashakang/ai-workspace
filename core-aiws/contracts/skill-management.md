@@ -14,6 +14,7 @@ Allowed write roots:
 ~/.aiws/plugins/
 ~/.aiws/state/skill-drafts/
 ~/.aiws/state/skill-proposals/
+~/.aiws/state/draft-activations/
 ~/.aiws/state/git-worktrees/
 temporary package build output
 explicit package output directories supplied by the caller
@@ -42,7 +43,8 @@ delete_draft_file(draft_id, relative_path)
 refresh_modified_status(draft_id)
 validate_draft(draft_id)
 build_draft_package(draft_id, package_output_dir)
-activate_draft(draft_id, host_kind, package_output_dir)
+activate_draft(draft_id, host_kind, host_id, package_output_dir)
+deactivate_draft(draft_id, host_kind, host_id)
 update_from_github(plugin_id, marketplace_id)
 stage_proposal(draft_id, target_scope, target_repo, summary, rationale)
 submit_pr(proposal_id, submitter)
@@ -69,7 +71,20 @@ contracts/<plugin_id>.contract.json
 
 The ZIP must not contain a wrapper directory, absolute paths, or `..` traversal entries. The manifest inside the package preserves the original plugin name and version; package creation must not use runtime adapter identities such as `aiws-generated-plugin`.
 
-`activate_draft` in Phase 2 Slice 3A supports only `host_kind='cowork'`. If the draft is unchanged after refresh, it returns `not_modified` with no actions and does not create a package. If the draft is modified, it builds the Cowork package and returns `host_capability_missing` with one non-terminal `package_upload` action pointing at the ZIP for manual Cowork upload. This slice must not mutate Cowork runtime state, RPM files, `~/.claude`, AIWS host registry paths, or memory/import/export paths.
+Draft activation state for the Cowork slice is explicit and intentionally narrow:
+
+| State | Meaning | Runtime effect |
+|---|---|---|
+| absent | No draft activation record exists; the draft is inactive for that host. | None |
+| `pending_upload` | A modified draft package was prepared for manual Cowork upload. | Management/status only; it must not change skill resolution. |
+
+`active` runtime overlays and `deactivated` tombstones are out of scope for this Cowork slice. Deactivation removes the pending record; absence again means inactive.
+
+`activate_draft` in Phase 2 Slice 3A supports only `host_kind='cowork'`. `package_output_dir` remains required and explicit. The runtime adapter resolves or registers the concrete `host_id` before calling the low-level skill manager; if a caller supplies `host_id`, it must match the registered host identity for that `host_kind`. Before building a package or writing pending state, activation must reload the draft record, re-derive the canonical draft identity from the record's `plugin_id`, `skill_id`, and `origin_repo`, reject any mismatch with the requested `draft_id`, and re-check that the stored draft path is the expected path under `~/.aiws/plugins/`.
+
+If the draft is unchanged after refresh, activation returns `not_modified` with no actions and does not create a package or pending record. If the draft is modified, activation rebuilds the Cowork package, records `pending_upload` under `~/.aiws/state/draft-activations/<host-id>/<draft_id>.json`, and returns `host_capability_missing` with one non-terminal `package_upload` action pointing at the ZIP for manual Cowork upload. The activation metadata root, host directory, final record path, and temporary write path must all be checked for path traversal and symlink escape before write or delete. The record file name is the canonical `draft_id`, not just `plugin_id + skill_id`, so multiple marketplaces or source repositories with the same plugin and skill names do not collide. Writes must be atomic replace operations. The pending record is visible only through management/status responses; it must not affect `resolve`, `get`, `search`, `list_local`, or runtime skill content. This slice must not mutate Cowork runtime state, RPM files, installed marketplace or organization plugin files, `~/.claude`, proposal records, GitHub state, AIWS host registry paths, or memory/import/export paths.
+
+`deactivate_draft` is pending-upload cancellation, not proof that anything was removed from Cowork. It clears only the pending activation record for the supplied `draft_id` and host. It must verify that the pending record's stored `draft_id` exactly matches the requested draft before deleting it; plugin and skill identity alone are not sufficient. It must not clear draft `modified` state, bypass update-conflict handling for modified drafts, delete user-chosen package artifacts, restore or mutate an installed marketplace package, remove anything from Cowork, edit proposal records, or touch GitHub. If the package was manually uploaded to Cowork, removing it remains a Cowork UI action.
 
 ## Draft Registry
 
@@ -156,10 +171,10 @@ Proposal files must be created with collision-safe IDs and must never overwrite 
 
 A staged proposal submitted for review moves from `status='staged'` to `status='submitted_for_review'` only after the submitter returns nonblank `branch_name` and `pr_url`. Successful submission also adds `submitted_at` to the proposal record. Explicitly supplied product-specific `required_review_roles` may be persisted, but the normal Cowork flow omits role metadata. If submission fails or returns invalid metadata, local proposal state remains staged and retryable. If an already submitted proposal has complete metadata, submit returns that existing result without calling the submitter again. If submitted metadata is incomplete, submit fails closed.
 
-When an active modified draft exists, update from GitHub must fail closed and offer only:
+When a modified draft or pending Cowork upload exists, update from GitHub must fail closed and offer only:
 
 ```text
-keep_local_modified_skill_active
+keep_local_draft_and_pending_package
 discard_local_changes_and_update
 submit_or_upload_first
 ```

@@ -182,6 +182,21 @@ def require_record_path_under(path: Path, root: Path) -> Path:
     return resolved_path
 
 
+def require_activation_path_under(path: Path, root: Path) -> Path:
+    reject_symlinked_root(root.parent, label="AIWS activation state parent")
+    reject_symlinked_root(root, label="AIWS activation state root")
+    reject_existing_symlink_components(path.parent, label="AIWS activation state path")
+    resolved_path = path.resolve()
+    resolved_root = root.resolve()
+    if resolved_path == resolved_root:
+        raise SkillManagerError(f"Activation record path is outside AIWS activation state root: {path}")
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise SkillManagerError(f"Activation record path is outside AIWS activation state root: {path}") from exc
+    return resolved_path
+
+
 def tree_digest(root: Path) -> str:
     if not root.is_dir():
         raise SkillManagerError(f"Draft path is not a directory: {root}")
@@ -690,6 +705,21 @@ def require_non_blank_string(value: Any, field_name: str) -> str:
     return value.strip()
 
 
+def require_host_id(value: Any) -> str:
+    host_id = require_non_blank_string(value, "host_id")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", host_id):
+        raise SkillManagerError(f"host_id contains unsupported characters: {host_id!r}")
+    return host_id
+
+
+def require_canonical_draft_record(aiws_root: Path, record_id: str) -> DraftRecord:
+    record = safely_identify_draft_record(aiws_root, record_id)
+    canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
+    if canonical_record_id != record_id:
+        raise SkillManagerError(f"Draft record id does not match canonical draft id {canonical_record_id}.")
+    return record
+
+
 def proposal_record_path(aiws_root: Path, proposal_id: str) -> Path:
     return aiws_root / "state" / "skill-proposals" / f"{proposal_id}.json"
 
@@ -1158,6 +1188,8 @@ def build_draft_package(aiws_root: Path, record_id: str, package_output_dir: Pat
         "modified": record.modified,
         "status_label": "Modified locally" if record.modified else "Current",
         "validation_status": "passed",
+        "validation_tree_digest": record.last_validation_tree_digest,
+        "current_tree_digest": record.current_tree_digest,
         "package_layout": "cowork_flat_root",
     }
 
@@ -1234,11 +1266,102 @@ def validate_draft(aiws_root: Path, record_id: str) -> dict[str, Any]:
     }
 
 
-def activate_draft(aiws_root: Path, record_id: str, host_kind: str, package_output_dir: Path) -> dict[str, Any]:
+def draft_activation_root(aiws_root: Path) -> Path:
+    return aiws_root / "state" / "draft-activations"
+
+
+def draft_activation_record_path(aiws_root: Path, host_id: str, record_id: str) -> Path:
+    return draft_activation_root(aiws_root) / require_host_id(host_id) / f"{record_id}.json"
+
+
+def write_draft_activation_record(
+    aiws_root: Path,
+    *,
+    record_id: str,
+    host_kind: str,
+    host_id: str,
+    record: DraftRecord,
+    package: dict[str, Any],
+) -> dict[str, Any]:
+    root = draft_activation_root(aiws_root)
+    path = draft_activation_record_path(aiws_root, host_id, record_id)
+    require_activation_path_under(path, root)
+    require_activation_path_under(path.with_suffix(path.suffix + ".tmp"), root)
+    now = utc_now()
+    payload = {
+        "status": "pending_upload",
+        "activation_status": "pending_upload",
+        "draft_id": record_id,
+        "record_id": record_id,
+        "host_kind": host_kind,
+        "host_id": host_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "origin_marketplace": record.origin_marketplace,
+        "origin_repo": record.origin_repo,
+        "base_version": record.base_version,
+        "package_path": package["package_path"],
+        "validation_status": package.get("validation_status"),
+        "validation_tree_digest": package.get("validation_tree_digest"),
+        "current_tree_digest": package.get("current_tree_digest"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    write_json_atomic(path, payload)
+    return {"activation_record_path": str(path), **payload}
+
+
+def deactivate_draft(aiws_root: Path, record_id: str, host_kind: str, host_id: str) -> dict[str, Any]:
+    if host_kind != "cowork":
+        raise SkillManagerError("Only host_kind='cowork' is supported for draft deactivation in this slice.")
+    host_id = require_host_id(host_id)
+    record = require_canonical_draft_record(aiws_root, record_id)
+    path = draft_activation_record_path(aiws_root, host_id, record_id)
+    require_activation_path_under(path, draft_activation_root(aiws_root))
+    if not path.exists():
+        return {
+            "status": "inactive",
+            "activation_status": "inactive",
+            "record_id": record_id,
+            "draft_id": record_id,
+            "host_kind": host_kind,
+            "host_id": host_id,
+            "plugin_id": record.plugin_id,
+            "skill_id": record.skill_id,
+            "cleared": False,
+        }
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError(f"Activation record must be a JSON object: {path}")
+    if payload.get("draft_id") != record_id:
+        raise SkillManagerError(f"Activation record draft_id does not match requested draft: {record_id}")
+    path.unlink()
+    return {
+        "status": "deactivated",
+        "activation_status": "inactive",
+        "record_id": record_id,
+        "draft_id": record_id,
+        "host_kind": host_kind,
+        "host_id": host_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "cleared": True,
+    }
+
+
+def activate_draft(
+    aiws_root: Path,
+    record_id: str,
+    host_kind: str,
+    package_output_dir: Path,
+    *,
+    host_id: str,
+) -> dict[str, Any]:
     if host_kind != "cowork":
         raise SkillManagerError("Only host_kind='cowork' is supported for draft activation in this slice.")
+    host_id = require_host_id(host_id)
 
-    safely_identify_draft_record(aiws_root, record_id)
+    require_canonical_draft_record(aiws_root, record_id)
     try:
         record = refresh_modified_status(aiws_root, record_id)
     except Exception:
@@ -1267,12 +1390,24 @@ def activate_draft(aiws_root: Path, record_id: str, host_kind: str, package_outp
             "actions": [],
         }
 
+    record = require_canonical_draft_record(aiws_root, record_id)
     package = build_draft_package(aiws_root, record_id, package_output_dir)
+    activation_record = write_draft_activation_record(
+        aiws_root,
+        record_id=record_id,
+        host_kind=host_kind,
+        host_id=host_id,
+        record=record,
+        package=package,
+    )
     return {
         **package,
         "status": "host_capability_missing",
+        "activation_status": "pending_upload",
+        "host_id": host_id,
         "activation_effective": False,
         "requires_manual_upload": True,
+        "activation_record_path": activation_record["activation_record_path"],
         "actions": [
             {
                 "type": "package_upload",
@@ -1961,10 +2096,10 @@ def revert_draft(aiws_root: Path, record_id: str) -> dict[str, str]:
 
 
 def update_from_github_decision(record: DraftRecord | None) -> dict[str, Any]:
-    if record is not None and record.active and record.modified:
+    if record is not None and record.modified:
         return {
             "allowed": False,
-            "reason": "active_modified_draft",
-            "choices": ["keep_local_modified_skill_active", "discard_local_changes_and_update", "submit_or_upload_first"],
+            "reason": "modified_draft_or_pending_upload",
+            "choices": ["keep_local_draft_and_pending_package", "discard_local_changes_and_update", "submit_or_upload_first"],
         }
-    return {"allowed": True, "reason": "no_active_modified_draft", "choices": []}
+    return {"allowed": True, "reason": "no_modified_draft_or_pending_upload", "choices": []}

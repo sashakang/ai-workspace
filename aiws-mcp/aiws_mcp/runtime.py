@@ -1250,16 +1250,29 @@ class AiwsRuntime:
         draft_id: str,
         *,
         host_kind: str,
+        host_id: str | None = None,
         package_output_dir: str | Path | None,
     ) -> dict[str, Any]:
         if package_output_dir is None:
             raise ValueError("package_output_dir is required.")
+        host = self.ensure_host(host_kind=host_kind, host_id=host_id)
         return skill_manager.activate_draft(
             self.root,
             draft_id,
-            host_kind,
+            host.host_kind,
             Path(package_output_dir).expanduser(),
+            host_id=host.host_id,
         )
+
+    def deactivate_draft(
+        self,
+        draft_id: str,
+        *,
+        host_kind: str,
+        host_id: str | None = None,
+    ) -> dict[str, Any]:
+        host = self.ensure_host(host_kind=host_kind, host_id=host_id)
+        return skill_manager.deactivate_draft(self.root, draft_id, host.host_kind, host.host_id)
 
     def stage_proposal(
         self,

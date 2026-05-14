@@ -61,7 +61,7 @@ Each draft registry record should preserve the fields required by `core-aiws/con
 
 ## Identity And Status
 
-AIWS must preserve one user-facing skill identity. A modified local draft replaces the installed version in the Cowork UI/runtime, while the installed version remains internally available as fallback/cache.
+AIWS must preserve one user-facing skill identity. In the current Cowork-safe slice, a modified local draft does not replace the installed version in the Cowork UI/runtime. AIWS prepares a package and records `pending_upload`; the user can use the modified skill only after uploading that package through Cowork.
 
 Cowork must not show two visible copies of the same logical skill. The logical identity remains:
 
@@ -114,10 +114,10 @@ Dry-run or validation-only actions must not repair, backfill, delete, activate, 
 
 ## Update Conflict Handling
 
-When updating from GitHub or another managed source, an active modified draft is a hard conflict. AIWS must fail closed and offer only these three choices:
+When updating from GitHub or another managed source, a modified draft or pending Cowork upload is a hard conflict. AIWS must fail closed and offer only these three choices:
 
 ```text
-keep local modified skill active
+keep local draft and pending package
 discard local changes and update
 submit/upload first
 ```
@@ -185,12 +185,12 @@ Managed marketplace and organization plugin files are read-only inputs. Host-spe
 The MVP is done when a current Cowork user can:
 
 - create or open a draft from an installed skill
-- validate the draft before activation or staging
-- activate a modified local skill without creating a duplicate visible identity
-- see and track `Modified locally` status for the active modified draft
+- validate the draft before package preparation or staging
+- prepare a modified local skill package without creating a duplicate visible identity or changing runtime resolution
+- see and track `Modified locally` and `Modified locally, pending Cowork upload` status
 - stage a proposed improvement with provenance and review notes
 - submit a staged proposal for maintainer review from Cowork
-- update safely, with active modified draft conflicts limited to the three approved choices
+- update safely, with modified draft or pending-upload conflicts limited to the three approved choices
 - install and use the skill-management workflow without installing Python, `uvx`, GitHub CLI, or running terminal commands
 
-The technical pilot is useful but not end-user complete while it depends on `uvx` or local GitHub CLI. The MVP is not done if it mutates managed marketplace or organization plugin files in place, creates a second visible copy of the same logical skill, hides local modification state, requires normal users to use GitHub UI for submission, requires normal users to install Python/`uvx`/`gh`, or lets update flows overwrite active local edits without explicit user choice.
+The technical pilot is useful but not end-user complete while it depends on `uvx` or local GitHub CLI. The MVP is not done if it mutates managed marketplace or organization plugin files in place, creates a second visible copy of the same logical skill, hides local modification state, requires normal users to use GitHub UI for submission, requires normal users to install Python/`uvx`/`gh`, or lets update flows overwrite local edits or pending uploads without explicit user choice.

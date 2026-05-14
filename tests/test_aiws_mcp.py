@@ -199,9 +199,14 @@ class AiwsMcpSkillTests(unittest.TestCase):
         )
 
         self.assertEqual(activated["status"], "host_capability_missing")
+        self.assertEqual(activated["activation_status"], "pending_upload")
         self.assertEqual(activated["actions"][0]["type"], "package_upload")
+        self.assertTrue(Path(activated["activation_record_path"]).is_file())
         with zipfile.ZipFile(activated["package_path"]) as package:
             self.assertIn("skills/meeting-followup/SKILL.md", package.namelist())
+        deactivated = runtime.deactivate_draft(record_id, host_kind="cowork")
+        self.assertEqual(deactivated["status"], "deactivated")
+        self.assertFalse(Path(activated["activation_record_path"]).exists())
         self.assert_no_memory_or_claude_writes()
 
     def test_cowork_runtime_submit_for_review_uses_gh_cli_submitter(self) -> None:

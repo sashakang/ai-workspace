@@ -90,8 +90,22 @@ def create_server(root: Path | None = None):
         return runtime.validate_draft(draft_id)
 
     @server.tool(name="aiws.skills.activate_draft")
-    def activate_draft(draft_id: str, host_kind: str, package_output_dir: str) -> dict[str, Any]:
-        return runtime.activate_draft(draft_id, host_kind=host_kind, package_output_dir=package_output_dir)
+    def activate_draft(
+        draft_id: str,
+        host_kind: str,
+        package_output_dir: str,
+        host_id: str | None = None,
+    ) -> dict[str, Any]:
+        return runtime.activate_draft(
+            draft_id,
+            host_kind=host_kind,
+            host_id=host_id,
+            package_output_dir=package_output_dir,
+        )
+
+    @server.tool(name="aiws.skills.deactivate_draft")
+    def deactivate_draft(draft_id: str, host_kind: str, host_id: str | None = None) -> dict[str, Any]:
+        return runtime.deactivate_draft(draft_id, host_kind=host_kind, host_id=host_id)
 
     @server.tool(name="aiws.skills.stage_proposal")
     def stage_proposal(

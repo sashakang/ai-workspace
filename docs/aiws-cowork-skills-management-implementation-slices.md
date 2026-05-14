@@ -60,13 +60,13 @@ Likely files, modules, and contracts to inspect: `core-aiws/contracts/skill-mana
 
 Owner: developer session.
 
-Expected output: Activation builds or installs the draft under the same logical plugin and skill identity, replacing the active user-level package through the supported Cowork/plugin install path. The Cowork UI/runtime sees one visible identity and shows `Modified locally` when the active draft differs from its base.
+Expected output: For the current Cowork slice, activation prepares a package for manual Cowork upload and records a pending upload state. It does not install into Cowork, patch Cowork runtime files, or create an active runtime overlay. The user can use the modified skill in Cowork only after uploading the package through a Cowork-supported UI path.
 
-Acceptance: Unit/runtime identity behavior: activating a changed draft never creates a second visible copy of the same logical skill. The installed marketplace or organization package remains available internally as fallback/cache, but the active local draft wins in user-facing resolution. If duplicate visible variants are possible and scope is not pinned by user choice or organization policy, resolution fails closed.
+Acceptance: Activation state has two meanings in this slice: absent means inactive, and `pending_upload` means a package exists for manual Cowork upload. `pending_upload` is stored under `~/.aiws/state/draft-activations/<host-id>/` after the runtime resolves or verifies the concrete Cowork host identity. It is visible only through management/status responses and must not affect `resolve`, `get`, `search`, `list_local`, or runtime skill content. It must not create a second visible skill, and it must not claim the draft is active in Cowork before a supported Cowork install/upload step happens.
 
 Cowork runtime validation: direct host install is unsupported by current Cowork host surfaces. Until Cowork documents or exposes a supported direct activation capability, activation returns `host_capability_missing` with one non-terminal package-upload action when Cowork cannot activate the draft programmatically. AIWS must not patch `~/.cowork/plugins` to simulate activation.
 
-Evidence: Unit/runtime tests should prove materialized or activated local skill records replace fallback identities instead of duplicating them; `Modified locally` is returned for active changed drafts; ambiguous duplicate variants fail closed unless pinned by scope/version. Cowork runtime evidence can remain pending until direct host capability exists, but host capability gaps must return a clear non-terminal action. Existing identity and ambiguity tests live in `tests/test_aiws_mcp.py`, especially `test_materialized_skill_replaces_builtin_fallback_identity` and `test_duplicate_shared_skill_ids_fail_closed_unless_pinned`.
+Evidence: Tests should prove a modified draft produces a package and a `pending_upload` record, unchanged/invalid/out-of-scope drafts do not, pending state does not leak into runtime resolution, and activation does not mutate installed marketplace files, Cowork runtime/RPM state, `~/.claude`, proposal records, or GitHub. Add coverage proving activation rejects tampered draft records before package or pending-state writes, activation metadata cannot escape `~/.aiws/state/draft-activations/` through path traversal or symlinks, and `deactivate_draft` clears only the matching pending record by exact `draft_id` without deleting user-chosen package artifacts or clearing the draft's modified state.
 
 Likely files, modules, and contracts to inspect: `docs/aiws-cowork-skills-management-mvp.md`, `core-aiws/contracts/skill-management.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, and `tests/test_aiws_mcp.py`.
 
@@ -74,9 +74,9 @@ Likely files, modules, and contracts to inspect: `docs/aiws-cowork-skills-manage
 
 Owner: developer session.
 
-Expected output: The draft registry and Cowork-facing skill summary expose enough state to show the same skill identity with `Modified locally` status when an active draft differs from the installed base.
+Expected output: The draft registry and Cowork-facing skill summary expose enough state to show the same skill identity with `Modified locally` or `Modified locally, pending Cowork upload` status when a draft differs from the installed base or has a prepared package.
 
-Acceptance: The system can determine and persist `modified=true` based on draft content compared with the base content or base digest. Status changes are deterministic, do not depend on UI-only state, and survive process restart. A clean reopened draft remains unmodified. A local edit changes the status to `Modified locally`. Reverting clears the draft record and removes local draft files only under allowed roots.
+Acceptance: The system can determine and persist `modified=true` based on draft content compared with the base content or base digest. Status changes are deterministic, do not depend on UI-only state, and survive process restart. A clean reopened draft remains unmodified. A local edit changes the status to `Modified locally`. Preparing a Cowork package records `pending_upload` without changing runtime resolution. Reverting clears the draft record and removes local draft files only under allowed roots; deactivation clears pending upload state without touching Cowork or uploaded packages.
 
 Evidence: Tests should include unchanged draft, changed draft, reopened changed draft, status serialization/readback, and revert behavior. Existing draft record and revert tests in `tests/test_aiws_skill_manager.py` are the base.
 
@@ -110,11 +110,11 @@ Likely files, modules, and contracts to inspect: `core-aiws/contracts/skill-mana
 
 Owner: developer session.
 
-Expected output: Update from GitHub or another managed source detects an active modified draft as a hard conflict and returns only the approved choices.
+Expected output: Update from GitHub or another managed source detects a modified draft or pending Cowork upload as a hard conflict and returns only the approved choices.
 
-Acceptance: With no active modified draft, update can proceed through the normal update path. With an active modified draft, update fails closed and offers exactly: `keep_local_modified_skill_active`, `discard_local_changes_and_update`, and `submit_or_upload_first`. No silent merge, overwrite, background submission, auto-resolution, or extra choice is exposed. The user must make one explicit choice before update continues.
+Acceptance: With no modified draft and no pending Cowork upload, update can proceed through the normal update path. With a modified draft or pending Cowork upload, update fails closed and offers exactly: `keep_local_draft_and_pending_package`, `discard_local_changes_and_update`, and `submit_or_upload_first`. No silent merge, overwrite, background submission, auto-resolution, or extra choice is exposed. The user must make one explicit choice before update continues.
 
-Evidence: Tests should assert the exact machine choices and any Cowork-facing labels map one-to-one to those choices. Existing coverage is in `tests/test_aiws_skill_manager.py` around `update_from_github_decision`; extend it for inactive modified drafts, active unmodified drafts, and UI label mapping if labels are added.
+Evidence: Tests should assert the exact machine choices and any Cowork-facing labels map one-to-one to those choices. Existing coverage is in `tests/test_aiws_skill_manager.py` around `update_from_github_decision`; extend it for clean drafts, modified drafts, pending-upload drafts, and UI label mapping if labels are added.
 
 Likely files, modules, and contracts to inspect: `core-aiws/contracts/skill-management.md`, `docs/aiws-cowork-skills-management-mvp.md`, `aiws-mcp/aiws_mcp/skill_manager.py`, and `tests/test_aiws_skill_manager.py`.
 
@@ -124,7 +124,7 @@ Owner: developer session.
 
 Expected output: All create, validate, activate, stage, update, submit, and revert operations enforce the allowed write roots from the skill-management contract.
 
-Acceptance: Allowed write roots are `~/.aiws/plugins/`, `~/.aiws/state/skill-drafts/`, `~/.aiws/state/skill-proposals/`, and temporary package build output. Managed marketplace and organization plugin files are read-only inputs. Disallowed memory roots are never touched. Path traversal, symlinked roots, symlinked child paths, root-as-draft-path records, non-deterministic draft paths, and direct mutation of managed source packages fail closed.
+Acceptance: Allowed write roots are `~/.aiws/plugins/`, `~/.aiws/state/skill-drafts/`, `~/.aiws/state/skill-proposals/`, `~/.aiws/state/draft-activations/`, and temporary package build output. Managed marketplace and organization plugin files are read-only inputs. Disallowed memory roots are never touched. Path traversal, symlinked roots, symlinked child paths, root-as-draft-path records, non-deterministic draft paths, and direct mutation of managed source packages fail closed.
 
 Evidence: Tests should cover path traversal, symlinked plugin root, symlinked state parent/root, deterministic draft path symlink, draft path outside allowed roots, root-as-draft-path, validation dry-run writes nothing, and activation/staging writes only approved roots. Existing boundary tests in `tests/test_aiws_skill_manager.py` should be preserved and extended; host write-root checks in `tests/test_aiws_mcp.py` are relevant for adapter-owned writes.
 
@@ -136,7 +136,7 @@ Owner: developer session.
 
 Expected output: A compact fixture set and tests cover the full MVP journey without relying on real Cowork, real GitHub, or user home directories.
 
-Acceptance: Fixtures include a valid installed marketplace plugin with one public skill, an invalid skill frontmatter case, a version mismatch case, a modified draft case, an active modified conflict case, a duplicate visible identity case, and a staging proposal record case. Tests use temporary AIWS roots and fake host roots. No test writes to the developer's real `~/.aiws`, `~/.cowork`, `~/.codex`, or managed marketplace checkout.
+Acceptance: Fixtures include a valid installed marketplace plugin with one public skill, an invalid skill frontmatter case, a version mismatch case, a modified draft case, a pending-upload conflict case, a duplicate visible identity case, and a staging proposal record case. Tests use temporary AIWS roots and fake host roots. No test writes to the developer's real `~/.aiws`, `~/.cowork`, `~/.codex`, or managed marketplace checkout.
 
 Evidence: A developer can run the relevant suite locally and see focused failures if identity, validation, staging, conflict handling, or write boundaries regress. Suggested command after implementation is `python -m unittest tests.test_aiws_skill_manager tests.test_aiws_mcp tests.test_aiws_productivity_plugin`.
 

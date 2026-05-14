@@ -100,12 +100,12 @@ The authoritative draft registry lives under:
 ~/.aiws/state/skill-drafts/
 ```
 
-If a modified draft is active, Cowork should show one skill identity with a `Modified locally` status. The draft replaces the installed version in the UI/runtime, but the installed package remains available internally as a fallback/cache.
+In the current Cowork-safe slice, a modified draft is not made active by AIWS. AIWS preserves one skill identity, prepares a package for Cowork upload, and shows draft lifecycle status such as `Modified locally` or `Modified locally, pending Cowork upload`. The installed package remains the runtime source until Cowork accepts the uploaded package.
 
-When updating from GitHub and an active modified draft exists, AIWS fails closed and offers only:
+When updating from GitHub and a modified draft or pending Cowork upload exists, AIWS fails closed and offers only:
 
 ```text
-keep local modified skill active
+keep local draft and pending package
 discard local changes and update
 submit/upload first
 ```

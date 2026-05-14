@@ -23,6 +23,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     build_draft_package,
     create_or_open_draft,
     create_draft_record,
+    deactivate_draft,
     delete_draft_file,
     discover_installed_plugins,
     draft_id,
@@ -331,10 +332,10 @@ class AiwsSkillManagerTests(unittest.TestCase):
             decision = update_from_github_decision(modified)
 
         self.assertFalse(decision["allowed"])
-        self.assertEqual(decision["reason"], "active_modified_draft")
+        self.assertEqual(decision["reason"], "modified_draft_or_pending_upload")
         self.assertEqual(
             decision["choices"],
-            ["keep_local_modified_skill_active", "discard_local_changes_and_update", "submit_or_upload_first"],
+            ["keep_local_draft_and_pending_package", "discard_local_changes_and_update", "submit_or_upload_first"],
         )
 
     def test_create_or_open_draft_copies_valid_plugin_and_records_origin(self) -> None:
@@ -611,10 +612,12 @@ class AiwsSkillManagerTests(unittest.TestCase):
             package_dir = temp_root / "packages"
             self.set_record_validation_status(aiws_root, record_id, "failed")
 
-            result = activate_draft(aiws_root, record_id, "cowork", package_dir)
+            result = activate_draft(aiws_root, record_id, "cowork", package_dir, host_id="cowork-test")
 
             self.assertEqual(result["status"], "host_capability_missing")
+            self.assertEqual(result["activation_status"], "pending_upload")
             self.assertEqual(result["record_id"], record_id)
+            self.assertEqual(result["host_id"], "cowork-test")
             self.assertEqual(result["plugin_id"], "example-plugin")
             self.assertEqual(result["skill_id"], "meeting-followup")
             self.assertTrue(result["modified"])
@@ -633,6 +636,16 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 },
             )
             self.assertTrue(Path(result["package_path"]).is_file())
+            activation_record_path = Path(result["activation_record_path"])
+            self.assertEqual(
+                activation_record_path,
+                aiws_root / "state" / "draft-activations" / "cowork-test" / f"{record_id}.json",
+            )
+            activation_record = json.loads(activation_record_path.read_text())
+            self.assertEqual(activation_record["status"], "pending_upload")
+            self.assertEqual(activation_record["draft_id"], record_id)
+            self.assertEqual(activation_record["host_id"], "cowork-test")
+            self.assertEqual(activation_record["package_path"], result["package_path"])
             self.assertEqual(load_draft_record(aiws_root, record_id).last_validation_status, "passed")
 
     def test_activate_draft_unchanged_returns_not_modified_without_package(self) -> None:
@@ -642,7 +655,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
             package_dir = temp_root / "packages"
             self.set_record_validation_status(aiws_root, record_id, "failed")
 
-            result = activate_draft(aiws_root, record_id, "cowork", package_dir)
+            result = activate_draft(aiws_root, record_id, "cowork", package_dir, host_id="cowork-test")
 
             self.assertEqual(
                 result,
@@ -657,7 +670,62 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 },
             )
             self.assertFalse(package_dir.exists())
+            self.assertFalse((aiws_root / "state" / "draft-activations").exists())
             self.assertEqual(load_draft_record(aiws_root, record_id).last_validation_status, "passed")
+
+    def test_deactivate_draft_clears_matching_pending_upload_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            package_dir = temp_root / "packages"
+            activated = activate_draft(aiws_root, record_id, "cowork", package_dir, host_id="cowork-test")
+            package_path = Path(activated["package_path"])
+
+            result = deactivate_draft(aiws_root, record_id, "cowork", "cowork-test")
+
+            self.assertEqual(result["status"], "deactivated")
+            self.assertEqual(result["activation_status"], "inactive")
+            self.assertTrue(result["cleared"])
+            self.assertFalse(Path(activated["activation_record_path"]).exists())
+            self.assertTrue(package_path.exists())
+            loaded = load_draft_record(aiws_root, record_id)
+            self.assertTrue(loaded.modified)
+
+    def test_deactivate_draft_rejects_mismatched_pending_upload_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            package_dir = temp_root / "packages"
+            activated = activate_draft(aiws_root, record_id, "cowork", package_dir, host_id="cowork-test")
+            activation_record_path = Path(activated["activation_record_path"])
+            payload = json.loads(activation_record_path.read_text())
+            payload["draft_id"] = "other-draft"
+            activation_record_path.write_text(json.dumps(payload))
+
+            with self.assertRaisesRegex(SkillManagerError, "does not match requested draft"):
+                deactivate_draft(aiws_root, record_id, "cowork", "cowork-test")
+
+            self.assertTrue(activation_record_path.exists())
+
+    def test_activate_draft_rejects_tampered_record_id_before_package_or_pending_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            wrong_record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/other")
+            shutil.copyfile(
+                aiws_root / "state" / "skill-drafts" / f"{record_id}.json",
+                aiws_root / "state" / "skill-drafts" / f"{wrong_record_id}.json",
+            )
+            package_dir = temp_root / "packages"
+
+            with self.assertRaisesRegex(SkillManagerError, "canonical draft id"):
+                activate_draft(aiws_root, wrong_record_id, "cowork", package_dir, host_id="cowork-test")
+
+            self.assert_no_package_artifacts(package_dir)
+            self.assertFalse((aiws_root / "state" / "draft-activations").exists())
 
     def test_build_draft_package_missing_requested_skill_fails_closed_without_package(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -704,7 +772,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
             package_dir = temp_root / "packages"
 
             with self.assertRaisesRegex(SkillManagerError, "must not contain symlinks"):
-                activate_draft(aiws_root, record_id, "cowork", package_dir)
+                activate_draft(aiws_root, record_id, "cowork", package_dir, host_id="cowork-test")
 
             self.assert_no_package_artifacts(package_dir)
             loaded = load_draft_record(aiws_root, record_id)
@@ -877,7 +945,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
             aiws_root, record_id, _plugin_root, _record = self.create_meeting_followup_draft(Path(temp))
 
             with self.assertRaisesRegex(SkillManagerError, "Only host_kind='cowork'"):
-                activate_draft(aiws_root, record_id, "codex", Path(temp) / "packages")
+                activate_draft(aiws_root, record_id, "codex", Path(temp) / "packages", host_id="codex-test")
 
     def test_activate_draft_does_not_create_cowork_rpm_host_or_memory_dirs(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -886,7 +954,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
             draft_skill = Path(record.draft_path) / "skills" / "meeting-followup" / "SKILL.md"
             draft_skill.write_text(draft_skill.read_text() + "\nLocal draft edit.\n")
 
-            activate_draft(aiws_root, record_id, "cowork", temp_root / "packages")
+            activate_draft(aiws_root, record_id, "cowork", temp_root / "packages", host_id="cowork-test")
 
             self.assertFalse((aiws_root / "hosts").exists())
             self.assertFalse((aiws_root / "memory").exists())
