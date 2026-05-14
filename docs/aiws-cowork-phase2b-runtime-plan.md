@@ -247,6 +247,23 @@ Acceptance:
 - Skill updates prepared by AIWS flow through Cowork-owned marketplace/package upload or another supported Cowork install/update surface.
 - The report explicitly records that Python, `uv`, `uvx`, and `gh` were not used by AIWS.
 
+### Slice 2B.8A: Cowork Package Intake Probe
+
+Before implementing any automated package handoff, prove whether Cowork consumes packages placed in the writable `package_uploads` surface reported by `aiws.host.surfaces`. Current evidence proves only that `~/.cowork/packages` is writable; it does not prove Cowork watches, imports, installs, or activates packages placed there.
+
+Use the disposable probe utility:
+
+```bash
+python -m scripts.cowork_package_intake_probe \
+  --host-id <existing-cowork-host-id>
+```
+
+The utility reads an existing Cowork host record under `~/.aiws/hosts/<host-id>/host.json`, builds a unique throwaway plugin named `aiws-cowork-package-intake-probe-<yyyymmddhhmmss>`, and copies only that ZIP to the recorded `package_uploads` directory. It must not create or update host records, use real AIWS skill packages, overwrite existing files, follow symlinked upload paths, or write anywhere else under `~/.cowork`.
+
+Probe success requires a new Cowork chat, without using `Settings -> Plugins -> Upload a file`, to see and call `intake-probe` from the unique probe plugin. Anything less is `cowork_install_confirmation_unavailable` or `no_automatic_intake_observed`, not proof that the normal-user manual upload problem is solved.
+
+If the probe plugin appears in Cowork, remove or disable it through Cowork plugin settings when available. If cleanup is unavailable, record the unique probe plugin id, copied package path, and Cowork cleanup limitation as evidence. Never reuse a probe identity.
+
 ### Slice 2B.9: Non-CLI GitHub Submitter
 
 Replace normal-user reliance on host `gh` with a GitHub App, bot, API, or Cowork-compatible GitHub connection.
