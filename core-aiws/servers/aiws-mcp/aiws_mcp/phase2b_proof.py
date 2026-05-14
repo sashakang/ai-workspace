@@ -37,13 +37,20 @@ def runtime_info_payload() -> dict[str, Any]:
     }
 
 
-def create_server():
+def create_server(*, host: str = "127.0.0.1", port: int = 8000, mcp_path: str = "/mcp"):
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover - exercised only without optional runtime dependency
         raise RuntimeError("The MCP SDK is required to run the AIWS Phase 2B proof server.") from exc
 
-    server = FastMCP("aiws-phase2b-proof", stateless_http=True, json_response=True)
+    server = FastMCP(
+        "aiws-phase2b-proof",
+        host=host,
+        port=port,
+        streamable_http_path=mcp_path,
+        stateless_http=True,
+        json_response=True,
+    )
 
     @server.tool(name="aiws.health.ping")
     def health_ping() -> dict[str, Any]:
@@ -56,9 +63,16 @@ def create_server():
     return server
 
 
-def run_server(*, server: Any | None = None, transport: str = "streamable-http") -> None:
+def run_server(
+    *,
+    server: Any | None = None,
+    transport: str = "streamable-http",
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    mcp_path: str = "/mcp",
+) -> None:
     if server is None:
-        server = create_server()
+        server = create_server(host=host, port=port, mcp_path=mcp_path)
     server.run(transport=transport)
 
 
@@ -70,12 +84,28 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("streamable-http", "stdio", "sse"),
         help="MCP transport to use. Defaults to streamable-http for hosted connector testing.",
     )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host interface to bind. Defaults to 127.0.0.1 for local smoke testing.",
+    )
+    parser.add_argument(
+        "--port",
+        default=8000,
+        type=int,
+        help="Port to bind. Defaults to 8000 for local smoke testing.",
+    )
+    parser.add_argument(
+        "--mcp-path",
+        default="/mcp",
+        help="Streamable HTTP MCP path. Defaults to /mcp.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    run_server(transport=args.transport)
+    run_server(transport=args.transport, host=args.host, port=args.port, mcp_path=args.mcp_path)
     return 0
 
 

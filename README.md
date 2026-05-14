@@ -122,6 +122,8 @@ The review and merge process stays with the repository owner:
 
 This keeps local iteration fast while preserving ownership, review, and canonical versioning in the source repo. AI Workspace should help with the mechanics of editing, validating, packaging, and proposing changes, but it should not bypass the repo's normal review process.
 
+For private and non-public skills, the near-term maintainer workflow is a Claude Code "skill workshop": maintainers use Claude Code skills, workflows, and commands to update source, validate contracts, build Cowork packages, push through the maintainer or bot identity, and prepare marketplace artifacts on demand. That workflow is for maintainers, not normal Cowork users. Cowork remains the user-facing place to install and use skills, and the richer Cowork edit UX is deferred until the runtime and security model are clean.
+
 ## Why This Is Extensible
 
 This repository is not only an analyst plugin repo. It is a platform for adding more repo-backed skills and plugins with the same architecture.

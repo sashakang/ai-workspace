@@ -8,7 +8,7 @@ Current install status: the Personal marketplace path is now the primary journey
 
 The MVP is intentionally narrow. It covers creating or opening a draft from an installed skill, validating the draft, activating a modified local skill, staging a proposed improvement, submitting it for maintainer review from Cowork, tracking local modification state, and handling update conflicts safely. GitHub can be used as the backend review system, but normal users should not need to use GitHub UI directly. The MVP does not wait for broader memory sync, complete `aiws-mcp` alignment, or the final target control plane, but it must remain compatible with the target architecture in `docs/aiws-target-architecture.md`.
 
-Runtime status has two levels. The current MCP-backed `core-aiws` bridge is a technical pilot path because it starts `aiws-mcp` through `uvx`. It can validate the lifecycle semantics with AIWS maintainers and technical testers, but it is not the target Cowork user experience. The target MVP package must not require normal users to install Python, install `uvx`, configure GitHub CLI, or run terminal commands.
+Runtime status has three levels. The current MCP-backed `core-aiws` bridge is a technical pilot path because it starts `aiws-mcp` through `uvx`. It can validate the lifecycle semantics with AIWS maintainers and technical testers, but it is not the target Cowork user experience. For private and non-public skills, the near-term practical path is a Claude Code skill workshop for maintainers/operators: update source, validate contracts, build Cowork packages, push to GitHub as the maintainer or bot, and prepare or upload marketplace artifacts on demand. That workshop must not run AIWS MCP inside Claude Code, and it is not the normal Cowork user path. The target MVP package must not require normal users to install Python, install `uvx`, configure GitHub CLI, or run terminal commands.
 
 ## Source Documents
 
@@ -36,6 +36,8 @@ The user starts from an installed Cowork skill, such as `aiws-productivity/meeti
 The MVP should use product-language targets such as `Personal`, `PNC skills`, `Company skills`, and `Public skills`. Branches, commits, remotes, pull request creation, and package rebuild details are backend concerns unless the user explicitly asks for them.
 
 Normal-user operations must stay inside Cowork. Any Python, `uvx`, `gh`, or shell requirement belongs only to a technical pilot checklist and must be removed or hidden behind a self-contained package before broader customer rollout.
+
+Cowork remains the product target for install, use, and eventually skill editing. The richer Cowork edit UX is deferred until the runtime and security model are clean enough to protect private skills, memory, drafts, proposal records, and source content.
 
 ## Local State
 
@@ -164,6 +166,8 @@ Merged
 This MVP does not expose memory tools, run memory import/export flows, or touch memory paths. Memory sync is a later shared-infrastructure phase.
 
 This MVP also does not require complete `aiws-mcp` alignment. It may be implemented through the `core-aiws` skill-management bridge or an equivalent Cowork adapter now, as long as the state and identity rules remain compatible with the target control plane. In target state, install, update, draft editing, local activation, staging, and submission should map cleanly onto the AIWS runtime under `~/.aiws/` and the host adapter model in `docs/aiws-target-architecture.md`.
+
+Hosted remote MCP is not the near-term path for private or non-public skills. Until auth, permissions, and tenancy are designed, remote MCP proofs must stay harmless and must not expose private skills, memory, drafts, proposal records, source content, or lifecycle tools.
 
 Allowed write roots for the MVP are:
 

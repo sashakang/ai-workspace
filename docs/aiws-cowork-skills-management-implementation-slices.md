@@ -4,7 +4,9 @@ This document turns the urgent Phase 2 Cowork skills-management MVP in `docs/aiw
 
 Phase 2 now starts from the Cowork Personal marketplace path. The user reported that Cowork can install the AIWS plugins from the marketplace and generate `meeting-followup` nodes correctly. The proven Cowork Team upload/import path remains a fallback, not the primary journey. The installed source package for the MVP should normally be marketplace-installed; it may be an uploaded Cowork plugin ZIP only when marketplace access is unavailable or the fallback path is explicitly under test. In both cases, Cowork must own the install operation and AIWS must not edit runtime RPM state by hand.
 
-The current `core-aiws` MCP bridge is a Phase 2A technical pilot when it depends on `uvx` to launch `aiws-mcp`. That dependency is acceptable only for maintainers and technical testers. Phase 2B now targets a hosted FastMCP or official MCP Python SDK AIWS control-plane proof registered through Cowork's supported managed/custom connector path. Cowork marketplace/upload plugins remain the skills distribution and user-facing UX surface; the AIWS MCP/control-plane runtime is a separate deployable surface. Normal Cowork users must not require Python, `uvx`, GitHub CLI, shell commands, uploaded-plugin runtime setup, or manual MCP setup.
+The current `core-aiws` MCP bridge is a Phase 2A technical pilot when it depends on `uvx` to launch `aiws-mcp`. That dependency is acceptable only for maintainers and technical testers. For private and non-public skills, the preferred near-term path is now a Claude Code skill workshop for maintainers/operators, not MCP running inside Claude Code and not hosted remote MCP. The workshop should update skill source, validate contracts, build Cowork packages, push to GitHub as the maintainer or bot, and prepare or upload marketplace artifacts on demand.
+
+Cowork marketplace/upload plugins remain the skills distribution and user-facing install/use surface. Cowork edit UX remains the product target, but it is deferred until the runtime and security model are clean. Hosted FastMCP or official MCP Python SDK connector work remains a parked secondary/future proof registered through Cowork's supported managed/custom connector path. It must not expose private skills, memory, drafts, proposal records, or source content until auth, permissions, and tenancy are designed. Normal Cowork users must not require Python, `uvx`, GitHub CLI, shell commands, uploaded-plugin runtime setup, or manual MCP setup.
 
 The implementation must stay aligned with `core-aiws/contracts/skill-management.md`. The main implementation surfaces to inspect are `aiws-mcp/aiws_mcp/skill_manager.py` and `aiws-mcp/aiws_mcp/runtime.py`, with tests in `tests/test_aiws_skill_manager.py`, `tests/test_aiws_mcp.py`, and `tests/test_aiws_productivity_plugin.py`.
 
@@ -19,6 +21,8 @@ Previous Cowork runtime blocker: the user reported that the Cowork session did n
 - Do not mutate managed marketplace or organization plugin files in place.
 - Keep normal user flows product-language first: `Personal`, `PNC skills`, `Company skills`, and `Public skills`.
 - Do not treat `uvx`, Python, GitHub CLI, or terminal setup as acceptable requirements for normal users. If a slice depends on them, label it technical-pilot only.
+- Do not run AIWS MCP inside Claude Code for the maintainer/private-skill workshop path.
+- Do not expose private skills, memory, drafts, proposal records, or source content through hosted remote MCP until auth, permissions, and tenancy are designed.
 - Do not treat uploaded-plugin `.mcp.json` stdio/HTTP runtime experiments as the Phase 2B path forward. They are closed evidence unless Cowork documents or proves a supported local runtime path.
 - Branches, commits, package rebuilds, and pull requests are backend details unless the user explicitly asks. Normal users stage and submit through Cowork UI; repo and skill maintainers review and merge in GitHub.
 - AI-engineering reviewer rule: every slice needs a brief reviewer note that explains the AI-facing behavior, the state transition, and why the change cannot silently overwrite user edits or expose duplicate skill identities.
@@ -134,17 +138,27 @@ Evidence: A developer can run the relevant suite locally and see focused failure
 
 Likely files, modules, and contracts to inspect: `tests/test_aiws_skill_manager.py`, `tests/test_aiws_mcp.py`, `tests/test_aiws_productivity_plugin.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `aiws-mcp/aiws_mcp/runtime.py`, `.claude-plugin/marketplace.json`, `aiws-productivity/.claude-plugin/plugin.json`, and `aiws-productivity/contracts/aiws-productivity.contract.json`.
 
-## Slice 10: Hosted FastMCP Control-Plane Proof
+## Slice 10: Claude Code Skill Workshop
 
 Owner: developer session.
 
-Expected output: A hosted FastMCP or official MCP Python SDK AIWS control-plane proof is registered through Cowork's supported managed/custom connector path. It exposes only harmless tools such as `aiws.health.ping` and `aiws.runtime.info`.
+Expected output: A maintainer/operator workflow uses Claude Code functionality, not MCP in Claude Code, to update skill source, validate contracts, build Cowork packages, push to GitHub as the maintainer or bot, and prepare or upload marketplace artifacts on demand.
 
-Acceptance: A normal Cowork user can install the AIWS skills through Cowork and access the harmless AIWS control-plane proof tools through Cowork without Python, `uvx`, GitHub CLI, shell commands, uploaded-plugin runtime setup, or manual MCP setup. The proof must not expose memory tools, mutate managed marketplace or organization plugin files, or claim that draft/edit/validate/stage/submit is production-ready. FastMCP/Python is preferred because the existing AIWS control-plane code is already Python; TypeScript SDK work is deferred unless AIWS builds a new hosted service from scratch.
+Acceptance: The workflow is explicitly labeled maintainer/private-skill only and is not presented as the normal Cowork user path. It validates before package build, push, or upload. It keeps Cowork as the user-facing install/use surface, preserves repository review boundaries, and does not expose private skill content through hosted MCP. It can prepare artifacts for Cowork while leaving Cowork edit UX deferred until the runtime/security model is clean.
 
-Evidence: Cowork connector configuration, runtime logs, visible tool names, one successful `aiws.health.ping` or `aiws.runtime.info` call, and a dependency audit proving the user did not use Python/`uvx`/`gh`/shell/manual MCP setup. If Cowork cannot support the connector path, record Phase 2B as blocked rather than passing the end-user MVP.
+Evidence: Maintainer workflow doc or command surface, package build output, validation/test output, changed-file summary, and dry-run or real publication notes when explicitly requested.
 
-## Slice 11: Full Phase 2B Lifecycle Through Cowork
+## Slice 11: Parked Hosted FastMCP Control-Plane Proof
+
+Owner: developer session.
+
+Expected output: A hosted FastMCP or official MCP Python SDK AIWS control-plane proof can be registered through Cowork's supported managed/custom connector path when needed. It exposes only harmless tools such as `aiws.health.ping` and `aiws.runtime.info`.
+
+Acceptance: A normal Cowork user can install the AIWS skills through Cowork and access the harmless AIWS control-plane proof tools through Cowork without Python, `uvx`, GitHub CLI, shell commands, uploaded-plugin runtime setup, or manual MCP setup. The proof must not expose memory tools, private skills, drafts, proposal records, source content, lifecycle tools, or managed marketplace/organization plugin mutation. It must not claim that draft/edit/validate/stage/submit is production-ready. FastMCP/Python is preferred because the existing AIWS control-plane code is already Python; TypeScript SDK work is deferred unless AIWS builds a new hosted service from scratch.
+
+Evidence: Cowork connector configuration, runtime logs, visible tool names, one successful `aiws.health.ping` or `aiws.runtime.info` call, and a dependency audit proving the user did not use Python/`uvx`/`gh`/shell/manual MCP setup. If Cowork cannot support the connector path, keep this proof parked rather than passing the end-user MVP.
+
+## Slice 12: Full Phase 2B Lifecycle Through Cowork
 
 Owner: developer session.
 
@@ -160,9 +174,10 @@ Evidence: Manual Cowork validation report, connector/runtime logs, proposal stat
 2. Add the missing Slice 1 and Slice 2 edge tests while touching the same surface: missing skill, invalid source plugin, and a draft validation operation that updates or returns `last_validation_status` without activation or staging.
 3. Wire activation identity behavior and `Modified locally` status.
 4. Keep Phase 2A implementation evidence separate: run the focused unit tests and add missing fixtures where coverage is still thin.
-5. Prove Slice 10 first for Phase 2B: harmless hosted FastMCP or official MCP Python SDK control-plane tools (`aiws.health.ping`, `aiws.runtime.info`) through Cowork's supported managed/custom connector path.
-6. Design the connector-backed draft lifecycle around the proven control-plane path.
-7. Implement or resume lifecycle work through that path as appropriate, including local proposal-record staging as distinct from submit/upload and update conflict choice handling.
-8. Add GitHub App, bot, API, or Cowork-compatible submit-for-review behavior later than connector proof and lifecycle design; normal-user GitHub CLI submission must be replaced.
+5. Build Slice 10 as the near-term maintainer/private-skill path: Claude Code skill workshop operations for source updates, validation, Cowork package build, GitHub push, and marketplace artifact preparation.
+6. Keep Slice 11 parked as a harmless connector proof only: hosted FastMCP or official MCP Python SDK tools (`aiws.health.ping`, `aiws.runtime.info`) through Cowork's supported managed/custom connector path, with no private state exposure.
+7. Design any connector-backed draft lifecycle only after the security model is clear enough to protect private skills, memory, drafts, proposal records, and source content.
+8. Implement or resume lifecycle work through the clean Cowork path as appropriate, including local proposal-record staging as distinct from submit/upload and update conflict choice handling.
+9. Add GitHub App, bot, API, or Cowork-compatible submit-for-review behavior later than the workshop and runtime/security design; normal-user GitHub CLI submission must be replaced.
 
 The final implementation review should check the AI-engineering reviewer rule for every slice: the behavior must be understandable to an AI agent operating through the skill-management surface, state transitions must be explicit, and no flow may quietly overwrite local work or expose two visible copies of the same logical skill.

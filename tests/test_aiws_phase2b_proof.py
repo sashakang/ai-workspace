@@ -29,11 +29,14 @@ FORBIDDEN_TOOL_PARTS = (
 
 
 class FakeFastMCP:
+    instances: list["FakeFastMCP"] = []
+
     def __init__(self, name: str, **kwargs: Any) -> None:
         self.name = name
         self.kwargs = kwargs
         self.tools: dict[str, Callable[..., Any]] = {}
         self.run_calls: list[dict[str, Any]] = []
+        self.instances.append(self)
 
     def tool(self, *, name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -48,6 +51,7 @@ class FakeFastMCP:
 
 class FakeMcpSdk:
     def __enter__(self) -> type[FakeFastMCP]:
+        FakeFastMCP.instances = []
         self.previous = {
             name: sys.modules.get(name)
             for name in ("mcp", "mcp.server", "mcp.server.fastmcp")
@@ -86,10 +90,21 @@ class AiwsPhase2BProofTests(unittest.TestCase):
             server = phase2b_proof.create_server()
 
         self.assertEqual(server.name, "aiws-phase2b-proof")
+        self.assertEqual(server.kwargs["host"], "127.0.0.1")
+        self.assertEqual(server.kwargs["port"], 8000)
+        self.assertEqual(server.kwargs["streamable_http_path"], "/mcp")
         self.assertTrue(server.kwargs["stateless_http"])
         self.assertTrue(server.kwargs["json_response"])
         self.assertEqual(tuple(server.tools), phase2b_proof.PROOF_TOOL_NAMES)
         self.assert_no_forbidden_tool_parts(server.tools)
+
+    def test_create_server_passes_connector_binding_options_to_fastmcp(self) -> None:
+        with FakeMcpSdk():
+            server = phase2b_proof.create_server(host="0.0.0.0", port=9001, mcp_path="/aiws/mcp")
+
+        self.assertEqual(server.kwargs["host"], "0.0.0.0")
+        self.assertEqual(server.kwargs["port"], 9001)
+        self.assertEqual(server.kwargs["streamable_http_path"], "/aiws/mcp")
 
     def test_payloads_include_explicit_safety_flags(self) -> None:
         payloads = [
@@ -115,10 +130,23 @@ class AiwsPhase2BProofTests(unittest.TestCase):
 
         self.assertEqual(server.run_calls, [{"transport": "streamable-http"}])
 
+    def test_main_passes_cli_binding_options_and_keeps_streamable_http_default(self) -> None:
+        with FakeMcpSdk():
+            result = phase2b_proof.main(["--host", "0.0.0.0", "--port", "9001", "--mcp-path", "/aiws/mcp"])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(FakeFastMCP.instances), 1)
+        server = FakeFastMCP.instances[0]
+        self.assertEqual(server.kwargs["host"], "0.0.0.0")
+        self.assertEqual(server.kwargs["port"], 9001)
+        self.assertEqual(server.kwargs["streamable_http_path"], "/aiws/mcp")
+        self.assertEqual(server.run_calls, [{"transport": "streamable-http"}])
+
     def test_phase2b_docs_capture_run_and_cowork_test_instructions(self) -> None:
         phase_plan = (REPO_ROOT / "docs" / "aiws-cowork-phase2b-runtime-plan.md").read_text(encoding="utf-8")
 
         self.assertIn("python -m aiws_mcp.phase2b_proof --transport streamable-http", phase_plan)
+        self.assertIn("python -m aiws_mcp.phase2b_proof --host 0.0.0.0 --port \"$PORT\" --mcp-path /mcp", phase_plan)
         self.assertIn("http://localhost:8000/mcp", phase_plan)
         self.assertIn("aiws.health.ping", phase_plan)
         self.assertIn("aiws.runtime.info", phase_plan)
