@@ -1,12 +1,16 @@
 # AIWS Cowork Phase 2B Runtime Plan
 
-Updated: 2026-05-14
+Updated: 2026-05-15
 
 ## Status
 
 Phase 2A is validated as a technical pilot. Cowork can install the AIWS marketplace plugins, expose the AIWS draft-management tools from `core-aiws`, create and edit a draft, validate it, stage a proposal, submit it for review with authenticated host `gh`, create a GitHub PR, and complete maintainer review. That proves the lifecycle semantics.
 
 The regular Cowork user draft/edit/validate/stage/submit path is also proven end to end for `aiws-productivity:meeting-followup`. The 2026-05-14 test opened draft `aiws-productivity--meeting-followup--de0e75a572` from installed plugin version `0.2.1`, edited only the draft copy under `~/.aiws/plugins/...`, staged proposal `skillprop_ed458362021141179dbdb85a9df73794`, and submitted PR #2 to `sashakang/aiws-skill-tests`. The PR is open and non-draft. Installed plugin files, marketplace files, `~/.claude`, and Cowork runtime files were untouched. That historical test predated the corrected Gate 1 boundary; current normal Cowork submission leaves review and merge to repository maintainers and policy instead of writing product-level reviewer-role metadata.
+
+The 2026-05-15 regular-user loop is now complete and recorded in the testing manual. Cowork opened and edited draft `aiws-productivity--meeting-followup--de0e75a572`, validated digest `c94dc08ad7a6633e2755611fc8f9866a158793c63617325cb9db63618e964265`, prepared a `pending_upload` package, verified the manually uploaded modified package in a new Cowork chat, cleared the pending-upload marker, staged proposal `skillprop_bb386ac3528247c7bf7ddb88793497b2`, and submitted PR #3 to `sashakang/aiws-skill-tests`. The repository allowlist guard also worked: a proposal staged with the literal placeholder `<test review repository>` was blocked before submit. See [AIWS Testing Manual](./aiws-testing-manual.md), [Cowork Modified Draft Upload Report](./cowork-modified-draft-upload-report-2026-05-15.md), [Cowork Pending Upload Deactivation Report](./cowork-pending-upload-deactivation-report-2026-05-15.md), and [Cowork Proposal Submit Report](./cowork-proposal-submit-report-2026-05-15.md).
+
+The product gap is now concrete. Manual package upload works as a fallback/technical-pilot bridge, but it is not acceptable as the final regular-user activation experience because it can leave duplicate visible `meeting-followup` instances in Cowork. The next implementation slice must make activation/update user-friendly: no manual ZIP handling for regular users, no duplicate visible plugin instances, no direct mutation of installed marketplace files, and a truthful non-terminal fallback if Cowork still cannot activate a prepared package programmatically.
 
 The 2026-05-14 canonical Cowork user test also passed for the normal install/use/update path. Cowork installed marketplace `sashakang/ai-workspace`, installed `core-aiws@ai-workspace` and `aiws-productivity@ai-workspace`, exposed `aiws-productivity:meeting-followup`, invoked the skill successfully, updated the marketplace/plugins through the Cowork UI, and kept `meeting-followup` visible after update. See [Cowork Canonical User Test Report](./cowork-canonical-user-test-report-2026-05-14.md).
 
@@ -237,6 +241,8 @@ This slice is also paused until a supported local runtime path exists. The FastM
 
 Run the lifecycle again from a normal Cowork user path where AIWS does not rely on user-installed Python, `uv`, `uvx`, or `gh`.
 
+Status: completed for the current technical-pilot path on 2026-05-15. Marketplace install/use, draft open/edit/validate, `pending_upload` package preparation, manual upload verification, pending-upload cleanup, staging, repository guard, and submit-for-review all passed and are recorded in the testing manual. This does not make activation end-user ready, because modified-skill activation still required manual package upload and produced duplicate visible skill instances.
+
 Acceptance:
 
 - Marketplace install is still the primary install path.
@@ -263,6 +269,34 @@ The utility reads an existing Cowork host record under `~/.aiws/hosts/<host-id>/
 Probe success requires a new Cowork chat, without using `Settings -> Plugins -> Upload a file`, to see and call `intake-probe` from the unique probe plugin. Anything less is `cowork_install_confirmation_unavailable` or `no_automatic_intake_observed`, not proof that the normal-user manual upload problem is solved.
 
 If the probe plugin appears in Cowork, remove or disable it through Cowork plugin settings when available. If cleanup is unavailable, record the unique probe plugin id, copied package path, and Cowork cleanup limitation as evidence. Never reuse a probe identity.
+
+### Slice 2B.8B: User-Friendly Cowork Activation And Update
+
+Replace the current manual-upload activation bridge with a Cowork-safe activation/update path that a normal user can complete without handling ZIP files.
+
+Current evidence:
+
+- `activate_draft` can prepare a package and record `pending_upload`.
+- Manual upload of that package through Cowork works and the modified skill runs.
+- Cowork may show both the original marketplace package and uploaded modified package, so the current bridge can expose duplicate visible skill identities.
+- `deactivate_draft` correctly clears only AIWS pending-upload state and does not uninstall the Cowork-uploaded package.
+
+Expected output:
+
+- A Cowork-facing activate/update action can apply or hand off the modified package through a Cowork-supported surface without asking the regular user to locate or upload a ZIP manually.
+- The same logical skill identity remains visible to the user; duplicate visible `plugin_id + skill_id` variants are avoided, hidden, or treated as a fail-closed conflict with clear instructions.
+- Installed marketplace and organization plugin files stay read-only to AIWS.
+- `~/.claude`, Cowork RPM/runtime files, and unmanaged plugin folders remain untouched.
+- If Cowork cannot support programmatic activation, the response remains non-terminal and honest, but the user-facing path should be simpler than "find this ZIP and upload it".
+
+Acceptance:
+
+- A modified draft can be activated or prepared for activation without manual ZIP handling in the normal-user happy path.
+- Activation does not leave two active visible copies of `aiws-productivity:meeting-followup` unless the user explicitly chooses a separate uploaded copy or scope.
+- Cleanup semantics are explicit: clearing AIWS pending state is separate from uninstalling a Cowork-uploaded plugin.
+- Re-running activation is idempotent or returns the existing pending/active state without creating duplicate packages or duplicate visible skills.
+- The action reports whether Cowork activation is `active`, `pending_upload`, `handoff_required`, or `host_capability_missing`.
+- The test manual includes the new scenario and the old manual-upload scenario remains labeled fallback/technical-pilot only.
 
 ### Slice 2B.9: Non-CLI GitHub Submitter
 

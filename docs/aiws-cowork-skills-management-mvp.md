@@ -10,6 +10,10 @@ The MVP is intentionally narrow. It covers creating or opening a draft from an i
 
 Runtime status has three levels. The current MCP-backed `core-aiws` bridge is a technical pilot path because it starts `aiws-mcp` through `uvx`. It can validate the lifecycle semantics with AIWS maintainers and technical testers, but it is not the target Cowork user experience. For private and non-public skills, the near-term practical path is a Claude Code skill workshop for maintainers/operators: update source, validate contracts, build Cowork packages, push to GitHub as the maintainer or bot, and prepare or upload marketplace artifacts on demand. That workshop must not run AIWS MCP inside Claude Code, and it is not the normal Cowork user path. The target MVP package must not require normal users to install Python, install `uvx`, configure GitHub CLI, or run terminal commands.
 
+Current validation status as of 2026-05-15: the regular Cowork user loop has passed for `aiws-productivity:meeting-followup`. The tested flow opened and edited a draft, validated it, prepared a `pending_upload` package, manually uploaded and verified the modified package, cleared the pending-upload marker, staged a proposal, enforced the repository allowlist guard, and submitted PR #3 to `sashakang/aiws-skill-tests`. See `docs/aiws-testing-manual.md`, `docs/cowork-modified-draft-upload-report-2026-05-15.md`, `docs/cowork-pending-upload-deactivation-report-2026-05-15.md`, and `docs/cowork-proposal-submit-report-2026-05-15.md`.
+
+The remaining MVP blocker is activation UX. Manual package upload is validated as a fallback, but it is not acceptable as the normal user path because it can leave duplicate visible plugin instances. The next product slice must make modified-skill activation/update user-friendly, preserve one visible logical skill identity, and keep installed marketplace files read-only.
+
 ## Source Documents
 
 Use these documents as the governing references:
@@ -62,6 +66,8 @@ Each draft registry record should preserve the fields required by `core-aiws/con
 ## Identity And Status
 
 AIWS must preserve one user-facing skill identity. In the current Cowork-safe slice, a modified local draft does not replace the installed version in the Cowork UI/runtime. AIWS prepares a package and records `pending_upload`; the user can use the modified skill only after uploading that package through Cowork.
+
+The 2026-05-15 CW-09 test proved that manual upload of the prepared package works, but it also showed the concrete product problem: Cowork can expose both the original marketplace plugin and the uploaded modified package. That is acceptable evidence for the technical pilot, but the final MVP must not make regular users reason about duplicate plugin instances.
 
 Cowork must not show two visible copies of the same logical skill. The logical identity remains:
 
@@ -193,4 +199,4 @@ The MVP is done when a current Cowork user can:
 - update safely, with modified draft or pending-upload conflicts limited to the three approved choices
 - install and use the skill-management workflow without installing Python, `uvx`, GitHub CLI, or running terminal commands
 
-The technical pilot is useful but not end-user complete while it depends on `uvx` or local GitHub CLI. The MVP is not done if it mutates managed marketplace or organization plugin files in place, creates a second visible copy of the same logical skill, hides local modification state, requires normal users to use GitHub UI for submission, requires normal users to install Python/`uvx`/`gh`, or lets update flows overwrite local edits or pending uploads without explicit user choice.
+The technical pilot is useful but not end-user complete while it depends on `uvx` or local GitHub CLI. The MVP is not done if it mutates managed marketplace or organization plugin files in place, creates a second visible copy of the same logical skill, hides local modification state, requires normal users to use GitHub UI for submission, requires normal users to install Python/`uvx`/`gh`, requires normal users to manually upload ZIP files for the happy path, or lets update flows overwrite local edits or pending uploads without explicit user choice.

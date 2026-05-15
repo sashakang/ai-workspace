@@ -16,6 +16,8 @@ The current tester-facing Phase 2A scenario is tracked in `docs/cowork-skills-ma
 
 Previous Cowork runtime blocker: the user reported that the Cowork session did not expose `aiws.skills.create_or_open_draft` or `aiws.skills.validate_draft` as callable tools. ToolSearch returned no AIWS draft-management schemas. `core-aiws` version `0.3.7` now bundles the AIWS MCP bridge source, includes the Scenario D draft-record safety fix, and returns a safe submit-for-review handoff when `gh` is unavailable. Cowork runtime testing on 2026-05-14 validated the full Phase 2A A-H lifecycle with host `gh` present, including PR creation and maintainer merge in the private test repo. A later regular Cowork user test proved the draft/edit/validate/stage/submit path end to end for `aiws-productivity:meeting-followup`, including draft `aiws-productivity--meeting-followup--de0e75a572`, proposal `skillprop_ed458362021141179dbdb85a9df73794`, and PR #2 in `sashakang/aiws-skill-tests`. That historical test predated the corrected Gate 1 boundary; current normal Cowork submission leaves review and merge to repository maintainers and policy instead of writing product-level reviewer-role metadata. Do not count manual `/tmp` copies, schema-only validation, CLI-only execution, or direct filesystem reconstruction as Cowork runtime validation.
 
+Current validation update, 2026-05-15: the regular-user loop has now been retested and recorded in `docs/aiws-testing-manual.md`. Draft `aiws-productivity--meeting-followup--de0e75a572` validated with digest `c94dc08ad7a6633e2755611fc8f9866a158793c63617325cb9db63618e964265`, manual package upload worked, pending-upload cleanup worked, the repository allowlist guard blocked a placeholder target repo, and proposal `skillprop_bb386ac3528247c7bf7ddb88793497b2` submitted PR #3 to `sashakang/aiws-skill-tests`. The remaining product gap is activation UX: manual upload is a fallback/technical-pilot bridge, and duplicate visible plugin instances are not acceptable for the final normal-user path.
+
 ## Session Rules
 
 - Owner for every slice: developer session.
@@ -69,6 +71,18 @@ Cowork runtime validation: direct host install is unsupported by current Cowork 
 Evidence: Tests should prove a modified draft produces a package and a `pending_upload` record, unchanged/invalid/out-of-scope drafts do not, pending state does not leak into runtime resolution, and activation does not mutate installed marketplace files, Cowork runtime/RPM state, `~/.claude`, proposal records, or GitHub. Add coverage proving activation rejects tampered draft records before package or pending-state writes, activation metadata cannot escape `~/.aiws/state/draft-activations/` through path traversal or symlinks, and `deactivate_draft` clears only the matching pending record by exact `draft_id` without deleting user-chosen package artifacts or clearing the draft's modified state.
 
 Likely files, modules, and contracts to inspect: `docs/aiws-cowork-skills-management-mvp.md`, `core-aiws/contracts/skill-management.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, and `tests/test_aiws_mcp.py`.
+
+## Slice 3B: Replace Manual Upload With User-Friendly Activation
+
+Owner: developer session.
+
+Expected output: A normal Cowork user can activate or prepare activation for a modified draft without manually finding and uploading a ZIP in the happy path. The implementation must use only Cowork-supported install/update surfaces. If no supported activation surface exists, the result stays non-terminal and honest, but the UX should guide the user through one clear Cowork action rather than exposing package mechanics as the product flow.
+
+Acceptance: Activation preserves one logical visible skill identity. It does not leave two visible active copies of `aiws-productivity:meeting-followup` unless the user explicitly chooses a separate uploaded copy or scope. Installed marketplace and organization plugin folders remain read-only. `~/.claude`, Cowork RPM/runtime files, and unmanaged plugin folders remain untouched. Repeated activation is idempotent or returns the existing pending/active state. Cleanup semantics distinguish "clear AIWS pending state" from "uninstall Cowork-uploaded plugin". The manual ZIP upload path remains documented only as fallback/technical-pilot behavior.
+
+Evidence: Tests should extend the current CW-08/CW-09/CW-10 coverage. They must prove no manual ZIP handling is required in the happy path, duplicate visible skill identity is avoided or reported as a fail-closed conflict, activation state is correctly reported as `active`, `pending_upload`, `handoff_required`, or `host_capability_missing`, and deactivation does not remove Cowork-owned installed packages. Add a new scenario to `docs/aiws-testing-manual.md` when the implementation exists.
+
+Likely files, modules, and contracts to inspect: `docs/aiws-testing-manual.md`, `docs/cowork-modified-draft-upload-report-2026-05-15.md`, `docs/cowork-pending-upload-deactivation-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `scripts/cowork_package_intake_probe.py`, `tests/test_aiws_mcp.py`, and `tests/test_cowork_package_intake_probe.py`.
 
 ## Slice 4: Track Modified Locally Status
 
