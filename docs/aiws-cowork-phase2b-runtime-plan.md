@@ -278,6 +278,8 @@ Replace the current manual-upload activation bridge with a Cowork-safe activatio
 
 Gate 1: approved for staged implementation in [Cowork Activation And Update Gate 1](./cowork-activation-update-gate1-2026-05-15.md). The approved scope is activation handoff improvement, not fake activation. AIWS may prepare and hand off packages through safe Cowork-supported upload surfaces, but it must not claim `active` until Cowork confirms the modified package is visible and callable through a supported mechanism.
 
+Updated Gate 1: [Cowork Activation UX Gate 1](./cowork-activation-ux-gate1-2026-05-15.md) supersedes local activation as the normal-user goal. Current Cowork documentation supports marketplace update/sync as the real delivery mechanism: regular users propose changes, maintainers merge them, and Cowork receives the updated plugin through GitHub-synced marketplace update/sync or same-name manual marketplace upload. Local package activation remains a technical-pilot fallback only.
+
 Current evidence:
 
 - `activate_draft` can prepare a package and record `pending_upload`.

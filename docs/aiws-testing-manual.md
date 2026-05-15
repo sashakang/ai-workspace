@@ -45,6 +45,7 @@ Common placeholders:
 | CW-10A | Revert stale draft records | Manual Cowork cleanup | PASS |
 | CW-11 | Stage proposal without submitting | Manual Cowork | PASS |
 | CW-12 | Submit proposal for review | Manual Cowork + GitHub | PASS or non-terminal handoff |
+| CW-12A | Post-merge marketplace delivery guidance | Cowork/product workflow | Planned |
 | CW-13 | Cowork package intake probe | Local command + new Cowork chat | Evidence-gathering |
 | CW-14 | Hosted/uploaded MCP smoke experiments | Manual Cowork diagnostic | Currently BLOCKED |
 | AUTO-01 | Cowork ZIP package builder tests | Automated unittest | PASS |
@@ -767,6 +768,25 @@ If a proposal was accidentally staged with the literal placeholder `<test review
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-h-submit-for-review-optional-and-guarded), [Regular User Draft Submit Report](./cowork-regular-user-draft-submit-report-2026-05-14.md), and [Cowork Proposal Submit Report](./cowork-proposal-submit-report-2026-05-15.md).
 
 Latest 0.3.13 evidence: [Cowork Inspected Draft Proposal Submit PASS](./cowork-inspected-draft-proposal-submit-pass-2026-05-15.md).
+
+## Scenario 12A: Post-Merge Marketplace Delivery Guidance
+
+Purpose: confirm the normal user path does not ask users to activate local ZIP packages after a proposal is submitted. The updated skill reaches Cowork through marketplace update/sync after maintainer merge.
+
+Status: planned by [Cowork Activation UX Gate 1](./cowork-activation-ux-gate1-2026-05-15.md).
+
+Expected behavior:
+
+```text
+regular user action: submit proposal for review
+maintainer action: review and merge
+delivery path:
+- GitHub-synced marketplace: trigger Cowork marketplace update/sync or rely on automatic sync if enabled
+- manual marketplace: maintainer/admin uploads a new ZIP with the same plugin name
+regular user manual ZIP upload: no
+local package activation: fallback/technical pilot only
+duplicate visible skill copies: not acceptable in the normal path
+```
 
 ## Scenario 13: Cowork Package Intake Probe
 

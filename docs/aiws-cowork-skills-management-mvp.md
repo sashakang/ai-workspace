@@ -12,7 +12,7 @@ Runtime status has three levels. The current MCP-backed `core-aiws` bridge is a 
 
 Current validation status as of 2026-05-15: the regular Cowork user loop has passed for `aiws-productivity:meeting-followup`. The tested flow opened and edited a draft, validated it, prepared a `pending_upload` package, manually uploaded and verified the modified package, cleared the pending-upload marker, staged a proposal, enforced the repository allowlist guard, and submitted PR #3 to `sashakang/aiws-skill-tests`. See `docs/aiws-testing-manual.md`, `docs/cowork-modified-draft-upload-report-2026-05-15.md`, `docs/cowork-pending-upload-deactivation-report-2026-05-15.md`, and `docs/cowork-proposal-submit-report-2026-05-15.md`.
 
-The remaining MVP blocker is activation UX. Manual package upload is validated as a fallback, but it is not acceptable as the normal user path because it can leave duplicate visible plugin instances. The next product slice must make modified-skill activation/update user-friendly, preserve one visible logical skill identity, and keep installed marketplace files read-only.
+The remaining MVP blocker is update delivery after review. Manual package upload is validated as a fallback, but it is not acceptable as the normal user path because it can leave duplicate visible plugin instances. The current Gate 1 decision is to use Cowork's documented marketplace update/sync model as the normal delivery path: regular users propose changes, maintainers merge them, and Cowork receives the updated plugin through GitHub-synced marketplace update/sync or same-name manual marketplace upload. Local package activation remains a technical-pilot fallback only. See `docs/cowork-activation-ux-gate1-2026-05-15.md`.
 
 ## Source Documents
 
@@ -31,11 +31,11 @@ The user starts from an installed Cowork skill, such as `aiws-productivity/meeti
 1. Create or open a draft from the installed skill.
 2. Edit the draft under the AIWS draft workspace.
 3. Validate the draft against skill compatibility rules and plugin/package expectations.
-4. Activate the modified local skill.
-5. See the same skill identity in Cowork with `Modified locally` status.
+4. Optionally prepare a technical-pilot package for local testing.
+5. Submit the validated change for maintainer review.
 6. Stage a proposed improvement with provenance and review notes.
 7. Submit the staged proposal from Cowork when ready.
-8. Let repo or skill maintainers review, comment on, and merge the resulting proposal in GitHub.
+8. Let repo or skill maintainers review, comment on, merge, and deliver the resulting update through Cowork marketplace update/sync.
 
 The MVP should use product-language targets such as `Personal`, `PNC skills`, `Company skills`, and `Public skills`. Branches, commits, remotes, pull request creation, and package rebuild details are backend concerns unless the user explicitly asks for them.
 
