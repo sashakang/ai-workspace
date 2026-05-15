@@ -462,7 +462,9 @@ meeting-followup runs successfully: yes
 updated instruction reflected: yes
 ```
 
-If `meeting-followup` appears twice, record it. That means Cowork has both the marketplace package and uploaded package installed; it does not prove AIWS can replace the active plugin in place.
+If `meeting-followup` appears twice, record it. That means Cowork has both the marketplace package and uploaded package installed; it does not prove AIWS can replace the active plugin in place. This is a PASS for the technical-pilot upload bridge, but it is a product gap for the final regular-user activation experience.
+
+Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-upload-report-2026-05-15.md).
 
 ## Scenario 10: Deactivate Pending Upload Marker
 
