@@ -351,7 +351,7 @@ Acceptance:
 
 Keep this separate from the FastMCP proof. Local `gh` remains Phase 2A technical-pilot evidence only and is not a normal-user submission path.
 
-Implementation update in `core-aiws` 0.3.17: AIWS now includes a GitHub REST API submitter. When a host-provided token is available through environment/configuration, the runtime prefers the API submitter over host `gh`. If no token is configured, `gh` remains a technical-pilot fallback; if neither path is available, the runtime still returns non-terminal `submit_handoff_required`. Runtime Cowork validation is still pending.
+Implementation and runtime update in `core-aiws` 0.3.17: AIWS now includes a GitHub REST API submitter. When a host-provided token is available through environment/configuration, the runtime prefers the API submitter over host `gh`. Cowork Scenario 12B passed: the API submitter created PR #6 in `sashakang/aiws-skill-tests` without requiring host `gh` or a user-pasted token. If no token is configured, `gh` remains a technical-pilot fallback; if neither path is available, the runtime still returns non-terminal `submit_handoff_required`. See [Cowork GitHub API Submitter PASS](./cowork-github-api-submitter-pass-2026-05-15.md).
 
 ### Slice 2B.10: Repository Policy-Owned Review
 

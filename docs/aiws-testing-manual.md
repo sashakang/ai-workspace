@@ -811,7 +811,7 @@ Latest evidence: [Cowork Post-Merge Delivery Guidance PASS](./cowork-post-merge-
 
 Purpose: confirm AIWS no longer requires host `gh` when a host-provided GitHub token is configured.
 
-Status: implemented in `core-aiws` 0.3.17; automated tests pass, runtime Cowork token-path retest pending.
+Status: implemented and runtime-tested in `core-aiws` 0.3.17.
 
 Automated verification from the repo root:
 
@@ -854,6 +854,8 @@ post_merge_delivery.status: marketplace_update_required_after_merge
 ```
 
 If no host token is configured, the runtime may still use `gh` as a technical-pilot fallback or return `submit_handoff_required`. That is not a failure of the API submitter; it means the host credential path has not been configured for Cowork yet.
+
+Latest evidence: [Cowork GitHub API Submitter PASS](./cowork-github-api-submitter-pass-2026-05-15.md).
 
 ## Scenario 13: Cowork Package Intake Probe
 
