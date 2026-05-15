@@ -100,6 +100,8 @@ Acceptance: The slice is read-only. If multiple installed instances share the sa
 
 Evidence: Tests should cover one installed copy, duplicate installed copies, missing skill, explicit source pinning, and no writes outside approved AIWS-owned state. Preserve existing `discover_installed_plugins` coverage that returns `ambiguous_installed_plugin` for duplicate roots.
 
+Runtime update: the first `core-aiws` 0.3.10 test showed that explicit `source_plugin_root` works, but default discovery missed Cowork's RPM install path. The next implementation should add known Cowork RPM/plugin roots to default discovery without broad filesystem scanning or any Cowork runtime mutation.
+
 Likely files, modules, and contracts to inspect: `docs/cowork-registry-alignment-gate1-2026-05-15.md`, `docs/cowork-activation-handoff-039-runtime-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `tests/test_aiws_skill_manager.py`, and `tests/test_aiws_mcp.py`.
 
 ## Slice 4: Track Modified Locally Status

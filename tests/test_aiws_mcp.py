@@ -172,6 +172,25 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIsNone(result["selected_instance"])
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_inspects_skill_from_default_rpm_root(self) -> None:
+        cowork_home = Path(self.tempdir.name) / ".cowork"
+        rpm_root = cowork_home / "rpm"
+        plugin_root = self.write_cowork_plugin(rpm_root / "plugin_123")
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "COWORK_HOME": str(cowork_home)},
+        )
+
+        result = runtime.inspect_installed_skill(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["instance_count"], 1)
+        self.assertEqual(result["selected_instance"]["source_plugin_root"], str(plugin_root.resolve()))
+        self.assert_no_memory_or_claude_writes()
+
     def test_cowork_runtime_create_draft_requires_source_when_discovery_is_ambiguous(self) -> None:
         uploads = Path(self.tempdir.name) / "cowork-uploads"
         self.write_cowork_plugin(uploads / "first")

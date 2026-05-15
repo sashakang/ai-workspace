@@ -1626,6 +1626,20 @@ class AiwsSkillManagerTests(unittest.TestCase):
             missing = discover_installed_plugins(plugin_id="missing-plugin", search_roots=[first_root])
             self.assertEqual(missing["status"], "installed_plugin_not_found")
 
+    def test_discover_installed_plugins_includes_cowork_rpm_roots_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            cowork_home = temp_root / ".cowork"
+            rpm_root = cowork_home / "rpm"
+            plugin_root = self.write_plugin(rpm_root / "plugin_123", public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            found = discover_installed_plugins(plugin_id="example-plugin", env={"COWORK_HOME": str(cowork_home)})
+
+            self.assertEqual(found["status"], "ok")
+            self.assertIn(str(rpm_root), found["searched_roots"])
+            self.assertEqual(found["plugins"][0]["source_plugin_root"], str(plugin_root.resolve()))
+
     def test_inspect_installed_skill_reports_single_duplicate_and_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)
@@ -1663,6 +1677,43 @@ class AiwsSkillManagerTests(unittest.TestCase):
             )
             self.assertEqual(missing["status"], "installed_skill_not_found")
             self.assertEqual(missing["instance_count"], 0)
+
+    def test_inspect_installed_skill_uses_default_cowork_rpm_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            cowork_home = temp_root / ".cowork"
+            rpm_root = cowork_home / "rpm"
+            plugin_root = self.write_plugin(rpm_root / "plugin_123", public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            result = inspect_installed_skill(
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                env={"COWORK_HOME": str(cowork_home)},
+            )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["instance_count"], 1)
+            self.assertEqual(result["selected_instance"]["source_plugin_root"], str(plugin_root.resolve()))
+
+    def test_inspect_installed_skill_reports_duplicate_cowork_rpm_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            cowork_home = temp_root / ".cowork"
+            first_plugin = self.write_plugin(cowork_home / "rpm" / "plugin_123", public_skills=["meeting-followup"])
+            self.write_skill(first_plugin, "meeting-followup")
+            second_plugin = self.write_plugin(cowork_home / "rpm" / "plugin_456", public_skills=["meeting-followup"])
+            self.write_skill(second_plugin, "meeting-followup")
+
+            result = inspect_installed_skill(
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                env={"COWORK_HOME": str(cowork_home)},
+            )
+
+            self.assertEqual(result["status"], "duplicate_visible_identity")
+            self.assertEqual(result["instance_count"], 2)
+            self.assertIsNone(result["selected_instance"])
 
     def test_inspect_installed_skill_explicit_source_pins_duplicate(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

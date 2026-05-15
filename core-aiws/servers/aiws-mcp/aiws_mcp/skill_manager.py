@@ -512,8 +512,10 @@ def default_plugin_search_roots(env: dict[str, str] | None = None) -> list[Path]
         roots.extend([root, root.parent, root.parent.parent])
     cowork_home = env.get("COWORK_HOME")
     if cowork_home:
-        roots.append(Path(cowork_home).expanduser())
-    roots.append(Path("~/.cowork").expanduser())
+        root = Path(cowork_home).expanduser()
+        roots.extend([root, root / "rpm", root / "plugins"])
+    default_cowork_home = Path("~/.cowork").expanduser()
+    roots.extend([default_cowork_home, default_cowork_home / "rpm", default_cowork_home / "plugins"])
 
     result: list[Path] = []
     seen: set[str] = set()
