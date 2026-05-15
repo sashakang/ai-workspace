@@ -331,6 +331,8 @@ Implementation update in `core-aiws` 0.3.14: draft opening now blocks accidental
 
 Implementation update in `core-aiws` 0.3.15: the existing `revert_draft` manager operation is exposed through the Cowork MCP bridge as `aiws.skills.revert_draft`. This gives users a supported cleanup path for stale draft records after drift-protection tests, without manual filesystem deletion or Cowork runtime mutation.
 
+Runtime update after `core-aiws` 0.3.15: Scenario CW-10A passed. Cowork refreshed and reverted eight explicitly listed stale `aiws-productivity:meeting-followup` drafts, kept `aiws-productivity--meeting-followup--25bf8e1a23`, and confirmed `create_or_open_draft` still fails closed while that keep draft remains active. See [Cowork Stale Draft Cleanup PASS](./cowork-stale-draft-cleanup-pass-2026-05-15.md).
+
 ### Slice 2B.9: Non-CLI GitHub Submitter
 
 Replace normal-user reliance on host `gh` with a GitHub App, bot, API, or Cowork-compatible GitHub connection.

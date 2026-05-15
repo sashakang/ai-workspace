@@ -112,6 +112,8 @@ Implementation update in `core-aiws` 0.3.14: `create_or_open_draft` now fails cl
 
 Implementation update in `core-aiws` 0.3.15: `aiws.skills.revert_draft` is now exposed for supported stale-draft cleanup. It removes only the selected AIWS draft worktree and draft record; it does not delete Cowork-installed plugins, packages, proposals, GitHub state, memory, or `~/.claude`.
 
+Runtime update after `core-aiws` 0.3.15: stale draft cleanup passed through Cowork. Eight explicitly listed stale drafts were reverted, the intentional keep draft remained active, and drift protection still blocked a new parallel draft. See [Cowork Stale Draft Cleanup PASS](./cowork-stale-draft-cleanup-pass-2026-05-15.md).
+
 Likely files, modules, and contracts to inspect: `docs/cowork-registry-alignment-gate1-2026-05-15.md`, `docs/cowork-activation-handoff-039-runtime-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `tests/test_aiws_skill_manager.py`, and `tests/test_aiws_mcp.py`.
 
 ## Slice 4: Track Modified Locally Status

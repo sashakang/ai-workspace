@@ -659,6 +659,8 @@ manual filesystem deletion: no
 
 For the 2026-05-15 drift-protection test, the draft currently recommended to keep is `aiws-productivity--meeting-followup--25bf8e1a23`, because it produced the successful regular-user proposal and PR #4. Treat that as test evidence, not a universal rule.
 
+Latest evidence: [Cowork Stale Draft Cleanup PASS](./cowork-stale-draft-cleanup-pass-2026-05-15.md).
+
 ## Scenario 11: Stage Proposal Without Submitting
 
 Purpose: confirm staging writes only a local proposal record.
