@@ -12,6 +12,8 @@ The 2026-05-15 regular-user loop is now complete and recorded in the testing man
 
 The product gap is now concrete. Manual package upload works as a fallback/technical-pilot bridge, but it is not acceptable as the final regular-user activation experience because it can leave duplicate visible `meeting-followup` instances in Cowork. The next implementation slice must make activation/update user-friendly: no manual ZIP handling for regular users, no duplicate visible plugin instances, no direct mutation of installed marketplace files, and a truthful non-terminal fallback if Cowork still cannot activate a prepared package programmatically.
 
+The immediate next slice is narrower than full activation UX. Runtime testing showed that Cowork can run the uploaded modified skill from a hostloop plugin cache while `aiws_skills_resolve` cannot see that same skill in AIWS metadata. Before AIWS can claim a clean activation/update model, it needs a read-only Cowork registry-alignment layer that reports which installed skill instances Cowork sees, whether AIWS can resolve them, and whether duplicate visible identities are present. Gate 1 is approved in [Cowork Registry Alignment Gate 1](./cowork-registry-alignment-gate1-2026-05-15.md).
+
 The 2026-05-14 canonical Cowork user test also passed for the normal install/use/update path. Cowork installed marketplace `sashakang/ai-workspace`, installed `core-aiws@ai-workspace` and `aiws-productivity@ai-workspace`, exposed `aiws-productivity:meeting-followup`, invoked the skill successfully, updated the marketplace/plugins through the Cowork UI, and kept `meeting-followup` visible after update. See [Cowork Canonical User Test Report](./cowork-canonical-user-test-report-2026-05-14.md).
 
 Phase 2B is the end-user runtime gap. The current `core-aiws` package still starts the AIWS MCP bridge through:
@@ -299,6 +301,24 @@ Acceptance:
 - Re-running activation is idempotent or returns the existing pending/active state without creating duplicate packages or duplicate visible skills.
 - The action reports whether Cowork activation is `active`, `pending_upload`, `handoff_prepared`, `handoff_required`, or `host_capability_missing`.
 - The test manual includes the new scenario and the old manual-upload scenario remains labeled fallback/technical-pilot only.
+
+### Slice 2B.8C: Cowork Registry Alignment
+
+Implement the approved read-only registry-alignment slice from [Cowork Registry Alignment Gate 1](./cowork-registry-alignment-gate1-2026-05-15.md).
+
+Acceptance:
+
+- AIWS can report Cowork-visible installed skill instances as structured evidence.
+- Duplicate `plugin_id + skill_id` instances return a clear ambiguous/duplicate state instead of silently choosing one.
+- Hostloop paths are treated as ephemeral runtime evidence, not durable source roots.
+- Explicit source pinning remains available for maintainer/diagnostic flows.
+- The operation does not mutate Cowork RPM/runtime folders, installed marketplace or organization plugins, uploaded plugin files, hostloop caches, `~/.claude`, memory roots, proposal records, or GitHub state.
+- The normal-user response explains duplicate installs in product language and does not ask the user to inspect RPM paths.
+
+Evidence:
+
+- Unit tests cover single instance, duplicate instance, explicit source pinning, hostloop evidence handling, and no-write behavior.
+- Runtime testing records whether `meeting-followup` is visible once or duplicated and whether AIWS metadata can resolve the same skill Cowork can invoke.
 
 ### Slice 2B.9: Non-CLI GitHub Submitter
 

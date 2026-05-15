@@ -14,6 +14,8 @@ The implementation must stay aligned with `core-aiws/contracts/skill-management.
 
 The current tester-facing Phase 2A scenario is tracked in `docs/cowork-skills-management-phase2-test-plan.md`.
 
+Registry-alignment update, 2026-05-15: after `core-aiws` 0.3.9 fallback activation, Cowork could run the manually uploaded modified `aiws-productivity:meeting-followup` package, but AIWS metadata could not resolve that same installed skill. Runtime evidence also showed duplicate visible `aiws-productivity` instances and a hostloop path used by Cowork Skill invocation. The approved next slice is read-only Cowork registry alignment, documented in [Cowork Registry Alignment Gate 1](./cowork-registry-alignment-gate1-2026-05-15.md). Do not continue activation UX work by guessing the active plugin instance, editing Cowork runtime folders, or treating hostloop paths as durable source roots.
+
 Previous Cowork runtime blocker: the user reported that the Cowork session did not expose `aiws.skills.create_or_open_draft` or `aiws.skills.validate_draft` as callable tools. ToolSearch returned no AIWS draft-management schemas. `core-aiws` version `0.3.7` now bundles the AIWS MCP bridge source, includes the Scenario D draft-record safety fix, and returns a safe submit-for-review handoff when `gh` is unavailable. Cowork runtime testing on 2026-05-14 validated the full Phase 2A A-H lifecycle with host `gh` present, including PR creation and maintainer merge in the private test repo. A later regular Cowork user test proved the draft/edit/validate/stage/submit path end to end for `aiws-productivity:meeting-followup`, including draft `aiws-productivity--meeting-followup--de0e75a572`, proposal `skillprop_ed458362021141179dbdb85a9df73794`, and PR #2 in `sashakang/aiws-skill-tests`. That historical test predated the corrected Gate 1 boundary; current normal Cowork submission leaves review and merge to repository maintainers and policy instead of writing product-level reviewer-role metadata. Do not count manual `/tmp` copies, schema-only validation, CLI-only execution, or direct filesystem reconstruction as Cowork runtime validation.
 
 Current validation update, 2026-05-15: the regular-user loop has now been retested and recorded in `docs/aiws-testing-manual.md`. Draft `aiws-productivity--meeting-followup--de0e75a572` validated with digest `c94dc08ad7a6633e2755611fc8f9866a158793c63617325cb9db63618e964265`, manual package upload worked, pending-upload cleanup worked, the repository allowlist guard blocked a placeholder target repo, and proposal `skillprop_bb386ac3528247c7bf7ddb88793497b2` submitted PR #3 to `sashakang/aiws-skill-tests`. The remaining product gap is activation UX: manual upload is a fallback/technical-pilot bridge, and duplicate visible plugin instances are not acceptable for the final normal-user path.
@@ -85,6 +87,20 @@ Acceptance: Activation preserves one logical visible skill identity. It does not
 Evidence: Tests should extend the current CW-08/CW-09/CW-10 coverage. They must prove no manual ZIP handling is required in the handoff path, duplicate visible skill identity is avoided or reported as a fail-closed conflict, activation state is correctly reported as `active`, `pending_upload`, `handoff_prepared`, `handoff_required`, or `host_capability_missing`, and deactivation does not remove Cowork-owned installed packages. Add a new scenario to `docs/aiws-testing-manual.md` when the implementation exists.
 
 Likely files, modules, and contracts to inspect: `docs/aiws-testing-manual.md`, `docs/cowork-modified-draft-upload-report-2026-05-15.md`, `docs/cowork-pending-upload-deactivation-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `scripts/cowork_package_intake_probe.py`, `tests/test_aiws_mcp.py`, and `tests/test_cowork_package_intake_probe.py`.
+
+## Slice 3C: Align Cowork Registry Evidence Before Activation UX
+
+Owner: developer session.
+
+Gate 1: approved in `docs/cowork-registry-alignment-gate1-2026-05-15.md`.
+
+Expected output: AIWS can explain which Cowork-installed skill instances exist for a logical skill, whether those instances are duplicated, and whether AIWS metadata can resolve the same skill that Cowork Skill invocation can run.
+
+Acceptance: The slice is read-only. It may use Cowork plugin-management output, AIWS host surfaces, AIWS-owned state, and explicit trusted plugin roots. Hostloop paths may be reported only as session evidence. If multiple installed instances share the same `plugin_id + skill_id`, AIWS returns an ambiguous/duplicate state and does not choose one unless Cowork provides a reliable active signal or the caller pins a concrete source. The response must not ask normal users to inspect RPM paths; it should state that Cowork has more than one installed copy and that cleanup or exact source selection is required before AIWS can manage that identity safely.
+
+Evidence: Tests should cover one installed instance, duplicate instances, explicit source pinning, missing Cowork evidence, hostloop evidence treated as ephemeral, and no writes outside approved AIWS-owned state. Preserve existing `discover_installed_plugins` coverage that returns `ambiguous_installed_plugin` for duplicate roots.
+
+Likely files, modules, and contracts to inspect: `docs/cowork-registry-alignment-gate1-2026-05-15.md`, `docs/cowork-activation-handoff-039-runtime-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `tests/test_aiws_skill_manager.py`, and `tests/test_aiws_mcp.py`.
 
 ## Slice 4: Track Modified Locally Status
 
