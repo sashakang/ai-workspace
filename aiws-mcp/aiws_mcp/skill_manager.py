@@ -1867,10 +1867,34 @@ def post_merge_delivery_guidance(target_repo: str) -> dict[str, Any]:
     }
 
 
+def repository_review_policy_from_codeowners(codeowners_status: Any) -> dict[str, Any]:
+    value = str(codeowners_status or "unknown")
+    if value == "detected":
+        status = "present"
+        caveat = "CODEOWNERS detected; GitHub repository policy owns reviewer assignment and approval."
+    elif value == "not_detected":
+        status = "absent"
+        caveat = "CODEOWNERS not detected; repository maintainers still own review and merge."
+    else:
+        value = "unknown"
+        status = "unknown"
+        caveat = "Repository review policy could not be determined from the submitter."
+    return {
+        "status": status,
+        "codeowners": value,
+        "review_assignment_owner": "repository_policy",
+        "normal_user_selects_reviewers": False,
+        "caveat": caveat,
+    }
+
+
 def submitted_review_response(proposal: dict[str, Any]) -> dict[str, Any]:
     branch_name = require_non_blank_string(proposal.get("branch_name"), "branch_name")
     pr_url = require_non_blank_string(proposal.get("pr_url"), "pr_url")
     target_repo = require_non_blank_string(proposal.get("target_repo"), "target_repo")
+    repository_review_policy = proposal.get("repository_review_policy")
+    if not isinstance(repository_review_policy, dict):
+        repository_review_policy = repository_review_policy_from_codeowners("unknown")
     return {
         "status": "submitted_for_review",
         "status_label": "Submitted for review",
@@ -1882,6 +1906,7 @@ def submitted_review_response(proposal: dict[str, Any]) -> dict[str, Any]:
         "target_repo": target_repo,
         "branch_name": branch_name,
         "pr_url": pr_url,
+        "repository_review_policy": repository_review_policy,
         "post_merge_delivery": post_merge_delivery_guidance(target_repo),
     }
 
@@ -2158,7 +2183,9 @@ class GhCliProposalSubmitter:
         except json.JSONDecodeError as exc:
             raise SkillManagerError("GitHub PR list output was not valid JSON.") from exc
         body_path = worktree_root / "pull-request-body.md"
-        write_pr_body(body_path, payload, codeowners_status=detect_codeowners(repo_dir))
+        codeowners_status = detect_codeowners(repo_dir)
+        repository_review_policy = repository_review_policy_from_codeowners(codeowners_status)
+        write_pr_body(body_path, payload, codeowners_status=codeowners_status)
         if isinstance(existing_prs, list) and existing_prs and isinstance(existing_prs[0], dict):
             pr_url = require_non_blank_string(existing_prs[0].get("url"), "pr_url")
             update_existing_pr_metadata(
@@ -2168,7 +2195,12 @@ class GhCliProposalSubmitter:
                 is_draft=bool(existing_prs[0].get("isDraft")),
                 body_path=body_path,
             )
-            return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
+            return {
+                "status": "submitted_for_review",
+                "branch_name": branch_name,
+                "pr_url": pr_url,
+                "repository_review_policy": repository_review_policy,
+            }
 
         pr_create = self.run(
             [
@@ -2189,7 +2221,12 @@ class GhCliProposalSubmitter:
             action="Create proposal pull request",
         )
         pr_url = require_non_blank_string(pr_create.stdout.strip(), "pr_url")
-        return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
+        return {
+            "status": "submitted_for_review",
+            "branch_name": branch_name,
+            "pr_url": pr_url,
+            "repository_review_policy": repository_review_policy,
+        }
 
 
 def github_api_token_from_env(env: dict[str, str] | None = None) -> str | None:
@@ -2485,7 +2522,9 @@ class GitHubApiProposalSubmitter:
                 payload={"sha": commit_sha, "force": True},
             )
 
-        body = pr_body_text(payload, codeowners_status=detect_codeowners_in_tree(tree_items))
+        codeowners_status = detect_codeowners_in_tree(tree_items)
+        repository_review_policy = repository_review_policy_from_codeowners(codeowners_status)
+        body = pr_body_text(payload, codeowners_status=codeowners_status)
         existing_prs = require_github_list(
             self.request_json(
                 "GET",
@@ -2500,7 +2539,12 @@ class GitHubApiProposalSubmitter:
             number = existing_prs[0].get("number")
             if isinstance(number, int):
                 self.request_json("PATCH", target_repo, f"/pulls/{number}", payload={"body": body})
-            return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
+            return {
+                "status": "submitted_for_review",
+                "branch_name": branch_name,
+                "pr_url": pr_url,
+                "repository_review_policy": repository_review_policy,
+            }
 
         created_pr = require_github_object(
             self.request_json(
@@ -2518,7 +2562,12 @@ class GitHubApiProposalSubmitter:
             action="Create GitHub pull request",
         )
         pr_url = require_non_blank_string(created_pr.get("html_url") or created_pr.get("url"), "pr_url")
-        return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
+        return {
+            "status": "submitted_for_review",
+            "branch_name": branch_name,
+            "pr_url": pr_url,
+            "repository_review_policy": repository_review_policy,
+        }
 
 
 class GithubHandoffProposalSubmitter:
@@ -2669,6 +2718,7 @@ def submit_pr(
             "branch_name": branch_name,
             "terminal": False,
             "no_pr_created": True,
+            "repository_review_policy": repository_review_policy_from_codeowners("unknown"),
             "post_merge_delivery": post_merge_delivery_guidance(target_repo),
         }
         returned_review_roles = []
@@ -2690,6 +2740,9 @@ def submit_pr(
         raise SkillManagerError("submitter returned invalid review metadata.") from exc
     if submitted_branch_name != branch_name:
         raise SkillManagerError("submitter returned invalid review metadata.")
+    repository_review_policy = submitter_result.get("repository_review_policy")
+    if not isinstance(repository_review_policy, dict):
+        repository_review_policy = repository_review_policy_from_codeowners("unknown")
 
     submitted_at = utc_now()
     updated_proposal = {
@@ -2697,6 +2750,7 @@ def submit_pr(
         "status": "submitted_for_review",
         "branch_name": submitted_branch_name,
         "pr_url": pr_url,
+        "repository_review_policy": repository_review_policy,
         "submitted_at": submitted_at,
         "updated_at": submitted_at,
     }

@@ -1870,6 +1870,9 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(proposal["status"], "submitted_for_review")
             self.assertEqual(proposal["branch_name"], expected_branch)
             self.assertEqual(proposal["pr_url"], "https://github.com/example/review/pull/123")
+            self.assertEqual(proposal["repository_review_policy"]["status"], "unknown")
+            self.assertEqual(proposal["repository_review_policy"]["codeowners"], "unknown")
+            self.assertFalse(proposal["repository_review_policy"]["normal_user_selects_reviewers"])
             self.assertNotIn("required_review_roles", proposal)
             self.assertIn("submitted_at", proposal)
 
@@ -1891,6 +1894,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(second["status"], "submitted_for_review")
             self.assertEqual(second["branch_name"], first["branch_name"])
             self.assertEqual(second["pr_url"], first["pr_url"])
+            self.assertEqual(second["repository_review_policy"]["status"], "unknown")
             self.assertEqual(second_submitter.calls, [])
 
     def test_submit_pr_strips_stale_review_roles_from_normal_flow(self) -> None:
@@ -2081,6 +2085,8 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertTrue(result["no_pr_created"])
             self.assertEqual(result["post_merge_delivery"]["status"], "marketplace_update_required_after_merge")
             self.assertFalse(result["post_merge_delivery"]["normal_user_manual_zip_upload_required"])
+            self.assertEqual(result["repository_review_policy"]["status"], "unknown")
+            self.assertFalse(result["repository_review_policy"]["normal_user_selects_reviewers"])
             self.assertNotIn("required_review_roles", result)
             self.assertGreaterEqual(len(result["actions"]), 1)
             self.assertEqual(len(submitter.calls), 1)
@@ -2227,6 +2233,11 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "submitted_for_review")
             self.assertEqual(result["pr_url"], "https://github.com/example/review/pull/7")
+            self.assertEqual(result["repository_review_policy"]["status"], "absent")
+            self.assertEqual(result["repository_review_policy"]["codeowners"], "not_detected")
+            self.assertFalse(result["repository_review_policy"]["normal_user_selects_reviewers"])
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["repository_review_policy"]["status"], "absent")
             command_lines = [" ".join(call[0]) for call in runner.calls]
             pr_create = next(command for command in command_lines if command.startswith("gh pr create"))
             self.assertIn("--repo example/review", pr_create)
@@ -2297,6 +2308,8 @@ class AiwsSkillManagerTests(unittest.TestCase):
             result = submit_pr(aiws_root, staged["proposal_id"], submitter)
 
             self.assertEqual(result["status"], "submitted_for_review")
+            self.assertEqual(result["repository_review_policy"]["status"], "present")
+            self.assertEqual(result["repository_review_policy"]["codeowners"], "detected")
             command_lines = [" ".join(call[0]) for call in runner.calls]
             self.assertTrue(any(command.startswith("gh pr ready ") for command in command_lines))
             edit_command = next(command for command in command_lines if command.startswith("gh pr edit "))
@@ -2327,6 +2340,9 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "submitted_for_review")
             self.assertEqual(result["pr_url"], "https://github.com/example/review/pull/8")
+            self.assertEqual(result["repository_review_policy"]["status"], "absent")
+            self.assertEqual(result["repository_review_policy"]["codeowners"], "not_detected")
+            self.assertFalse(result["repository_review_policy"]["normal_user_selects_reviewers"])
             calls = [(method, path) for method, path, _payload, _query in api_client.calls]
             self.assertIn(("POST", "/repos/example/review/git/blobs"), calls)
             self.assertIn(("POST", "/repos/example/review/git/trees"), calls)

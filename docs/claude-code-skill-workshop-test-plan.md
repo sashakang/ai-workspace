@@ -282,7 +282,7 @@ ls -lh dist/cowork-import/
 Expected result:
 
 ```text
-dist/cowork-import/core-aiws-0.3.17.zip
+dist/cowork-import/core-aiws-0.3.18.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -305,7 +305,7 @@ Inspect the Cowork ZIP package boundary for private-content leakage.
 
 Repo root: <repo root>
 Packages:
-- dist/cowork-import/core-aiws-0.3.17.zip
+- dist/cowork-import/core-aiws-0.3.18.zip
 - dist/cowork-import/aiws-productivity-0.2.1.zip
 
 Inspect ZIP member names locally.
@@ -327,7 +327,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 packages = [
-    Path("dist/cowork-import/core-aiws-0.3.17.zip"),
+    Path("dist/cowork-import/core-aiws-0.3.18.zip"),
     Path("dist/cowork-import/aiws-productivity-0.2.1.zip"),
 ]
 blocked_fragments = [
@@ -469,7 +469,7 @@ Prompt to Claude Code:
 Give me a Cowork upload/install verification checklist for the updated local package.
 
 Packages:
-- dist/cowork-import/core-aiws-0.3.17.zip
+- dist/cowork-import/core-aiws-0.3.18.zip
 - dist/cowork-import/aiws-productivity-0.2.1.zip
 
 The checklist must use Cowork's supported upload/import UI only.

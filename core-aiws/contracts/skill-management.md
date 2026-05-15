@@ -59,6 +59,8 @@ revert_draft(draft_id)
 
 The runtime may use a GitHub REST API submitter when a host-provided GitHub token is available. Tokens must come from environment or host configuration, not from normal users pasting credentials into chat. If no API submitter is configured, `gh` may remain a technical-pilot fallback; if neither path is available, submission returns `submit_handoff_required`.
 
+Successful submit responses must include `repository_review_policy` metadata when available. The metadata reports whether repository-owned review enforcement is `present`, `absent`, or `unknown`, including CODEOWNERS detection when that signal is available. Missing CODEOWNERS is a caveat, not a submit blocker. Normal users must not be asked to choose GitHub reviewers or teams.
+
 Successful submit responses and submit handoff responses must include `post_merge_delivery` guidance. The guidance explains that regular users do not manually upload ZIP files in the normal path. After maintainer merge, Cowork receives the updated plugin through GitHub-synced marketplace update/sync or, for manual marketplaces, a maintainer/admin same-name ZIP upload that overwrites the old plugin.
 
 Draft file operations are the Cowork-facing edit surface for this phase. They are limited to text files under `skills/<skill_id>/` for the draft's own `skill_id`. They must reject path traversal, absolute paths, symlinks, binary content, and any path outside that managed skill folder. They must not edit contracts, plugin manifests, memory paths, installed source plugin packages, or Cowork/Claude runtime state.

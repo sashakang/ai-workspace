@@ -6,7 +6,7 @@ This manual is the starting point for AIWS testing. It lists the currently imple
 
 Current version assumptions:
 
-- `core-aiws` package version: `0.3.17`
+- `core-aiws` package version: `0.3.18`
 - `aiws-productivity` package version: `0.2.1`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
@@ -64,7 +64,7 @@ Check my AIWS setup.
 
 Verify:
 1. Marketplace `sashakang/ai-workspace` is installed.
-2. `core-aiws` is installed and updated to version 0.3.17 or newer.
+2. `core-aiws` is installed and updated to version 0.3.18 or newer.
 3. `aiws-productivity` is installed.
 4. `meeting-followup` skill is visible.
 
@@ -103,7 +103,7 @@ python scripts/build_cowork_import.py
 Expected command output:
 
 ```text
-dist/cowork-import/core-aiws-0.3.17.zip
+dist/cowork-import/core-aiws-0.3.18.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -116,7 +116,7 @@ Organization settings -> Plugins -> Add plugin -> Upload a file
 Upload:
 
 ```text
-core-aiws-0.3.17.zip
+core-aiws-0.3.18.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -453,7 +453,7 @@ proposal staged: no
 GitHub touched: no
 ```
 
-`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.17 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.18 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -506,7 +506,7 @@ Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-u
 
 Purpose: confirm AIWS can tell whether Cowork has zero, one, or multiple installed copies of the same logical skill before AIWS tries to manage it.
 
-Run this in a Cowork chat after updating `core-aiws` to `0.3.17` or later.
+Run this in a Cowork chat after updating `core-aiws` to `0.3.18` or later.
 
 Prompt to Cowork:
 
@@ -857,6 +857,59 @@ If no host token is configured, the runtime may still use `gh` as a technical-pi
 
 Latest evidence: [Cowork GitHub API Submitter PASS](./cowork-github-api-submitter-pass-2026-05-15.md).
 
+## Scenario 12C: Repository Review Policy Visibility
+
+Purpose: confirm Cowork submit results report repository-owned review policy without asking the normal user to choose GitHub reviewers.
+
+Status: implemented in `core-aiws` 0.3.18; automated tests pass, runtime Cowork retest pending.
+
+Automated verification from the repo root:
+
+```bash
+python -m unittest \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_gh_submitter_syncs_only_skill_folder_and_creates_non_draft_pr_without_reviewers \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_gh_submitter_reuses_existing_pr_only_after_refreshing_body_and_marking_ready \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_github_api_submitter_creates_branch_commit_and_pr_without_gh
+```
+
+Expected result:
+
+```text
+Ran 3 tests
+OK
+```
+
+Runtime Cowork prompt after Scenario 12 or 12B succeeds:
+
+```text
+Report the repository review policy metadata from the submitted proposal response.
+
+Confirm:
+1. repository_review_policy is present.
+2. repository_review_policy.status is one of present, absent, or unknown.
+3. repository_review_policy.codeowners is reported if known.
+4. normal_user_selects_reviewers is false.
+5. No required_review_roles or hardcoded AI engineer reviewer metadata is emitted in the normal Cowork flow.
+6. Missing CODEOWNERS is reported as a caveat, not as a submit blocker.
+```
+
+Expected behavior for a repository without CODEOWNERS:
+
+```text
+repository_review_policy.status: absent
+repository_review_policy.codeowners: not_detected
+repository_review_policy.normal_user_selects_reviewers: false
+submit blocked because CODEOWNERS missing: no
+```
+
+Expected behavior for a repository where CODEOWNERS is detected:
+
+```text
+repository_review_policy.status: present
+repository_review_policy.codeowners: detected
+repository_review_policy.normal_user_selects_reviewers: false
+```
+
 ## Scenario 13: Cowork Package Intake Probe
 
 Purpose: test whether Cowork automatically consumes files copied to the `package_uploads` surface. This scenario must use a disposable probe plugin only.
@@ -960,7 +1013,7 @@ OK
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.17.zip` is produced.
+- `core-aiws-0.3.18.zip` is produced.
 - `aiws-productivity-0.2.1.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.

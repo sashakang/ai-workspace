@@ -234,6 +234,8 @@ Acceptance: Submission reports repository review enforcement as present, absent,
 
 Evidence: Unit tests for reviewer-enforcement status parsing and proposal-state reporting, plus one live GitHub validation against a repo with no policy and one against a repo with enforced policy when that repo is available.
 
+Implementation update in `core-aiws` 0.3.18: submit responses and proposal records now include `repository_review_policy`. The normal Cowork flow reports repository policy status without hardcoding reviewer roles or asking users to choose reviewers.
+
 ## Suggested Developer Session Order
 
 1. Implement Slice 4, modified-state tracking, first. The registry already has `modified` and `last_validation_status`, and draft create/open plus write-root safety are already partially covered. Computing and persisting modified state unlocks activation status, proposal metadata, and conflict handling.
