@@ -502,6 +502,10 @@ GitHub touched: no
 ~/.claude touched: no
 ```
 
+If the package ZIP cannot be checked because the test runs from a sandbox that cannot see the Mac package path, record that as an evidence caveat, not as a failure. The critical pass condition is that AIWS pending-upload state is cleared while draft edits and Cowork-uploaded plugin state remain untouched.
+
+Latest evidence: [Cowork Pending Upload Deactivation Report](./cowork-pending-upload-deactivation-report-2026-05-15.md).
+
 ## Scenario 11: Stage Proposal Without Submitting
 
 Purpose: confirm staging writes only a local proposal record.
