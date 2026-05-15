@@ -110,6 +110,8 @@ Runtime update after `core-aiws` 0.3.13: the inspected draft/edit/validate/stage
 
 Implementation update in `core-aiws` 0.3.14: `create_or_open_draft` now fails closed when an active draft for the same plugin and skill already exists and the caller tries to open a different draft identity. Advanced callers can still create a deliberate parallel draft with `allow_parallel_draft: true`, but the regular Cowork flow should keep using the same `draft_id`.
 
+Implementation update in `core-aiws` 0.3.15: `aiws.skills.revert_draft` is now exposed for supported stale-draft cleanup. It removes only the selected AIWS draft worktree and draft record; it does not delete Cowork-installed plugins, packages, proposals, GitHub state, memory, or `~/.claude`.
+
 Likely files, modules, and contracts to inspect: `docs/cowork-registry-alignment-gate1-2026-05-15.md`, `docs/cowork-activation-handoff-039-runtime-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `tests/test_aiws_skill_manager.py`, and `tests/test_aiws_mcp.py`.
 
 ## Slice 4: Track Modified Locally Status

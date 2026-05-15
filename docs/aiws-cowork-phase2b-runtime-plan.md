@@ -329,6 +329,8 @@ Runtime update after `core-aiws` 0.3.13: the inspected draft/edit/validate/stage
 
 Implementation update in `core-aiws` 0.3.14: draft opening now blocks accidental draft drift. If an active draft already exists for the same `plugin_id + skill_id`, a later `create_or_open_draft` call for a different repository fails closed unless the caller explicitly sets `allow_parallel_draft: true`. Normal Cowork editing should reuse the existing `draft_id` through `read_draft_file`, `write_draft_file`, `validate_draft`, `stage_proposal`, and `submit_for_review`.
 
+Implementation update in `core-aiws` 0.3.15: the existing `revert_draft` manager operation is exposed through the Cowork MCP bridge as `aiws.skills.revert_draft`. This gives users a supported cleanup path for stale draft records after drift-protection tests, without manual filesystem deletion or Cowork runtime mutation.
+
 ### Slice 2B.9: Non-CLI GitHub Submitter
 
 Replace normal-user reliance on host `gh` with a GitHub App, bot, API, or Cowork-compatible GitHub connection.

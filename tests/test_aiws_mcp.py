@@ -266,6 +266,32 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertNotEqual(parallel["record_id"], draft["record_id"])
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_reverts_draft_and_allows_new_draft_after_cleanup(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        self.write_cowork_plugin(uploads)
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+        )
+        draft = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/first-review",
+        )
+
+        reverted = runtime.revert_draft(draft["record_id"])
+
+        reopened = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/second-review",
+        )
+
+        self.assertEqual(reverted["status"], "reverted")
+        self.assertEqual(reverted["record_id"], draft["record_id"])
+        self.assertNotEqual(reopened["record_id"], draft["record_id"])
+        self.assert_no_memory_or_claude_writes()
+
     def test_cowork_runtime_create_draft_fails_when_installed_skill_is_duplicated(self) -> None:
         uploads = Path(self.tempdir.name) / "cowork-uploads"
         self.write_cowork_plugin(uploads / "first")

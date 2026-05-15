@@ -89,6 +89,8 @@ If the draft is unchanged after refresh, activation returns `not_modified` with 
 
 `deactivate_draft` is pending-upload cancellation, not proof that anything was removed from Cowork. It clears only the pending activation record for the supplied `draft_id` and host. It must verify that the pending record's stored `draft_id` exactly matches the requested draft before deleting it; plugin and skill identity alone are not sufficient. It must not clear draft `modified` state, bypass update-conflict handling for modified drafts, delete user-chosen package artifacts, restore or mutate an installed marketplace package, remove anything from Cowork, edit proposal records, or touch GitHub. If the package was manually uploaded to Cowork, removing it remains a Cowork UI action.
 
+`revert_draft` is draft cleanup, not Cowork runtime cleanup. It removes the specific draft worktree under `~/.aiws/plugins/` and its matching draft record under `~/.aiws/state/skill-drafts/`. It must reject non-canonical record IDs, unexpected draft paths, symlinks, path traversal, and any path outside AIWS draft roots. It must not remove installed plugins, Cowork RPM/runtime files, packages, proposal records, GitHub branches or PRs, `~/.claude`, or memory data.
+
 ## Draft Registry
 
 Editable files live under:

@@ -30,6 +30,8 @@ discard local changes and update
 submit/upload first
 ```
 
+For draft cleanup, use `revert_draft(draft_id)` through the skill-manager bridge. Revert only draft IDs the user explicitly marks as stale, and never delete files manually from `~/.aiws`, Cowork RPM/runtime directories, installed plugin folders, or `~/.claude`.
+
 ## Edit And Test
 
 Create or open a draft through the internal `core-aiws` skill-manager bridge. Store editable files under `~/.aiws/plugins/` and durable state under `~/.aiws/state/skill-drafts/`.

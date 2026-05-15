@@ -101,6 +101,10 @@ def create_server(root: Path | None = None):
     def refresh_draft(draft_id: str) -> dict[str, Any]:
         return runtime.refresh_draft(draft_id)
 
+    @server.tool(name="aiws.skills.revert_draft")
+    def revert_draft(draft_id: str) -> dict[str, Any]:
+        return runtime.revert_draft(draft_id)
+
     @server.tool(name="aiws.skills.validate_draft")
     def validate_draft(draft_id: str) -> dict[str, Any]:
         return runtime.validate_draft(draft_id)

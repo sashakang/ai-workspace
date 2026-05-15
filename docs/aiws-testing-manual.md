@@ -6,7 +6,7 @@ This manual is the starting point for AIWS testing. It lists the currently imple
 
 Current version assumptions:
 
-- `core-aiws` package version: `0.3.14`
+- `core-aiws` package version: `0.3.15`
 - `aiws-productivity` package version: `0.2.1`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
@@ -42,6 +42,7 @@ Common placeholders:
 | CW-08 | Prepare Cowork package and activation handoff | Manual Cowork technical pilot | PASS with `pending_upload` or `handoff_prepared` |
 | CW-09 | Manual upload of modified draft package | Manual Cowork technical pilot | PASS |
 | CW-10 | Deactivate pending upload marker | Manual Cowork cleanup | PASS |
+| CW-10A | Revert stale draft records | Manual Cowork cleanup | PASS |
 | CW-11 | Stage proposal without submitting | Manual Cowork | PASS |
 | CW-12 | Submit proposal for review | Manual Cowork + GitHub | PASS or non-terminal handoff |
 | CW-13 | Cowork package intake probe | Local command + new Cowork chat | Evidence-gathering |
@@ -62,7 +63,7 @@ Check my AIWS setup.
 
 Verify:
 1. Marketplace `sashakang/ai-workspace` is installed.
-2. `core-aiws` is installed and updated to version 0.3.14 or newer.
+2. `core-aiws` is installed and updated to version 0.3.15 or newer.
 3. `aiws-productivity` is installed.
 4. `meeting-followup` skill is visible.
 
@@ -101,7 +102,7 @@ python scripts/build_cowork_import.py
 Expected command output:
 
 ```text
-dist/cowork-import/core-aiws-0.3.14.zip
+dist/cowork-import/core-aiws-0.3.15.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -114,7 +115,7 @@ Organization settings -> Plugins -> Add plugin -> Upload a file
 Upload:
 
 ```text
-core-aiws-0.3.14.zip
+core-aiws-0.3.15.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -451,7 +452,7 @@ proposal staged: no
 GitHub touched: no
 ```
 
-`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.14 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.15 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -504,7 +505,7 @@ Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-u
 
 Purpose: confirm AIWS can tell whether Cowork has zero, one, or multiple installed copies of the same logical skill before AIWS tries to manage it.
 
-Run this in a Cowork chat after updating `core-aiws` to `0.3.14` or later.
+Run this in a Cowork chat after updating `core-aiws` to `0.3.15` or later.
 
 Prompt to Cowork:
 
@@ -592,6 +593,71 @@ GitHub touched: no
 If the package ZIP cannot be checked because the test runs from a sandbox that cannot see the Mac package path, record that as an evidence caveat, not as a failure. The critical pass condition is that AIWS pending-upload state is cleared while draft edits and Cowork-uploaded plugin state remain untouched.
 
 Latest evidence: [Cowork Pending Upload Deactivation Report](./cowork-pending-upload-deactivation-report-2026-05-15.md).
+
+## Scenario 10A: Revert Stale Draft Records
+
+Purpose: clean up stale AIWS draft records after drift-protection testing, while keeping one intentional draft.
+
+Use this only when you have an explicit keep list and an explicit revert list. Do not ask Cowork to decide which draft matters. If there is any doubt, refresh the draft and report it instead of reverting it.
+
+Prompt to Cowork:
+
+```text
+Clean up stale AIWS drafts for:
+
+plugin_id: aiws-productivity
+skill_id: meeting-followup
+
+Keep this draft_id and do not modify or revert it:
+<draft_id to keep>
+
+Revert only these stale draft_ids:
+- <stale draft_id 1>
+- <stale draft_id 2>
+- <stale draft_id 3>
+
+For each stale draft_id:
+1. Call aiws.skills.refresh_draft first and report whether it exists.
+2. If it exists and is not the keep draft, call aiws.skills.revert_draft.
+3. If revert_draft is not available, stop and report BLOCKED. Do not delete files manually.
+
+Do not touch installed plugin files, Cowork RPM/runtime files, ~/.claude, memory, packages, proposals, GitHub branches, commits, pushes, or PRs.
+
+After cleanup, try to create or open this draft without allow_parallel_draft:
+
+plugin_id: aiws-productivity
+skill_id: meeting-followup
+target_repo: sashakang/aiws-skill-tests-drift-check
+
+Expected behavior:
+- If the keep draft still exists, create_or_open_draft should still fail closed because one active draft remains.
+- If no active draft remains, create_or_open_draft may create a new draft.
+
+Report:
+- kept draft_id
+- reverted draft_ids
+- draft_ids that were already missing
+- any errors
+- whether create_or_open_draft still failed closed or created a new draft
+- whether installed plugin files were touched
+- whether GitHub was touched
+```
+
+Expected answer when one keep draft remains:
+
+```text
+status: PASS
+kept draft_id: <draft_id to keep>
+reverted draft_ids: <stale IDs only>
+already missing: <IDs if any>
+create_or_open_draft after cleanup: failed closed
+reason: existing active draft
+installed plugin files touched: no
+GitHub touched: no
+manual filesystem deletion: no
+```
+
+For the 2026-05-15 drift-protection test, the draft currently recommended to keep is `aiws-productivity--meeting-followup--25bf8e1a23`, because it produced the successful regular-user proposal and PR #4. Treat that as test evidence, not a universal rule.
 
 ## Scenario 11: Stage Proposal Without Submitting
 
@@ -803,7 +869,7 @@ OK
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.14.zip` is produced.
+- `core-aiws-0.3.15.zip` is produced.
 - `aiws-productivity-0.2.1.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.
