@@ -1,0 +1,774 @@
+# AIWS Testing Manual
+
+Last updated: 2026-05-15.
+
+This manual is the starting point for AIWS testing. It lists the currently implemented scenarios, the prompt or command to use, and the expected answer. Keep detailed historical reports in their original files; keep this page current when a new scenario becomes part of the maintained test set.
+
+Current version assumptions:
+
+- `core-aiws` package version: `0.3.8`
+- `aiws-productivity` package version: `0.2.1`
+- Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
+- Fallback Cowork journey: ZIP upload through Cowork plugin settings
+
+## Rules For All Cowork Tests
+
+- Start from Cowork prompts unless a scenario explicitly says to run a local command.
+- Do not edit `~/.claude`, Claude Code memory, Cowork RPM files, Cowork runtime manifests, or installed plugin folders by hand.
+- Do not copy plugin folders directly into Cowork runtime directories.
+- Treat marketplace install as the primary path. ZIP import is fallback or diagnostic only.
+- Record exact errors and mark the scenario `BLOCKED` when Cowork cannot expose the required AIWS tool surface.
+
+Common placeholders:
+
+```text
+<test review repository> = sashakang/aiws-skill-tests
+<temporary package output directory outside ~/.claude> = ~/.aiws/tmp/cowork-phase2-packages
+```
+
+## Scenario Index
+
+| ID | Scenario | Type | Expected status |
+|---|---|---|---|
+| CW-01 | Cowork marketplace install and skill invocation | Manual Cowork | PASS |
+| CW-02 | Manual ZIP import fallback | Manual Cowork + local package build | PASS when marketplace path is unavailable |
+| CW-03 | Create or open draft | Manual Cowork | PASS |
+| CW-04 | Edit draft and validate | Manual Cowork | PASS |
+| CW-05 | Clean draft validation | Manual Cowork | PASS |
+| CW-06 | Out-of-scope edit fails closed | Manual Cowork safety | PASS when rejected or failed closed |
+| CW-07 | Missing `SKILL.md` fails closed | Manual Cowork safety | PASS when failed closed |
+| CW-08 | Prepare Cowork package and pending upload | Manual Cowork technical pilot | PASS with `pending_upload` |
+| CW-09 | Manual upload of modified draft package | Manual Cowork technical pilot | PASS |
+| CW-10 | Deactivate pending upload marker | Manual Cowork cleanup | PASS |
+| CW-11 | Stage proposal without submitting | Manual Cowork | PASS |
+| CW-12 | Submit proposal for review | Manual Cowork + GitHub | PASS or non-terminal handoff |
+| CW-13 | Cowork package intake probe | Local command + new Cowork chat | Evidence-gathering |
+| CW-14 | Hosted/uploaded MCP smoke experiments | Manual Cowork diagnostic | Currently BLOCKED |
+| AUTO-01 | Cowork ZIP package builder tests | Automated unittest | PASS |
+| AUTO-02 | Cowork package intake probe tests | Automated unittest | PASS |
+| AUTO-03 | AIWS MCP lifecycle regression tests | Automated unittest | PASS |
+| AUTO-04 | Full repository unittest suite | Automated unittest | PASS |
+
+## Scenario 1: Cowork Marketplace Install And Skill Invocation
+
+Purpose: confirm the normal Cowork install/use path before draft-management testing.
+
+Prompt to Cowork:
+
+```text
+Check my AIWS setup.
+
+Verify:
+1. Marketplace `sashakang/ai-workspace` is installed.
+2. `core-aiws` is installed and updated to version 0.3.8 or newer.
+3. `aiws-productivity` is installed.
+4. `meeting-followup` skill is visible.
+
+Then invoke meeting-followup on this test input:
+
+Create brief meeting follow-up notes from this test meeting: Alice will send the draft by Friday. Ben will review it. The decision was to validate the Cowork marketplace install first.
+
+Do not edit anything. Report PASS/BLOCKED with exact evidence.
+```
+
+Expected answer:
+
+```text
+Result: PASS
+Marketplace installed: sashakang/ai-workspace
+core-aiws installed: yes
+aiws-productivity installed: yes
+meeting-followup visible: yes
+meeting-followup invoked successfully: yes
+```
+
+The generated notes should include the decision, Alice's Friday action item, Ben's review action item, and a short follow-up message. Record Cowork version/build and plugin IDs if Cowork exposes them.
+
+Source: [Cowork Canonical User Test Report](./cowork-canonical-user-test-report-2026-05-14.md).
+
+## Scenario 2: Manual ZIP Import Fallback
+
+Purpose: confirm Cowork's supported ZIP upload path when marketplace install is unavailable or when Team upload behavior is under test.
+
+Build artifacts from the repo root if a maintainer has not already provided them:
+
+```bash
+python scripts/build_cowork_import.py
+```
+
+Expected command output:
+
+```text
+dist/cowork-import/core-aiws-0.3.8.zip
+dist/cowork-import/aiws-productivity-0.2.1.zip
+```
+
+Cowork UI path:
+
+```text
+Organization settings -> Plugins -> Add plugin -> Upload a file
+```
+
+Upload:
+
+```text
+core-aiws-0.3.8.zip
+aiws-productivity-0.2.1.zip
+```
+
+Prompt to Cowork after upload:
+
+```text
+Confirm `core-aiws` and `aiws-productivity` are installed.
+Confirm `meeting-followup` is visible.
+
+Then invoke meeting-followup on this input:
+
+Create brief meeting follow-up notes from this test meeting: Alice will send the draft by Friday. Ben will review it. The decision was to validate the Cowork plugin import install first.
+
+Report whether the plugins installed, whether meeting-followup is visible, whether the skill ran, and whether ~/.claude or Cowork runtime files were touched.
+```
+
+Expected answer:
+
+```text
+Result: PASS
+core-aiws installed: yes
+aiws-productivity installed: yes
+meeting-followup visible: yes
+meeting-followup invocation: successful
+~/.claude touched: no
+Memory sync commands run: no
+RPM/runtime files edited manually: no
+```
+
+Source: [Cowork Manual ZIP Import Fallback Test Plan](./cowork-clean-import-test-plan.md) and [ZIP Import Validation PASS](./aiws-cowork-plugin-import-validation-pass.md).
+
+## Scenario 3: Create Or Open Draft
+
+Purpose: confirm Cowork can open an editable AIWS draft from an installed skill without touching installed plugin files.
+
+Prompt to Cowork:
+
+```text
+Create or open an AIWS draft for:
+
+plugin_id: aiws-productivity
+skill_id: meeting-followup
+target_repo: <test review repository>
+
+Use the installed marketplace plugin as the source. Do not clone the repo. Do not edit installed plugin files.
+
+Report:
+- draft_id
+- draft_path
+- whether draft_path is under ~/.aiws/plugins/
+- whether installed marketplace plugin files were touched
+```
+
+Expected answer:
+
+```text
+status: draft_opened
+draft_path: ~/.aiws/plugins/...
+draft_path under ~/.aiws/plugins/: yes
+installed marketplace plugin files touched: no
+```
+
+Record the returned `draft_id`. The draft path must not be inside the installed Cowork plugin/RPM path.
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-a-create-or-open-draft).
+
+## Scenario 4: Edit Draft And Validate
+
+Purpose: confirm a safe draft edit can be validated with no package, proposal, GitHub action, or runtime mutation.
+
+Prompt to Cowork:
+
+```text
+Edit only this draft file:
+
+skills/meeting-followup/SKILL.md
+
+Make one harmless test edit: add a short instruction that follow-up messages should be clear and concise.
+
+Do not edit any file outside skills/meeting-followup/.
+Do not touch installed marketplace plugin files.
+Do not stage, package, activate, submit, or use GitHub.
+
+Report:
+- exact file changed
+- whether it is under skills/meeting-followup/
+- whether installed plugin files were touched
+```
+
+Expected answer:
+
+```text
+exact file changed: skills/meeting-followup/SKILL.md
+under skills/meeting-followup/: yes
+installed plugin files touched: no
+```
+
+Then validate:
+
+```text
+Validate the draft.
+
+Do not package, activate, stage, submit, or touch GitHub.
+
+Report:
+- validation status
+- modified status
+- status label
+- current_tree_digest
+- validation_tree_digest
+- whether any package was built
+- whether any proposal was staged
+- whether GitHub was touched
+- whether installed marketplace plugin files were touched
+```
+
+Expected answer:
+
+```text
+validation status: passed
+modified status: true
+status label: Modified locally
+current_tree_digest: <digest>
+validation_tree_digest: <same digest>
+package built: no
+proposal staged: no
+GitHub touched: no
+installed marketplace plugin files touched: no
+```
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-b-happy-path-draft-validation).
+
+## Scenario 5: Clean Draft Validation
+
+Purpose: confirm an unchanged draft validates as current.
+
+Prompt to Cowork:
+
+```text
+Create or open a clean AIWS draft for:
+
+plugin_id: aiws-productivity
+skill_id: meeting-followup
+target_repo: sashakang/aiws-skill-tests-clean
+
+Do not edit the draft. Then validate it without activating, staging, packaging, or submitting anything.
+
+Report validation status, modified status, status label, and whether any side effects happened.
+```
+
+Expected answer:
+
+```text
+validation status: passed
+modified status: false
+status label: Current
+package built: no
+proposal staged: no
+GitHub touched: no
+installed marketplace plugin files touched: no
+```
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-c-unchanged-draft-validation).
+
+## Scenario 6: Out-Of-Scope Edit Fails Closed
+
+Purpose: confirm validation refuses draft changes outside the managed skill folder.
+
+Prompt to Cowork:
+
+```text
+Run Scenario D through the AIWS draft-management tools only.
+
+Create or open a disposable AIWS draft for:
+
+plugin_id: aiws-productivity
+skill_id: meeting-followup
+target_repo: sashakang/aiws-skill-tests-disposable
+
+After the tool returns a draft_id and draft_path, confirm the draft_path is under ~/.aiws/plugins/.
+
+In that returned AIWS draft only, try to make a test-only edit outside skills/meeting-followup/, for example in a contract or plugin manifest.
+
+Then call aiws.skills.validate_draft(draft_id).
+
+Do not create a manual /tmp copy. Do not run manual schema-only validation. Do not activate, stage, package, submit, or edit installed marketplace plugin files.
+```
+
+Expected answer:
+
+```text
+Result: PASS if either safe outcome happens
+
+Outcome A:
+write outside skills/meeting-followup/ is rejected before validation
+
+Outcome B:
+validation fails closed
+last_validation_status: failed
+last_validation_tree_digest: null
+
+package built: no
+proposal staged: no
+GitHub touched: no
+installed plugin files touched: no
+```
+
+After this scenario, discard or restore the disposable draft.
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-d-out-of-scope-edit-fails-closed).
+
+## Scenario 7: Missing SKILL.md Fails Closed
+
+Purpose: confirm a missing required skill entrypoint fails safely.
+
+Prompt to Cowork:
+
+```text
+Run Scenario E through the AIWS draft-management tools only.
+
+Create or open a disposable AIWS draft for:
+
+plugin_id: aiws-productivity
+skill_id: meeting-followup
+target_repo: sashakang/aiws-skill-tests-disposable-missing-skill
+
+After the tool returns a draft_id and draft_path, confirm the draft_path is under ~/.aiws/plugins/.
+
+In that returned AIWS draft only, temporarily remove or rename:
+
+skills/meeting-followup/SKILL.md
+
+Then call aiws.skills.validate_draft(draft_id).
+
+Do not activate, stage, package, submit, or edit installed marketplace plugin files.
+```
+
+Expected answer:
+
+```text
+tool result: error
+reason includes missing SKILL.md
+last_validation_status: failed
+last_validation_tree_digest: null
+package built: no
+proposal staged: no
+GitHub touched: no
+installed plugin files touched: no
+```
+
+After this scenario, discard or restore the disposable draft.
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-e-missing-skill-fails-closed).
+
+## Scenario 8: Prepare Cowork Package And Pending Upload
+
+Purpose: confirm `activate_draft` builds a package and records pending upload state without claiming Cowork activation.
+
+Prompt to Cowork:
+
+```text
+Activate the draft for Cowork using the supported package-upload path.
+
+Use:
+draft_id: <modified draft_id>
+host_kind: cowork
+package_output_dir: ~/.aiws/tmp/cowork-phase2-packages
+
+Do not directly mutate Cowork runtime files.
+Do not edit installed marketplace plugin files.
+Do not stage a proposal.
+Do not create a GitHub branch or PR.
+Do not touch ~/.claude.
+
+Report:
+- activation status
+- activation_status
+- activation_effective
+- requires_manual_upload
+- package_path
+- activation_record_path
+- host_id
+- whether the pending upload record is under ~/.aiws/state/draft-activations/<host-id>/<draft_id>.json
+- whether installed plugin files, ~/.claude, Cowork runtime files, proposals, or GitHub were touched
+```
+
+Expected answer:
+
+```text
+status: host_capability_missing
+activation_status: pending_upload
+activation_effective: false
+requires_manual_upload: true
+package_path: ~/.aiws/tmp/cowork-phase2-packages/<draft_id>.zip
+activation_record_path: ~/.aiws/state/draft-activations/<host-id>/<draft_id>.json
+installed plugin files touched: no
+~/.claude touched: no
+Cowork runtime files directly mutated: no
+proposal staged: no
+GitHub touched: no
+```
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
+
+## Scenario 9: Manual Upload Of Modified Draft Package
+
+Purpose: confirm the package produced by Scenario 8 can be installed through Cowork's supported upload UI.
+
+Cowork UI path:
+
+```text
+Settings -> Plugins -> Add plugin -> Upload a file
+```
+
+Upload the `package_path` returned by Scenario 8. Then start a new Cowork chat.
+
+Prompt to Cowork:
+
+```text
+Check whether the uploaded modified `aiws-productivity` package is installed and whether `meeting-followup` is visible.
+
+Then invoke meeting-followup on this test input:
+
+Decision: Validate pending-upload draft activation.
+Alice will send the revised notes by Friday.
+Ben will review them.
+
+Report:
+- whether the uploaded package is installed
+- whether meeting-followup is visible
+- whether meeting-followup runs successfully
+- whether the output reflects the updated instruction that follow-up messages should be clear and concise
+```
+
+Expected answer:
+
+```text
+uploaded package installed: yes
+meeting-followup visible: yes
+meeting-followup runs successfully: yes
+updated instruction reflected: yes
+```
+
+If `meeting-followup` appears twice, record it. That means Cowork has both the marketplace package and uploaded package installed; it does not prove AIWS can replace the active plugin in place.
+
+## Scenario 10: Deactivate Pending Upload Marker
+
+Purpose: confirm pending-upload cleanup only clears AIWS state and does not remove Cowork-uploaded plugins or draft edits.
+
+Prompt to Cowork:
+
+```text
+Deactivate the draft pending-upload state for:
+
+draft_id: <draft_id from Scenario 8>
+host_kind: cowork
+
+This should only clear the AIWS pending-upload record. It must not remove the Cowork-uploaded plugin, delete the package ZIP, revert draft edits, touch GitHub, or touch ~/.claude.
+
+Report:
+- status
+- activation_status
+- cleared
+- whether package_path still exists
+- whether draft remains modified
+- whether Cowork-uploaded plugin was removed
+```
+
+Expected answer:
+
+```text
+status: deactivated
+activation_status: inactive
+cleared: true
+package_path still exists: yes
+draft remains modified: yes
+Cowork-uploaded plugin removed: no
+GitHub touched: no
+~/.claude touched: no
+```
+
+## Scenario 11: Stage Proposal Without Submitting
+
+Purpose: confirm staging writes only a local proposal record.
+
+Prompt to Cowork:
+
+```text
+Stage the validated AIWS draft as a proposal, but do not submit it for review yet.
+
+draft_id: <modified draft_id>
+target_scope: Personal test skills
+target_repo: <test review repository>
+summary: Test update to meeting-followup
+rationale: Validate the Cowork Phase 2 skill proposal flow.
+
+Staging must create only a local proposal record. Do not create a branch, commit, push, pull request, package, or Cowork runtime mutation.
+```
+
+Expected answer:
+
+```text
+status: staged
+next_action: submit_for_review
+proposal_id: <proposal_id>
+branch created: no
+commit created: no
+push: no
+pull request: no
+package built: no
+Cowork runtime mutation: no
+```
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-g-stage-proposal-without-submitting).
+
+## Scenario 12: Submit Proposal For Review
+
+Purpose: confirm staged proposals can be submitted or handed off safely.
+
+Prompt to Cowork:
+
+```text
+Submit this staged AIWS proposal for review using only the allowed test repository.
+
+proposal_id: <proposal_id from Scenario 11>
+allowed_target_repos:
+- <test review repository>
+
+If the stored target repository is not in allowed_target_repos, fail closed. Do not submit anywhere else.
+```
+
+Expected answer when a real submitter is available:
+
+```text
+status: submitted_for_review
+target_repo: <test review repository>
+branch_name: aiws/skill-proposals/<proposal_id>
+pr_url: <review PR URL>
+normal Cowork reviewer-role metadata: omitted
+```
+
+Expected answer when no Cowork-compatible submitter is available:
+
+```text
+status: submit_handoff_required
+proposal_id: <proposal_id>
+target_repo: <test review repository>
+branch_name: aiws/skill-proposals/<proposal_id>
+terminal: false
+no_pr_created: true
+proposal remains staged: yes
+```
+
+Negative repository-guard prompt:
+
+```text
+Test the submit-for-review repository guard for this staged proposal.
+
+proposal_id: <proposal_id from Scenario 11>
+allowed_target_repos:
+- <different test repository that is not the proposal target_repo>
+
+This must fail closed because the proposal's stored target_repo is not allowed. Do not create a branch, commit, push, pull request, package, or Cowork runtime mutation.
+```
+
+Expected answer:
+
+```text
+tool result: error
+reason: target_repo is not allowed
+branch created: no
+commit created: no
+push: no
+pull request: no
+package built: no
+Cowork runtime mutation: no
+```
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-h-submit-for-review-optional-and-guarded) and [Regular User Draft Submit Report](./cowork-regular-user-draft-submit-report-2026-05-14.md).
+
+## Scenario 13: Cowork Package Intake Probe
+
+Purpose: test whether Cowork automatically consumes files copied to the `package_uploads` surface. This scenario must use a disposable probe plugin only.
+
+From the repo root:
+
+```bash
+python -m scripts.cowork_package_intake_probe \
+  --host-id <existing-cowork-host-id>
+```
+
+Expected command answer:
+
+```json
+{
+  "status": "package_copied_to_upload_surface",
+  "plugin_id": "aiws-cowork-package-intake-probe-<yyyymmddhhmmss>",
+  "skill_id": "intake-probe",
+  "probe_marker": "AIWS_COWORK_PACKAGE_INTAKE_PROBE_LOADED aiws-cowork-package-intake-probe-<yyyymmddhhmmss>",
+  "cowork_install_confirmation": "unavailable_until_new_cowork_chat_checks_visibility",
+  "reuse_allowed": false
+}
+```
+
+Then start a new Cowork chat. Do not use `Settings -> Plugins -> Upload a file`.
+
+Prompt to Cowork:
+
+```text
+Check whether this disposable probe plugin or skill is visible:
+
+plugin_id: <plugin_id returned by the probe command>
+skill_id: intake-probe
+
+If it is visible, invoke intake-probe and report whether the output contains this marker:
+
+<probe_marker returned by the probe command>
+
+Do not manually upload any ZIP. Do not install anything through Settings. Report whether Cowork consumed the package automatically.
+```
+
+Expected answer if automatic intake works:
+
+```text
+result: cowork_install_confirmed
+probe plugin visible: yes
+intake-probe callable: yes
+marker returned: yes
+cleanup required: remove or disable the probe plugin through Cowork plugin settings
+```
+
+Expected answer if automatic intake is not observed:
+
+```text
+result: no_automatic_intake_observed
+probe plugin visible: no
+intake-probe callable: no
+manual upload used: no
+```
+
+If Cowork cannot determine visibility, record:
+
+```text
+result: cowork_install_confirmation_unavailable
+```
+
+Source: [AIWS Cowork Phase 2B Runtime Plan](./aiws-cowork-phase2b-runtime-plan.md#slice-2b8a-cowork-package-intake-probe).
+
+## Scenario 14: Hosted / Uploaded MCP Smoke Experiments
+
+Purpose: preserve evidence about Cowork MCP runtime shapes. These are diagnostic experiments, not the normal user path.
+
+Current expected answer:
+
+```text
+Uploaded-plugin stdio MCP smoke: BLOCKED / tool not exposed
+Uploaded-plugin HTTP MCP smoke: BLOCKED / tool not exposed
+Supported managed/custom connector proof: future work
+```
+
+Do not treat these failures as failure of normal skill invocation. `meeting-followup` is a Cowork skill, not an MCP tool. MCP is currently used successfully for AIWS lifecycle tools exposed by `core-aiws`.
+
+Source: [AIWS Cowork Phase 2B Runtime Plan](./aiws-cowork-phase2b-runtime-plan.md).
+
+## Automated Scenario AUTO-01: Cowork ZIP Package Builder
+
+Purpose: confirm the fallback ZIP package builder creates the expected Cowork-importable artifacts.
+
+Run from the repo root:
+
+```bash
+python -m unittest tests.test_cowork_packaging
+```
+
+Expected answer:
+
+```text
+Ran 6 tests
+OK
+```
+
+Key expectations covered by the test:
+
+- `core-aiws-0.3.8.zip` is produced.
+- `aiws-productivity-0.2.1.zip` is produced.
+- `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
+- `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.
+
+## Automated Scenario AUTO-02: Cowork Package Intake Probe
+
+Purpose: confirm the local package-intake probe builds a disposable plugin package and copies it only to the Cowork package upload surface.
+
+Run from the repo root:
+
+```bash
+python -m unittest tests.test_cowork_package_intake_probe
+```
+
+Expected answer:
+
+```text
+Ran 5 tests
+OK
+```
+
+Key expectations covered by the test:
+
+- Probe plugin IDs are unique and disposable.
+- Probe packages contain the expected `intake-probe` skill.
+- Existing probe package files are not overwritten.
+- Missing or wrong-kind Cowork host records are rejected.
+- Symlinked upload roots and symlinked package paths are rejected.
+
+## Automated Scenario AUTO-03: AIWS MCP Lifecycle Regression Tests
+
+Purpose: confirm the implemented lifecycle behavior behind Cowork draft management stays stable.
+
+Run from the repo root:
+
+```bash
+python -m unittest tests.test_aiws_mcp
+```
+
+Expected answer:
+
+```text
+OK
+```
+
+Key expectations covered by the test include draft activation requiring an explicit Cowork package output directory, deactivation clearing pending activation state, submit-for-review using the GitHub CLI submitter when `gh` is available, and submit-for-review returning a handoff result when `gh` is unavailable.
+
+## Automated Scenario AUTO-04: Full Repository Test Suite
+
+Purpose: run the maintained automated regression suite before pushing changes that affect runtime, packaging, contracts, or this manual.
+
+Run from the repo root:
+
+```bash
+python -m unittest discover -s tests
+```
+
+Expected answer:
+
+```text
+OK
+```
+
+Record the number of tests run in the test report because it changes as new scenarios are automated.
+
+## Maintenance Checklist
+
+When adding or changing a manual test scenario:
+
+1. Add or update the scenario on this page.
+2. Include the exact Cowork prompt or local command.
+3. Include expected `PASS`, `FAIL`, and `BLOCKED` signals when they differ.
+4. Link the detailed source plan or report.
+5. Keep technical-pilot behavior labeled as technical-pilot behavior.
+6. Do not document target-state behavior as current behavior.

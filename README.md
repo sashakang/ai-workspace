@@ -277,3 +277,4 @@ End users should install through the marketplace, not by cloning or symlinking t
 - [Platform architecture](./docs/ai-workspace-architecture.md)
 - [GitHub and rollout strategy](./docs/ai-workspace-github-rollout-strategy.md)
 - [Cowork skills marketplace architecture](./docs/aiws-skills-cowork-marketplace.md)
+- [AIWS testing manual](./docs/aiws-testing-manual.md)
