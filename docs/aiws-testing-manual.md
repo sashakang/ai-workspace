@@ -439,7 +439,7 @@ proposal staged: no
 GitHub touched: no
 ```
 
-`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable.
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.9 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -484,9 +484,9 @@ meeting-followup runs successfully: yes
 updated instruction reflected: yes
 ```
 
-If `meeting-followup` appears twice, record it. That means Cowork has both the marketplace package and uploaded package installed; it does not prove AIWS can replace the active plugin in place. This is a PASS for the technical-pilot upload bridge, but it is a product gap for the final regular-user activation experience.
+If `meeting-followup` appears twice, record it. That means Cowork has both the marketplace package and uploaded package installed; it does not prove AIWS can replace the active plugin in place. This is a PASS for the technical-pilot upload bridge, but it is a product gap for the final regular-user activation experience. If AIWS metadata cannot resolve a skill that the Cowork Skill invocation system can run, record that as a registry-alignment caveat.
 
-Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-upload-report-2026-05-15.md).
+Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-upload-report-2026-05-15.md) and [Cowork Activation Handoff 0.3.9 Runtime Report](./cowork-activation-handoff-039-runtime-report-2026-05-15.md).
 
 ## Scenario 10: Deactivate Pending Upload Marker
 
