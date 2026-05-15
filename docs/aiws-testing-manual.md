@@ -18,6 +18,8 @@ Current version assumptions:
 - Do not copy plugin folders directly into Cowork runtime directories.
 - Treat marketplace install as the primary path. ZIP import is fallback or diagnostic only.
 - Record exact errors and mark the scenario `BLOCKED` when Cowork cannot expose the required AIWS tool surface.
+- Keep draft lifecycle scenarios in the same Cowork chat unless a scenario explicitly says to start a new chat. In practice, run CW-03, CW-04, CW-08, and CW-10 in the same chat so the `draft_id` and current draft state stay easy to track.
+- Start a new Cowork chat after installing or uploading a plugin package. In practice, CW-09 should run in a new chat after the package from CW-08 is uploaded, because Cowork may only refresh the visible skill list when a new chat starts.
 
 Common placeholders:
 
@@ -371,6 +373,8 @@ Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-
 
 Purpose: confirm `activate_draft` builds a package and records pending upload state without claiming Cowork activation.
 
+Chat/session rule: run this in the same Cowork chat as Scenario 3 and Scenario 4, using the modified `draft_id` from that chat. Do not start a new chat for this scenario unless you first reopen the same draft and confirm it is still modified and valid.
+
 Prompt to Cowork:
 
 ```text
@@ -420,6 +424,8 @@ Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-
 ## Scenario 9: Manual Upload Of Modified Draft Package
 
 Purpose: confirm the package produced by Scenario 8 can be installed through Cowork's supported upload UI.
+
+Chat/session rule: upload the package first, then start a new Cowork chat for the verification prompt. The new chat is deliberate: it checks whether Cowork exposes the uploaded package and skill after plugin loading refreshes.
 
 Cowork UI path:
 
