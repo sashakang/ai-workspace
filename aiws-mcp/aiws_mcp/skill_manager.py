@@ -595,6 +595,129 @@ def discover_installed_plugins(
     return {"status": status, "searched_roots": searched, "plugins": plugins}
 
 
+def _installed_skill_instance(plugin: dict[str, Any], skill_id: str) -> dict[str, Any] | None:
+    plugin_root = Path(plugin["source_plugin_root"])
+    skill_root = plugin_root / "skills" / skill_id
+    skill_file = skill_root / "SKILL.md"
+    if not skill_file.is_file() or skill_file.is_symlink():
+        return None
+    try:
+        reject_symlinked_child_path(skill_file, plugin_root, label="Installed skill file")
+    except SkillManagerError:
+        return None
+    return {
+        "plugin_id": plugin["plugin_id"],
+        "skill_id": skill_id,
+        "base_version": plugin["base_version"],
+        "source_plugin_root": plugin["source_plugin_root"],
+        "origin_marketplace": plugin.get("origin_marketplace"),
+        "origin_ref": plugin.get("origin_ref"),
+        "base_commit": plugin.get("base_commit"),
+        "skill_root": str(skill_root.resolve()),
+        "skill_file": str(skill_file.resolve()),
+        "runtime_evidence": "installed_plugin_root",
+    }
+
+
+def inspect_installed_skill(
+    *,
+    plugin_id: str,
+    skill_id: str,
+    search_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
+    source_plugin_root: str | Path | None = None,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    if source_plugin_root is not None:
+        source_root = Path(source_plugin_root).expanduser()
+        try:
+            validation = validate_plugin(source_root, expected_name=plugin_id)
+        except SkillManagerError as exc:
+            return {
+                "status": "installed_plugin_not_found",
+                "selection": "explicit_source",
+                "plugin_id": plugin_id,
+                "skill_id": skill_id,
+                "instance_count": 0,
+                "selected_instance": None,
+                "instances": [],
+                "reason": str(exc),
+            }
+        plugin = {
+            "plugin_id": validation["name"],
+            "base_version": validation["version"],
+            "source_plugin_root": str(source_root.resolve()),
+            "origin_marketplace": source_root.parent.name or "cowork-upload",
+            "origin_ref": "explicit_source",
+            "base_commit": "explicit_source",
+        }
+        instance = _installed_skill_instance(plugin, skill_id)
+        if instance is None:
+            return {
+                "status": "installed_skill_not_found",
+                "selection": "explicit_source",
+                "plugin_id": plugin_id,
+                "skill_id": skill_id,
+                "instance_count": 0,
+                "selected_instance": None,
+                "instances": [],
+                "reason": f"Plugin {plugin_id!r} does not contain skill {skill_id!r}.",
+            }
+        return {
+            "status": "ok",
+            "selection": "explicit_source",
+            "plugin_id": plugin_id,
+            "skill_id": skill_id,
+            "instance_count": 1,
+            "selected_instance": instance,
+            "instances": [instance],
+            "discovery": None,
+        }
+
+    discovery = discover_installed_plugins(plugin_id=plugin_id, search_roots=search_roots, env=env)
+    instances = [
+        instance
+        for plugin in discovery.get("plugins", [])
+        if (instance := _installed_skill_instance(plugin, skill_id)) is not None
+    ]
+    if not instances:
+        return {
+            "status": "installed_skill_not_found",
+            "selection": "auto",
+            "plugin_id": plugin_id,
+            "skill_id": skill_id,
+            "instance_count": 0,
+            "selected_instance": None,
+            "instances": [],
+            "discovery": discovery,
+            "reason": f"No installed copy of {plugin_id}:{skill_id} was found in the searched plugin roots.",
+        }
+    if len(instances) > 1:
+        return {
+            "status": "duplicate_visible_identity",
+            "selection": "auto",
+            "plugin_id": plugin_id,
+            "skill_id": skill_id,
+            "instance_count": len(instances),
+            "selected_instance": None,
+            "instances": instances,
+            "discovery": discovery,
+            "reason": (
+                "Cowork has more than one installed copy of this skill. "
+                "AIWS cannot safely choose which copy to manage."
+            ),
+        }
+    return {
+        "status": "ok",
+        "selection": "auto",
+        "plugin_id": plugin_id,
+        "skill_id": skill_id,
+        "instance_count": 1,
+        "selected_instance": instances[0],
+        "instances": instances,
+        "discovery": discovery,
+    }
+
+
 def create_draft_record(
     aiws_root: Path,
     *,

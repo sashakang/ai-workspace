@@ -32,7 +32,7 @@ class CoworkPackagingTests(unittest.TestCase):
 
         self.assertEqual(
             {package.name for package in package_paths},
-            {"core-aiws-0.3.9.zip", "aiws-productivity-0.2.1.zip"},
+            {"core-aiws-0.3.10.zip", "aiws-productivity-0.2.1.zip"},
         )
 
     def test_core_package_includes_mcp_config_launcher_and_server_source(self) -> None:

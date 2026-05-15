@@ -153,6 +153,25 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(deleted["status"], "deleted")
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_inspects_installed_skill_duplicates(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        self.write_cowork_plugin(uploads / "first")
+        self.write_cowork_plugin(uploads / "second")
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+        )
+
+        result = runtime.inspect_installed_skill(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+        )
+
+        self.assertEqual(result["status"], "duplicate_visible_identity")
+        self.assertEqual(result["instance_count"], 2)
+        self.assertIsNone(result["selected_instance"])
+        self.assert_no_memory_or_claude_writes()
+
     def test_cowork_runtime_create_draft_requires_source_when_discovery_is_ambiguous(self) -> None:
         uploads = Path(self.tempdir.name) / "cowork-uploads"
         self.write_cowork_plugin(uploads / "first")

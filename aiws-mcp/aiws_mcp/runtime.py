@@ -1175,6 +1175,22 @@ class AiwsRuntime:
             env=self.env,
         )
 
+    def inspect_installed_skill(
+        self,
+        *,
+        plugin_id: str,
+        skill_id: str,
+        search_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
+        source_plugin_root: str | Path | None = None,
+    ) -> dict[str, Any]:
+        return skill_manager.inspect_installed_skill(
+            plugin_id=plugin_id,
+            skill_id=skill_id,
+            search_roots=search_roots,
+            source_plugin_root=source_plugin_root,
+            env=self.env,
+        )
+
     def create_or_open_draft(
         self,
         *,

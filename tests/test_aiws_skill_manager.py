@@ -30,6 +30,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     draft_worktree_path,
     GhCliProposalSubmitter,
     GithubHandoffProposalSubmitter,
+    inspect_installed_skill,
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     load_draft_record,
     list_draft_files,
@@ -1624,6 +1625,65 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
             missing = discover_installed_plugins(plugin_id="missing-plugin", search_roots=[first_root])
             self.assertEqual(missing["status"], "installed_plugin_not_found")
+
+    def test_inspect_installed_skill_reports_single_duplicate_and_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            first_root = temp_root / "uploads" / "one"
+            plugin_root = self.write_plugin(first_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            single = inspect_installed_skill(
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                search_roots=[first_root],
+            )
+            self.assertEqual(single["status"], "ok")
+            self.assertEqual(single["instance_count"], 1)
+            self.assertEqual(single["selected_instance"]["source_plugin_root"], str(plugin_root.resolve()))
+            self.assertEqual(single["selected_instance"]["skill_id"], "meeting-followup")
+
+            second_root = temp_root / "uploads" / "two"
+            other_plugin = self.write_plugin(second_root, public_skills=["meeting-followup"])
+            self.write_skill(other_plugin, "meeting-followup")
+
+            duplicate = inspect_installed_skill(
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                search_roots=[temp_root / "uploads"],
+            )
+            self.assertEqual(duplicate["status"], "duplicate_visible_identity")
+            self.assertEqual(duplicate["instance_count"], 2)
+            self.assertIsNone(duplicate["selected_instance"])
+
+            missing = inspect_installed_skill(
+                plugin_id="example-plugin",
+                skill_id="not-there",
+                search_roots=[temp_root / "uploads"],
+            )
+            self.assertEqual(missing["status"], "installed_skill_not_found")
+            self.assertEqual(missing["instance_count"], 0)
+
+    def test_inspect_installed_skill_explicit_source_pins_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            first_root = temp_root / "uploads" / "one"
+            first_plugin = self.write_plugin(first_root, public_skills=["meeting-followup"])
+            self.write_skill(first_plugin, "meeting-followup")
+            second_root = temp_root / "uploads" / "two"
+            second_plugin = self.write_plugin(second_root, public_skills=["meeting-followup"])
+            self.write_skill(second_plugin, "meeting-followup")
+
+            pinned = inspect_installed_skill(
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                source_plugin_root=second_plugin,
+            )
+
+            self.assertEqual(pinned["status"], "ok")
+            self.assertEqual(pinned["selection"], "explicit_source")
+            self.assertEqual(pinned["instance_count"], 1)
+            self.assertEqual(pinned["selected_instance"]["source_plugin_root"], str(second_plugin.resolve()))
 
     def test_submit_pr_submits_staged_proposal_and_persists_review_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

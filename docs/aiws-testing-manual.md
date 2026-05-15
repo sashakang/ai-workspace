@@ -6,7 +6,7 @@ This manual is the starting point for AIWS testing. It lists the currently imple
 
 Current version assumptions:
 
-- `core-aiws` package version: `0.3.9`
+- `core-aiws` package version: `0.3.10`
 - `aiws-productivity` package version: `0.2.1`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
@@ -62,7 +62,7 @@ Check my AIWS setup.
 
 Verify:
 1. Marketplace `sashakang/ai-workspace` is installed.
-2. `core-aiws` is installed and updated to version 0.3.9 or newer.
+2. `core-aiws` is installed and updated to version 0.3.10 or newer.
 3. `aiws-productivity` is installed.
 4. `meeting-followup` skill is visible.
 
@@ -101,7 +101,7 @@ python scripts/build_cowork_import.py
 Expected command output:
 
 ```text
-dist/cowork-import/core-aiws-0.3.9.zip
+dist/cowork-import/core-aiws-0.3.10.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -114,7 +114,7 @@ Organization settings -> Plugins -> Add plugin -> Upload a file
 Upload:
 
 ```text
-core-aiws-0.3.9.zip
+core-aiws-0.3.10.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -439,7 +439,7 @@ proposal staged: no
 GitHub touched: no
 ```
 
-`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.9 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.10 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -487,6 +487,57 @@ updated instruction reflected: yes
 If `meeting-followup` appears twice, record it. That means Cowork has both the marketplace package and uploaded package installed; it does not prove AIWS can replace the active plugin in place. This is a PASS for the technical-pilot upload bridge, but it is a product gap for the final regular-user activation experience. If AIWS metadata cannot resolve a skill that the Cowork Skill invocation system can run, record that as a registry-alignment caveat.
 
 Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-upload-report-2026-05-15.md) and [Cowork Activation Handoff 0.3.9 Runtime Report](./cowork-activation-handoff-039-runtime-report-2026-05-15.md).
+
+## Scenario 9A: Inspect Installed Skill Copies
+
+Purpose: confirm AIWS can tell whether Cowork has zero, one, or multiple installed copies of the same logical skill before AIWS tries to manage it.
+
+Run this in a Cowork chat after updating `core-aiws` to `0.3.10` or later.
+
+Prompt to Cowork:
+
+```text
+Inspect installed copies of this AIWS skill:
+
+plugin_id: aiws-productivity
+skill_id: meeting-followup
+
+Use aiws.skills.inspect_installed_skill if it is available.
+
+Do not create or edit a draft.
+Do not activate anything.
+Do not stage or submit a proposal.
+Do not touch GitHub, ~/.claude, memory, or Cowork runtime files.
+
+Report:
+- status
+- instance_count
+- selected_instance, if any
+- whether duplicate installed copies were found
+- whether anything was mutated
+```
+
+Expected answer when there is one installed copy:
+
+```text
+status: ok
+instance_count: 1
+selected_instance: present
+duplicate installed copies: no
+mutated anything: no
+```
+
+Expected answer when duplicate copies exist:
+
+```text
+status: duplicate_visible_identity
+instance_count: 2 or more
+selected_instance: null
+duplicate installed copies: yes
+mutated anything: no
+```
+
+If the tool is not available, update `core-aiws` from the marketplace and start a new Cowork chat before retesting.
 
 ## Scenario 10: Deactivate Pending Upload Marker
 
@@ -734,7 +785,7 @@ OK
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.9.zip` is produced.
+- `core-aiws-0.3.10.zip` is produced.
 - `aiws-productivity-0.2.1.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.

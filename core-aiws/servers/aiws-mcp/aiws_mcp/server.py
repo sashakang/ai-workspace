@@ -39,6 +39,20 @@ def create_server(root: Path | None = None):
     def discover_installed_plugins(plugin_id: str | None = None, search_roots: list[str] | None = None) -> dict[str, Any]:
         return runtime.discover_installed_plugins(plugin_id=plugin_id, search_roots=search_roots)
 
+    @server.tool(name="aiws.skills.inspect_installed_skill")
+    def inspect_installed_skill(
+        plugin_id: str,
+        skill_id: str,
+        search_roots: list[str] | None = None,
+        source_plugin_root: str | None = None,
+    ) -> dict[str, Any]:
+        return runtime.inspect_installed_skill(
+            plugin_id=plugin_id,
+            skill_id=skill_id,
+            search_roots=search_roots,
+            source_plugin_root=source_plugin_root,
+        )
+
     @server.tool(name="aiws.skills.create_or_open_draft")
     def create_or_open_draft(
         plugin_id: str,
