@@ -76,6 +76,8 @@ Likely files, modules, and contracts to inspect: `docs/aiws-cowork-skills-manage
 
 Owner: developer session.
 
+Gate 1: approved for staged implementation in `docs/cowork-activation-update-gate1-2026-05-15.md`. The approved scope is a safer activation handoff, not a claim that Cowork activation is complete.
+
 Expected output: A normal Cowork user can activate or prepare activation for a modified draft without manually finding and uploading a ZIP in the happy path. The implementation must use only Cowork-supported install/update surfaces. If no supported activation surface exists, the result stays non-terminal and honest, but the UX should guide the user through one clear Cowork action rather than exposing package mechanics as the product flow.
 
 Acceptance: Activation preserves one logical visible skill identity. It does not leave two visible active copies of `aiws-productivity:meeting-followup` unless the user explicitly chooses a separate uploaded copy or scope. Installed marketplace and organization plugin folders remain read-only. `~/.claude`, Cowork RPM/runtime files, and unmanaged plugin folders remain untouched. Repeated activation is idempotent or returns the existing pending/active state. Cleanup semantics distinguish "clear AIWS pending state" from "uninstall Cowork-uploaded plugin". The manual ZIP upload path remains documented only as fallback/technical-pilot behavior.

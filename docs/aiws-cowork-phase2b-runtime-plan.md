@@ -274,6 +274,8 @@ If the probe plugin appears in Cowork, remove or disable it through Cowork plugi
 
 Replace the current manual-upload activation bridge with a Cowork-safe activation/update path that a normal user can complete without handling ZIP files.
 
+Gate 1: approved for staged implementation in [Cowork Activation And Update Gate 1](./cowork-activation-update-gate1-2026-05-15.md). The approved scope is activation handoff improvement, not fake activation. AIWS may prepare and hand off packages through safe Cowork-supported upload surfaces, but it must not claim `active` until Cowork confirms the modified package is visible and callable through a supported mechanism.
+
 Current evidence:
 
 - `activate_draft` can prepare a package and record `pending_upload`.
