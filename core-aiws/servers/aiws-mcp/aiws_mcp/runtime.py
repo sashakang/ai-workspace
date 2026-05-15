@@ -1206,12 +1206,19 @@ class AiwsRuntime:
         search_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
     ) -> dict[str, Any]:
         discovered: dict[str, Any] | None = None
+        inspection: dict[str, Any] | None = None
         if source_plugin_root is None:
-            discovered = self.discover_installed_plugins(plugin_id=plugin_id, search_roots=search_roots)
-            matches = discovered.get("plugins", [])
-            if discovered.get("status") != "ok" or len(matches) != 1:
-                raise ValueError(f"{discovered.get('status')}: cannot select one installed plugin for {plugin_id!r}.")
-            selected = matches[0]
+            inspection = self.inspect_installed_skill(
+                plugin_id=plugin_id,
+                skill_id=skill_id,
+                search_roots=search_roots,
+            )
+            discovered = inspection.get("discovery")
+            selected = inspection.get("selected_instance")
+            if inspection.get("status") != "ok" or not isinstance(selected, dict):
+                raise ValueError(
+                    f"{inspection.get('status')}: cannot select one installed skill for {plugin_id!r}:{skill_id!r}."
+                )
             source_plugin_root = selected["source_plugin_root"]
             origin_marketplace = origin_marketplace or selected.get("origin_marketplace")
             origin_ref = origin_ref or selected.get("origin_ref")
@@ -1239,6 +1246,7 @@ class AiwsRuntime:
             "status": "draft_opened",
             "record_id": record_id,
             "discovery": discovered,
+            "inspection": inspection,
             **record.to_json(),
         }
 

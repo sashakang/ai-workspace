@@ -42,7 +42,7 @@ Owner: developer session.
 
 Expected output: A Cowork-facing operation can create or reopen a draft for an installed skill using the logical identity `plugin_id + skill_id`, origin metadata, and base version/ref/commit. Editable files are copied under `~/.aiws/plugins/<marketplace-slug>/<plugin-id>-<origin-repo-sha10>`, and the authoritative draft record is written under `~/.aiws/state/skill-drafts/`.
 
-Acceptance: Creating a draft validates the source plugin first, copies the installed source once, records origin metadata, and returns the existing draft on repeat calls without overwriting local edits. The draft path must match `aiws-mcp/aiws_mcp/skill_manager.py`: slug-normalized marketplace and plugin values, plus `origin-repo-sha10 = sha256(origin_repo)[:10]`. The suffix prevents origin collisions but does not change the user-facing identity or create duplicate visible skills. A requested skill missing from the installed plugin fails closed. An orphaned draft directory without a usable registry record fails closed and is not deleted.
+Acceptance: Creating a draft first inspects installed copies for the requested `plugin_id + skill_id`. A single matching installed copy is selected as the source. Duplicate matching copies fail closed with `duplicate_visible_identity`; AIWS must not guess. The selected source plugin is then validated, copied once, recorded with origin metadata, and returned on repeat calls without overwriting local edits. The draft path must match `aiws-mcp/aiws_mcp/skill_manager.py`: slug-normalized marketplace and plugin values, plus `origin-repo-sha10 = sha256(origin_repo)[:10]`. The suffix prevents origin collisions but does not change the user-facing identity or create duplicate visible skills. A requested skill missing from the installed plugin fails closed. An orphaned draft directory without a usable registry record fails closed and is not deleted.
 
 Evidence: Unit tests should cover first create, reopen without overwrite, missing skill, invalid source plugin, and orphaned draft directory. Existing coverage to preserve and extend is in `tests/test_aiws_skill_manager.py`, especially the `create_or_open_draft` tests.
 
@@ -103,6 +103,8 @@ Evidence: Tests should cover one installed copy, duplicate installed copies, mis
 Runtime update: the first `core-aiws` 0.3.10 test showed that explicit `source_plugin_root` works, but default discovery missed Cowork's RPM install path. The next implementation should add known Cowork RPM/plugin roots and bounded Claude local-agent session RPM roots to default discovery without broad filesystem scanning or any Cowork runtime mutation.
 
 Runtime update after `core-aiws` 0.3.12: Scenario 9A passed. AIWS found one installed `aiws-productivity:meeting-followup` instance without explicit source pinning and did not mutate state. The installed-copy safety check is now usable before draft/edit work proceeds.
+
+Implementation update in `core-aiws` 0.3.13: `create_or_open_draft` now uses the installed-copy inspection result when no explicit `source_plugin_root` is provided. This makes the safety check part of the normal draft-open path.
 
 Likely files, modules, and contracts to inspect: `docs/cowork-registry-alignment-gate1-2026-05-15.md`, `docs/cowork-activation-handoff-039-runtime-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `tests/test_aiws_skill_manager.py`, and `tests/test_aiws_mcp.py`.
 

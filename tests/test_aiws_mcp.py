@@ -210,7 +210,27 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(result["selected_instance"]["source_plugin_root"], str(plugin_root.resolve()))
         self.assert_no_memory_or_claude_writes()
 
-    def test_cowork_runtime_create_draft_requires_source_when_discovery_is_ambiguous(self) -> None:
+    def test_cowork_runtime_create_draft_selects_single_matching_skill_when_plugin_discovery_is_ambiguous(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        plugin_root = self.write_cowork_plugin(uploads / "first")
+        self.write_cowork_plugin(uploads / "second", skill_id="other-skill")
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+        )
+
+        draft = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/review",
+        )
+
+        self.assertEqual(draft["status"], "draft_opened")
+        self.assertEqual(draft["inspection"]["status"], "ok")
+        self.assertEqual(draft["inspection"]["selected_instance"]["source_plugin_root"], str(plugin_root.resolve()))
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_create_draft_fails_when_installed_skill_is_duplicated(self) -> None:
         uploads = Path(self.tempdir.name) / "cowork-uploads"
         self.write_cowork_plugin(uploads / "first")
         self.write_cowork_plugin(uploads / "second")
@@ -219,10 +239,10 @@ class AiwsMcpSkillTests(unittest.TestCase):
             env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
         )
 
-        discovered = runtime.discover_installed_plugins(plugin_id="example-plugin")
+        inspection = runtime.inspect_installed_skill(plugin_id="example-plugin", skill_id="meeting-followup")
 
-        self.assertEqual(discovered["status"], "ambiguous_installed_plugin")
-        with self.assertRaisesRegex(ValueError, "ambiguous_installed_plugin"):
+        self.assertEqual(inspection["status"], "duplicate_visible_identity")
+        with self.assertRaisesRegex(ValueError, "duplicate_visible_identity"):
             runtime.create_or_open_draft(
                 plugin_id="example-plugin",
                 skill_id="meeting-followup",

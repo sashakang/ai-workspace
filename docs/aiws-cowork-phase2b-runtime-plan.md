@@ -323,6 +323,8 @@ Runtime update: the first `core-aiws` 0.3.10 test partially passed. `inspect_ins
 
 Runtime update after `core-aiws` 0.3.12: Scenario 9A passed. `inspect_installed_skill` found one `aiws-productivity:meeting-followup` instance in the Cowork session RPM tree without an explicit source path, returned `status: ok`, and performed no mutations. See [Cowork Installed Skill Inspection PASS](./cowork-installed-skill-inspection-pass-2026-05-15.md).
 
+Implementation update in `core-aiws` 0.3.13: draft creation now uses installed-copy inspection when no explicit source root is supplied. If exactly one installed copy of `plugin_id + skill_id` exists, AIWS opens the draft from that source. If duplicates exist, draft creation fails closed with `duplicate_visible_identity`.
+
 ### Slice 2B.9: Non-CLI GitHub Submitter
 
 Replace normal-user reliance on host `gh` with a GitHub App, bot, API, or Cowork-compatible GitHub connection.
