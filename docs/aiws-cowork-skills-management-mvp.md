@@ -81,7 +81,7 @@ When the local draft is active and changed from its base, Cowork shows the same 
 Modified locally
 ```
 
-If duplicate visible variants of the same logical skill are possible and the scope is not pinned by the user or organization policy, the operation must fail closed rather than guessing.
+If duplicate visible variants of the same logical skill are possible and the scope is not pinned by the user or organization policy, the operation must fail closed rather than guessing. If an active draft already exists for a plugin and skill, the normal Cowork flow must keep using that `draft_id`; opening a second draft for a different origin is an explicit advanced action, not the default.
 
 ## Operations
 
@@ -89,7 +89,7 @@ The MVP should stay within the closed skill-management operation surface from `c
 
 ```text
 validate_plugin(source_or_package)
-create_or_open_draft(plugin_id, skill_id, origin_repo, origin_marketplace, base_ref)
+create_or_open_draft(plugin_id, skill_id, origin_repo, origin_marketplace, base_ref, allow_parallel_draft=false)
 refresh_modified_status(draft_id)
 build_draft_package(draft_id, package_output_dir)
 activate_draft(draft_id, host_kind, package_output_dir)

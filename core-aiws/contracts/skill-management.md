@@ -35,7 +35,7 @@ The skill-management contract is limited to this operation surface:
 
 ```text
 validate_plugin(source_or_package)
-create_or_open_draft(plugin_id, skill_id, origin_repo, origin_marketplace, base_ref)
+create_or_open_draft(plugin_id, skill_id, origin_repo, origin_marketplace, base_ref, allow_parallel_draft=false)
 list_draft_files(draft_id)
 read_draft_file(draft_id, relative_path)
 write_draft_file(draft_id, relative_path, content)
@@ -50,6 +50,8 @@ stage_proposal(draft_id, target_scope, target_repo, summary, rationale)
 submit_pr(proposal_id, submitter)
 revert_draft(draft_id)
 ```
+
+`create_or_open_draft` must not silently create a second draft for the same `plugin_id + skill_id` when a different active draft already exists. If an active related draft exists, the operation fails closed unless the caller explicitly sets `allow_parallel_draft=true`. Normal Cowork editing should keep using the returned `draft_id` with `read_draft_file`, `write_draft_file`, and later lifecycle operations. The explicit override exists for advanced workflows where the user intentionally wants separate drafts for different origins or review repositories.
 
 `stage_proposal` writes a local proposal record only, under `~/.aiws/state/skill-proposals/`. It records the draft, target scope, target review repository, summary, rationale, provenance, and validation status for later review. `target_scope` is the Cowork/user-facing label and policy scope. `target_repo` is the concrete backend review repository persisted for a later submit-for-review action. Staging must not upload, submit, create a pull request, or push changes; `submit_pr` or another explicit submit-for-review operation is follow-on behavior. Package export or upload is an admin/deployment fallback, not the normal user staging path.
 

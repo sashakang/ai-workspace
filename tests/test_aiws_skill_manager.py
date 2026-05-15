@@ -27,6 +27,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     delete_draft_file,
     discover_installed_plugins,
     draft_id,
+    draft_record_path,
     draft_worktree_path,
     GhCliProposalSubmitter,
     GithubHandoffProposalSubmitter,
@@ -2252,6 +2253,65 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(Path(reopened.draft_path), Path(record.draft_path))
             self.assertIn("Local draft edit.", draft_skill.read_text())
             self.assertNotIn("Upstream source edit", draft_skill.read_text())
+
+    def test_create_or_open_draft_rejects_parallel_origin_when_active_draft_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            first = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="ai-workspace",
+                origin_repo="https://github.com/example/first-review",
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+            )
+            first_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/first-review")
+            write_draft_file(
+                aiws_root,
+                first_id,
+                "skills/meeting-followup/SKILL.md",
+                (Path(first.draft_path) / "skills" / "meeting-followup" / "SKILL.md").read_text()
+                + "\nLocal draft edit.\n",
+            )
+
+            with self.assertRaisesRegex(SkillManagerError, "Existing active draft"):
+                create_or_open_draft(
+                    aiws_root,
+                    source_plugin_root=plugin_root,
+                    plugin_id="example-plugin",
+                    skill_id="meeting-followup",
+                    origin_marketplace="ai-workspace",
+                    origin_repo="https://github.com/example/second-review",
+                    origin_ref="master",
+                    base_version="1.0.0",
+                    base_commit="abc123",
+                )
+
+            second_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/second-review")
+            self.assertFalse(draft_record_path(aiws_root, second_id).exists())
+
+            second = create_or_open_draft(
+                aiws_root,
+                source_plugin_root=plugin_root,
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                origin_marketplace="ai-workspace",
+                origin_repo="https://github.com/example/second-review",
+                origin_ref="master",
+                base_version="1.0.0",
+                base_commit="abc123",
+                allow_parallel_draft=True,
+            )
+
+            self.assertTrue(draft_record_path(aiws_root, second_id).exists())
+            self.assertNotEqual(Path(second.draft_path), Path(first.draft_path))
 
     def test_create_or_open_draft_rejects_orphaned_draft_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

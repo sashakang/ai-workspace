@@ -230,6 +230,42 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(draft["inspection"]["selected_instance"]["source_plugin_root"], str(plugin_root.resolve()))
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_create_draft_blocks_accidental_parallel_active_draft(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        self.write_cowork_plugin(uploads)
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+        )
+
+        draft = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/first-review",
+        )
+        runtime.write_draft_file(
+            draft["record_id"],
+            "skills/meeting-followup/SKILL.md",
+            "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n\nUpdated.\n",
+        )
+
+        with self.assertRaisesRegex(ValueError, "Existing active draft"):
+            runtime.create_or_open_draft(
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                target_repo="example/second-review",
+            )
+
+        parallel = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/second-review",
+            allow_parallel_draft=True,
+        )
+
+        self.assertNotEqual(parallel["record_id"], draft["record_id"])
+        self.assert_no_memory_or_claude_writes()
+
     def test_cowork_runtime_create_draft_fails_when_installed_skill_is_duplicated(self) -> None:
         uploads = Path(self.tempdir.name) / "cowork-uploads"
         self.write_cowork_plugin(uploads / "first")

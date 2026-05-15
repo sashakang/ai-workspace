@@ -65,6 +65,7 @@ def create_server(root: Path | None = None):
         base_version: str | None = None,
         base_commit: str | None = None,
         search_roots: list[str] | None = None,
+        allow_parallel_draft: bool = False,
     ) -> dict[str, Any]:
         return runtime.create_or_open_draft(
             plugin_id=plugin_id,
@@ -77,6 +78,7 @@ def create_server(root: Path | None = None):
             base_version=base_version,
             base_commit=base_commit,
             search_roots=search_roots,
+            allow_parallel_draft=allow_parallel_draft,
         )
 
     @server.tool(name="aiws.skills.list_draft_files")

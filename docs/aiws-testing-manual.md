@@ -6,7 +6,7 @@ This manual is the starting point for AIWS testing. It lists the currently imple
 
 Current version assumptions:
 
-- `core-aiws` package version: `0.3.13`
+- `core-aiws` package version: `0.3.14`
 - `aiws-productivity` package version: `0.2.1`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
@@ -62,7 +62,7 @@ Check my AIWS setup.
 
 Verify:
 1. Marketplace `sashakang/ai-workspace` is installed.
-2. `core-aiws` is installed and updated to version 0.3.13 or newer.
+2. `core-aiws` is installed and updated to version 0.3.14 or newer.
 3. `aiws-productivity` is installed.
 4. `meeting-followup` skill is visible.
 
@@ -101,7 +101,7 @@ python scripts/build_cowork_import.py
 Expected command output:
 
 ```text
-dist/cowork-import/core-aiws-0.3.13.zip
+dist/cowork-import/core-aiws-0.3.14.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -114,7 +114,7 @@ Organization settings -> Plugins -> Add plugin -> Upload a file
 Upload:
 
 ```text
-core-aiws-0.3.13.zip
+core-aiws-0.3.14.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -181,7 +181,7 @@ draft_path under ~/.aiws/plugins/: yes
 installed marketplace plugin files touched: no
 ```
 
-Record the returned `draft_id`. The draft path must not be inside the installed Cowork plugin/RPM path. If installed skill inspection returns `duplicate_visible_identity`, draft creation must stop instead of guessing which installed copy to use.
+Record the returned `draft_id`. The draft path must not be inside the installed Cowork plugin/RPM path. If installed skill inspection returns `duplicate_visible_identity`, draft creation must stop instead of guessing which installed copy to use. Starting in `core-aiws` 0.3.14, if another active draft already exists for the same plugin and skill, opening a different draft must fail closed unless the caller explicitly sets `allow_parallel_draft: true`.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-a-create-or-open-draft).
 
@@ -197,6 +197,8 @@ Prompt to Cowork:
 Edit only this draft file:
 
 skills/meeting-followup/SKILL.md
+
+Use the exact draft_id returned by Scenario 3. Do not call create_or_open_draft again unless you are only reopening that same draft_id.
 
 Make one harmless test edit: add a short instruction that follow-up messages should be clear and concise.
 
@@ -217,6 +219,8 @@ exact file changed: skills/meeting-followup/SKILL.md
 under skills/meeting-followup/: yes
 installed plugin files touched: no
 ```
+
+If Cowork creates or edits a different `draft_id` than the one returned by Scenario 3, mark the scenario failed and stop. The point of this scenario is to preserve the same draft identity through edit and validation.
 
 Then validate:
 
@@ -447,7 +451,7 @@ proposal staged: no
 GitHub touched: no
 ```
 
-`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.13 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.14 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -500,7 +504,7 @@ Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-u
 
 Purpose: confirm AIWS can tell whether Cowork has zero, one, or multiple installed copies of the same logical skill before AIWS tries to manage it.
 
-Run this in a Cowork chat after updating `core-aiws` to `0.3.13` or later.
+Run this in a Cowork chat after updating `core-aiws` to `0.3.14` or later.
 
 Prompt to Cowork:
 
@@ -799,7 +803,7 @@ OK
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.13.zip` is produced.
+- `core-aiws-0.3.14.zip` is produced.
 - `aiws-productivity-0.2.1.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.

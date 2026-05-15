@@ -327,6 +327,8 @@ Implementation update in `core-aiws` 0.3.13: draft creation now uses installed-c
 
 Runtime update after `core-aiws` 0.3.13: the inspected draft/edit/validate/stage/submit path passed and produced PR #4 in `sashakang/aiws-skill-tests`. See [Cowork Inspected Draft Proposal Submit PASS](./cowork-inspected-draft-proposal-submit-pass-2026-05-15.md).
 
+Implementation update in `core-aiws` 0.3.14: draft opening now blocks accidental draft drift. If an active draft already exists for the same `plugin_id + skill_id`, a later `create_or_open_draft` call for a different repository fails closed unless the caller explicitly sets `allow_parallel_draft: true`. Normal Cowork editing should reuse the existing `draft_id` through `read_draft_file`, `write_draft_file`, `validate_draft`, `stage_proposal`, and `submit_for_review`.
+
 ### Slice 2B.9: Non-CLI GitHub Submitter
 
 Replace normal-user reliance on host `gh` with a GitHub App, bot, API, or Cowork-compatible GitHub connection.

@@ -777,6 +777,44 @@ def safely_identify_draft_record(aiws_root: Path, record_id: str) -> DraftRecord
     return load_draft_record(aiws_root, record_id)
 
 
+def draft_summary(record_id: str, record: DraftRecord) -> dict[str, Any]:
+    return {
+        "draft_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "origin_marketplace": record.origin_marketplace,
+        "origin_repo": record.origin_repo,
+        "draft_path": record.draft_path,
+        "active": record.active,
+        "modified": record.modified,
+        "last_validation_status": record.last_validation_status,
+        "last_validation_tree_digest": record.last_validation_tree_digest,
+    }
+
+
+def related_drafts(aiws_root: Path, *, plugin_id: str, skill_id: str, exclude_record_id: str | None = None) -> list[dict[str, Any]]:
+    state_root = aiws_root / "state" / "skill-drafts"
+    if not state_root.exists():
+        return []
+    require_path_under(state_root, aiws_root / "state", label="Draft state root")
+    drafts: list[dict[str, Any]] = []
+    for record_path in sorted(state_root.glob("*.json"), key=lambda item: item.name):
+        if record_path.name.endswith(".base-tree.json"):
+            continue
+        if record_path.is_symlink():
+            raise SkillManagerError(f"Draft record path must not be a symlink: {record_path}")
+        record_id = record_path.stem
+        if exclude_record_id is not None and record_id == exclude_record_id:
+            continue
+        record = load_draft_record(aiws_root, record_id)
+        canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
+        if canonical_record_id != record_id:
+            raise SkillManagerError(f"Draft record id does not match canonical draft id {canonical_record_id}.")
+        if record.plugin_id == plugin_id and record.skill_id == skill_id:
+            drafts.append(draft_summary(record_id, record))
+    return drafts
+
+
 def persist_validation_status(aiws_root: Path, record_id: str, status: str) -> DraftRecord:
     record = safely_identify_draft_record(aiws_root, record_id)
     validation_tree_digest = record.current_tree_digest if status == "passed" else None
@@ -947,6 +985,7 @@ def create_or_open_draft(
     origin_ref: str,
     base_version: str,
     base_commit: str,
+    allow_parallel_draft: bool = False,
 ) -> DraftRecord:
     reject_tree_symlinks(source_plugin_root, label="Source plugin tree")
     validation = validate_plugin(source_plugin_root, expected_name=plugin_id, expected_version=base_version)
@@ -985,6 +1024,24 @@ def create_or_open_draft(
             if not draft_base_tree_path(aiws_root, record_id).exists() and not refreshed.modified:
                 write_base_tree_manifest(aiws_root, record_id, existing_draft_path)
             return refreshed
+
+    if not allow_parallel_draft:
+        blocking_drafts = [
+            draft
+            for draft in related_drafts(
+                aiws_root,
+                plugin_id=plugin_id,
+                skill_id=skill_id,
+                exclude_record_id=record_id,
+            )
+            if draft["active"]
+        ]
+        if blocking_drafts:
+            draft_ids = ", ".join(draft["draft_id"] for draft in blocking_drafts)
+            raise SkillManagerError(
+                "Existing active draft for this plugin and skill must be reused, staged, reverted, "
+                f"or explicitly bypassed with allow_parallel_draft=true before opening another draft: {draft_ids}"
+            )
 
     if expected_draft_path.exists():
         raise SkillManagerError(f"Draft path already exists without a usable record: {expected_draft_path}")

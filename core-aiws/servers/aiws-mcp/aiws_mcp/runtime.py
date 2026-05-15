@@ -1204,6 +1204,7 @@ class AiwsRuntime:
         base_version: str | None = None,
         base_commit: str | None = None,
         search_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
+        allow_parallel_draft: bool = False,
     ) -> dict[str, Any]:
         discovered: dict[str, Any] | None = None
         inspection: dict[str, Any] | None = None
@@ -1240,6 +1241,7 @@ class AiwsRuntime:
             origin_ref=origin_ref or "cowork-upload",
             base_version=base_version,
             base_commit=base_commit or "uploaded",
+            allow_parallel_draft=allow_parallel_draft,
         )
         record_id = skill_manager.draft_id(plugin_id, skill_id, resolved_origin_repo)
         return {

@@ -34,6 +34,8 @@ submit/upload first
 
 Create or open a draft through the internal `core-aiws` skill-manager bridge. Store editable files under `~/.aiws/plugins/` and durable state under `~/.aiws/state/skill-drafts/`.
 
+After a draft is opened, keep using its `draft_id`. Do not run a fresh draft-open flow during edit, validation, staging, or submit unless you are intentionally reopening the same draft. If an active draft already exists for the same plugin and skill, creating a second draft for a different target must fail closed unless the caller explicitly chooses an advanced parallel-draft override.
+
 Use the draft file operations for Cowork-facing edits:
 
 ```text
