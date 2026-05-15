@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -30,6 +31,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     draft_record_path,
     draft_worktree_path,
     GhCliProposalSubmitter,
+    GitHubApiProposalSubmitter,
     GithubHandoffProposalSubmitter,
     inspect_installed_skill,
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
@@ -135,6 +137,76 @@ class FakeCommandRunner:
         if args[:3] == ["gh", "pr", "create"]:
             return subprocess.CompletedProcess(args, 0, "https://github.com/example/review/pull/7\n", "")
         raise AssertionError(f"Unexpected command: {args}")
+
+
+class FakeGitHubApiClient:
+    def __init__(self, *, no_changes: bool = False, existing_pr: bool = False) -> None:
+        self.no_changes = no_changes
+        self.existing_pr = existing_pr
+        self.calls: list[tuple[str, str, dict[str, object] | None, dict[str, object] | None]] = []
+        self.blob_counter = 0
+
+    def request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        payload: dict[str, object] | None = None,
+        query: dict[str, object] | None = None,
+        allow_404: bool = False,
+    ) -> dict[str, object] | list[object] | None:
+        self.calls.append((method, path, payload, query))
+        if method == "GET" and path == "/repos/example/review":
+            return {"default_branch": "main", "permissions": {"push": True}}
+        if method == "GET" and path == "/repos/example/review/git/refs/heads/main":
+            return {"object": {"sha": "commit-base"}}
+        if method == "GET" and path == "/repos/example/review/git/commits/commit-base":
+            return {"tree": {"sha": "tree-base"}}
+        if method == "GET" and path == "/repos/example/review/git/trees/tree-base":
+            return {
+                "tree": [
+                    {
+                        "path": "example-plugin/.claude-plugin/plugin.json",
+                        "type": "blob",
+                        "sha": "manifest-sha",
+                    },
+                    {
+                        "path": "example-plugin/skills/meeting-followup/SKILL.md",
+                        "type": "blob",
+                        "sha": "old-skill-sha",
+                    },
+                    {"path": "README.md", "type": "blob", "sha": "readme-sha"},
+                ]
+            }
+        if method == "GET" and path == "/repos/example/review/git/blobs/manifest-sha":
+            return {
+                "encoding": "base64",
+                "content": base64.b64encode(
+                    json.dumps({"name": "example-plugin", "version": "1.0.0"}).encode("utf-8")
+                ).decode("ascii"),
+            }
+        if method == "POST" and path == "/repos/example/review/git/blobs":
+            self.blob_counter += 1
+            return {"sha": f"new-blob-{self.blob_counter}"}
+        if method == "POST" and path == "/repos/example/review/git/trees":
+            return {"sha": "tree-base" if self.no_changes else "tree-new"}
+        if method == "POST" and path == "/repos/example/review/git/commits":
+            return {"sha": "commit-new"}
+        if method == "GET" and path.startswith("/repos/example/review/git/refs/heads/aiws/skill-proposals/"):
+            return None if allow_404 else {"object": {"sha": "commit-old"}}
+        if method == "POST" and path == "/repos/example/review/git/refs":
+            return {"ref": payload["ref"] if payload else ""}
+        if method == "PATCH" and path.startswith("/repos/example/review/git/refs/heads/aiws/skill-proposals/"):
+            return {"ref": path.removeprefix("/repos/example/review/git/refs/")}
+        if method == "GET" and path == "/repos/example/review/pulls":
+            if self.existing_pr:
+                return [{"number": 9, "html_url": "https://github.com/example/review/pull/9"}]
+            return []
+        if method == "PATCH" and path == "/repos/example/review/pulls/9":
+            return {"html_url": "https://github.com/example/review/pull/9"}
+        if method == "POST" and path == "/repos/example/review/pulls":
+            return {"html_url": "https://github.com/example/review/pull/8"}
+        raise AssertionError(f"Unexpected API call: {method} {path} {payload} {query}")
 
 
 class AiwsSkillManagerTests(unittest.TestCase):
@@ -2241,6 +2313,69 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertIn("Post-merge Cowork delivery:", body)
             self.assertNotIn("Required review role", body)
             self.assertNotIn("AI engineer", body)
+
+    def test_github_api_submitter_creates_branch_commit_and_pr_without_gh(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            self.set_proposal_target_repo(aiws_root, staged["proposal_id"], "example/review")
+            api_client = FakeGitHubApiClient()
+            submitter = GitHubApiProposalSubmitter(aiws_root=aiws_root, api_client=api_client)
+
+            result = submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(result["status"], "submitted_for_review")
+            self.assertEqual(result["pr_url"], "https://github.com/example/review/pull/8")
+            calls = [(method, path) for method, path, _payload, _query in api_client.calls]
+            self.assertIn(("POST", "/repos/example/review/git/blobs"), calls)
+            self.assertIn(("POST", "/repos/example/review/git/trees"), calls)
+            self.assertIn(("POST", "/repos/example/review/git/commits"), calls)
+            self.assertIn(("POST", "/repos/example/review/git/refs"), calls)
+            self.assertIn(("POST", "/repos/example/review/pulls"), calls)
+            tree_payload = next(
+                payload
+                for method, path, payload, _query in api_client.calls
+                if method == "POST" and path == "/repos/example/review/git/trees"
+            )
+            self.assertIn(
+                {
+                    "path": "example-plugin/skills/meeting-followup/SKILL.md",
+                    "mode": "100644",
+                    "type": "blob",
+                    "sha": None,
+                },
+                tree_payload["tree"],
+            )
+            self.assertTrue(
+                any(
+                    entry["path"] == "example-plugin/skills/meeting-followup/SKILL.md"
+                    and entry["sha"] == "new-blob-1"
+                    for entry in tree_payload["tree"]
+                )
+            )
+            pr_payload = next(
+                payload
+                for method, path, payload, _query in api_client.calls
+                if method == "POST" and path == "/repos/example/review/pulls"
+            )
+            self.assertFalse(pr_payload["draft"])
+            self.assertIn("CODEOWNERS: not_detected", pr_payload["body"])
+            self.assertIn("Post-merge Cowork delivery:", pr_payload["body"])
+            self.assertNotIn("AI engineer", pr_payload["body"])
+
+    def test_github_api_submitter_no_changes_keeps_proposal_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+            self.set_proposal_target_repo(aiws_root, staged["proposal_id"], "example/review")
+            submitter = GitHubApiProposalSubmitter(aiws_root=aiws_root, api_client=FakeGitHubApiClient(no_changes=True))
+
+            result = submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            self.assertEqual(result["status"], "no_changes_to_submit")
+            self.assertEqual(self.proposal_payload(aiws_root, staged["proposal_id"])["status"], "staged")
 
     def test_create_or_open_draft_reopens_existing_draft_without_overwriting_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

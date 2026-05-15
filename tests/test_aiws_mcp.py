@@ -402,6 +402,10 @@ class AiwsMcpSkillTests(unittest.TestCase):
             def __init__(self, *, aiws_root: Path) -> None:
                 self.aiws_root = aiws_root
 
+        class FakeGitHubApiProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
         class FakeGithubHandoffProposalSubmitter:
             def __init__(self, *, aiws_root: Path) -> None:
                 self.aiws_root = aiws_root
@@ -421,6 +425,13 @@ class AiwsMcpSkillTests(unittest.TestCase):
             }
 
         with (
+            patch.dict(os.environ, {"AIWS_GITHUB_TOKEN": "", "GITHUB_TOKEN": "", "GH_TOKEN": ""}),
+            patch.object(
+                runtime_module.skill_manager,
+                "GitHubApiProposalSubmitter",
+                FakeGitHubApiProposalSubmitter,
+                create=True,
+            ),
             patch.object(runtime_module.skill_manager, "GhCliProposalSubmitter", FakeGhCliProposalSubmitter, create=True),
             patch.object(
                 runtime_module.skill_manager,
@@ -443,8 +454,53 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_submit_for_review_prefers_github_api_submitter_when_token_exists(self) -> None:
+        class FakeGitHubApiProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        class FakeGhCliProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        captured: dict[str, object] = {}
+
+        def fake_submit_pr(aiws_root: Path, proposal_id: str, submitter: object, **kwargs: object) -> dict[str, object]:
+            captured["submitter"] = submitter
+            return {
+                "status": "submitted_for_review",
+                "proposal_id": proposal_id,
+                "branch_name": "aiws/skill-proposals/skillprop_123",
+                "pr_url": "https://github.com/example/review/pull/1",
+            }
+
+        with (
+            patch.dict(os.environ, {"AIWS_GITHUB_TOKEN": "token-for-test"}),
+            patch.object(
+                runtime_module.skill_manager,
+                "GitHubApiProposalSubmitter",
+                FakeGitHubApiProposalSubmitter,
+                create=True,
+            ),
+            patch.object(runtime_module.skill_manager, "GhCliProposalSubmitter", FakeGhCliProposalSubmitter, create=True),
+            patch.object(runtime_module.shutil, "which", return_value="/usr/bin/gh"),
+            patch.object(runtime_module.skill_manager, "submit_pr", side_effect=fake_submit_pr),
+        ):
+            result = self.runtime.submit_for_review(
+                "skillprop_123",
+                allowed_target_repos=["example/review"],
+            )
+
+        self.assertEqual(result["status"], "submitted_for_review")
+        self.assertIsInstance(captured["submitter"], FakeGitHubApiProposalSubmitter)
+        self.assert_no_memory_or_claude_writes()
+
     def test_cowork_runtime_submit_for_review_uses_handoff_submitter_when_gh_is_missing(self) -> None:
         class FakeGhCliProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        class FakeGitHubApiProposalSubmitter:
             def __init__(self, *, aiws_root: Path) -> None:
                 self.aiws_root = aiws_root
 
@@ -471,6 +527,13 @@ class AiwsMcpSkillTests(unittest.TestCase):
             }
 
         with (
+            patch.dict(os.environ, {"AIWS_GITHUB_TOKEN": "", "GITHUB_TOKEN": "", "GH_TOKEN": ""}),
+            patch.object(
+                runtime_module.skill_manager,
+                "GitHubApiProposalSubmitter",
+                FakeGitHubApiProposalSubmitter,
+                create=True,
+            ),
             patch.object(runtime_module.skill_manager, "GhCliProposalSubmitter", FakeGhCliProposalSubmitter, create=True),
             patch.object(
                 runtime_module.skill_manager,

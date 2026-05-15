@@ -6,7 +6,7 @@ This manual is the starting point for AIWS testing. It lists the currently imple
 
 Current version assumptions:
 
-- `core-aiws` package version: `0.3.16`
+- `core-aiws` package version: `0.3.17`
 - `aiws-productivity` package version: `0.2.1`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
@@ -64,7 +64,7 @@ Check my AIWS setup.
 
 Verify:
 1. Marketplace `sashakang/ai-workspace` is installed.
-2. `core-aiws` is installed and updated to version 0.3.16 or newer.
+2. `core-aiws` is installed and updated to version 0.3.17 or newer.
 3. `aiws-productivity` is installed.
 4. `meeting-followup` skill is visible.
 
@@ -103,7 +103,7 @@ python scripts/build_cowork_import.py
 Expected command output:
 
 ```text
-dist/cowork-import/core-aiws-0.3.16.zip
+dist/cowork-import/core-aiws-0.3.17.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -116,7 +116,7 @@ Organization settings -> Plugins -> Add plugin -> Upload a file
 Upload:
 
 ```text
-core-aiws-0.3.16.zip
+core-aiws-0.3.17.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -453,7 +453,7 @@ proposal staged: no
 GitHub touched: no
 ```
 
-`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.16 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.17 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -506,7 +506,7 @@ Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-u
 
 Purpose: confirm AIWS can tell whether Cowork has zero, one, or multiple installed copies of the same logical skill before AIWS tries to manage it.
 
-Run this in a Cowork chat after updating `core-aiws` to `0.3.16` or later.
+Run this in a Cowork chat after updating `core-aiws` to `0.3.17` or later.
 
 Prompt to Cowork:
 
@@ -807,6 +807,54 @@ duplicate visible skill copies: not acceptable in the normal path
 
 Latest evidence: [Cowork Post-Merge Delivery Guidance PASS](./cowork-post-merge-delivery-guidance-pass-2026-05-15.md).
 
+## Scenario 12B: Non-CLI GitHub Submitter
+
+Purpose: confirm AIWS no longer requires host `gh` when a host-provided GitHub token is configured.
+
+Status: implemented in `core-aiws` 0.3.17; automated tests pass, runtime Cowork token-path retest pending.
+
+Automated verification from the repo root:
+
+```bash
+python -m unittest \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_github_api_submitter_creates_branch_commit_and_pr_without_gh \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_github_api_submitter_no_changes_keeps_proposal_staged \
+  tests.test_aiws_mcp.AiwsMcpSkillTests.test_cowork_runtime_submit_for_review_prefers_github_api_submitter_when_token_exists
+```
+
+Expected result:
+
+```text
+Ran 3 tests
+OK
+```
+
+Runtime Cowork prompt, only after the host has a GitHub token configured for AIWS:
+
+```text
+Submit this staged AIWS proposal for review using the configured GitHub API submitter if available.
+
+proposal_id: <proposal_id from Scenario 11>
+allowed_target_repos:
+- <test review repository>
+
+Before submitting, revalidate the draft and confirm the digest gate passes.
+Report whether a PR was created, branch_name, pr_url, post_merge_delivery, and whether host gh was required.
+```
+
+Expected behavior:
+
+```text
+status: submitted_for_review
+branch_name: aiws/skill-proposals/<proposal_id>
+pr_url: <review PR URL>
+host gh required: no
+normal user token paste required: no
+post_merge_delivery.status: marketplace_update_required_after_merge
+```
+
+If no host token is configured, the runtime may still use `gh` as a technical-pilot fallback or return `submit_handoff_required`. That is not a failure of the API submitter; it means the host credential path has not been configured for Cowork yet.
+
 ## Scenario 13: Cowork Package Intake Probe
 
 Purpose: test whether Cowork automatically consumes files copied to the `package_uploads` surface. This scenario must use a disposable probe plugin only.
@@ -910,7 +958,7 @@ OK
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.16.zip` is produced.
+- `core-aiws-0.3.17.zip` is produced.
 - `aiws-productivity-0.2.1.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.

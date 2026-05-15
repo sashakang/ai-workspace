@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -12,7 +13,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import parse_qsl, urlsplit
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
+from urllib.request import Request, urlopen
 
 
 NAME_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?")
@@ -1985,7 +1988,16 @@ def detect_codeowners(repo_dir: Path) -> str:
     return "detected" if any(path.is_file() for path in candidates) else "not_detected"
 
 
-def write_pr_body(path: Path, payload: dict[str, Any], *, codeowners_status: str) -> None:
+def detect_codeowners_in_tree(tree_items: list[Any]) -> str:
+    candidates = {"CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"}
+    return (
+        "detected"
+        if any(isinstance(item, dict) and item.get("type") == "blob" and item.get("path") in candidates for item in tree_items)
+        else "not_detected"
+    )
+
+
+def pr_body_text(payload: dict[str, Any], *, codeowners_status: str) -> str:
     lines = [
         f"AIWS proposal: {payload['proposal_id']}",
         "",
@@ -2009,7 +2021,11 @@ def write_pr_body(path: Path, payload: dict[str, Any], *, codeowners_status: str
         "- Manual marketplace: upload a new plugin ZIP with the same plugin name so Cowork overwrites the existing plugin.",
         "- Regular users should not manually upload ZIP files for the normal path.",
     ]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return "\n".join(lines) + "\n"
+
+
+def write_pr_body(path: Path, payload: dict[str, Any], *, codeowners_status: str) -> None:
+    path.write_text(pr_body_text(payload, codeowners_status=codeowners_status), encoding="utf-8")
 
 
 def update_existing_pr_metadata(
@@ -2173,6 +2189,335 @@ class GhCliProposalSubmitter:
             action="Create proposal pull request",
         )
         pr_url = require_non_blank_string(pr_create.stdout.strip(), "pr_url")
+        return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
+
+
+def github_api_token_from_env(env: dict[str, str] | None = None) -> str | None:
+    values = env or os.environ
+    for name in ("AIWS_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"):
+        token = values.get(name)
+        if token and token.strip():
+            return token.strip()
+    return None
+
+
+class GitHubApiClient:
+    def __init__(self, *, token: str, api_url: str | None = None) -> None:
+        self.token = require_non_blank_string(token, "token")
+        self.api_url = (api_url or os.environ.get("GITHUB_API_URL") or "https://api.github.com").rstrip("/")
+
+    def request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        query: dict[str, Any] | None = None,
+        allow_404: bool = False,
+    ) -> dict[str, Any] | list[Any] | None:
+        suffix = path if path.startswith("/") else f"/{path}"
+        if query:
+            suffix = f"{suffix}?{urlencode(query)}"
+        body = None if payload is None else json.dumps(payload).encode("utf-8")
+        request = Request(
+            f"{self.api_url}{suffix}",
+            data=body,
+            method=method,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+                "User-Agent": "aiws-mcp",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with urlopen(request, timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS) as response:
+                raw = response.read().decode("utf-8")
+        except HTTPError as exc:
+            if allow_404 and exc.code == 404:
+                return None
+            detail = exc.read().decode("utf-8", errors="replace").strip()
+            raise SkillManagerError(f"GitHub API request failed ({exc.code}): {detail}") from exc
+        except URLError as exc:
+            raise SkillManagerError(f"GitHub API request failed: {exc.reason}") from exc
+        if not raw.strip():
+            return {}
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise SkillManagerError("GitHub API response was not valid JSON.") from exc
+
+
+def require_github_object(value: Any, *, action: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise SkillManagerError(f"{action} returned invalid GitHub metadata.")
+    return value
+
+
+def require_github_list(value: Any, *, action: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise SkillManagerError(f"{action} returned invalid GitHub metadata.")
+    return value
+
+
+def github_ref_path(branch_name: str) -> str:
+    return f"/git/refs/heads/{quote(branch_name, safe='/')}"
+
+
+def list_source_skill_files(source_skill_root: Path) -> list[tuple[str, bytes]]:
+    if not source_skill_root.is_dir():
+        raise SkillManagerError(f"Source skill folder is missing: {source_skill_root}")
+    files: list[tuple[str, bytes]] = []
+    for path in sorted(source_skill_root.rglob("*")):
+        if path.is_symlink():
+            raise SkillManagerError(f"Source skill folder must not contain symlinks: {path}")
+        if path.is_file():
+            relative = path.relative_to(source_skill_root).as_posix()
+            files.append((relative, path.read_bytes()))
+    if not files:
+        raise SkillManagerError(f"Source skill folder has no files: {source_skill_root}")
+    return files
+
+
+class GitHubApiProposalSubmitter:
+    def __init__(
+        self,
+        *,
+        aiws_root: Path,
+        token: str | None = None,
+        api_client: Any | None = None,
+    ) -> None:
+        self.aiws_root = aiws_root
+        resolved_token = token or github_api_token_from_env()
+        if api_client is None and not resolved_token:
+            raise SkillManagerError(
+                "GitHub API submitter requires AIWS_GITHUB_TOKEN, GITHUB_TOKEN, or GH_TOKEN in the host environment."
+            )
+        self.client = api_client or GitHubApiClient(token=resolved_token or "")
+
+    def request_json(
+        self,
+        method: str,
+        target_repo: str,
+        path: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        query: dict[str, Any] | None = None,
+        allow_404: bool = False,
+    ) -> dict[str, Any] | list[Any] | None:
+        return self.client.request_json(
+            method,
+            f"/repos/{target_repo}{path}",
+            payload=payload,
+            query=query,
+            allow_404=allow_404,
+        )
+
+    def read_blob_json(self, target_repo: str, blob_sha: str) -> dict[str, Any]:
+        blob = require_github_object(
+            self.request_json("GET", target_repo, f"/git/blobs/{quote(blob_sha, safe='')}"),
+            action="Read GitHub blob",
+        )
+        if blob.get("encoding") != "base64":
+            raise SkillManagerError("GitHub blob encoding was not base64.")
+        try:
+            raw = base64.b64decode(require_non_blank_string(blob.get("content"), "content"))
+            parsed = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise SkillManagerError("GitHub blob did not contain valid JSON.") from exc
+        if not isinstance(parsed, dict):
+            raise SkillManagerError("GitHub blob did not contain a JSON object.")
+        return parsed
+
+    def find_plugin_prefix(self, target_repo: str, tree_items: list[Any], plugin_id: str) -> str:
+        manifest_paths = [".claude-plugin/plugin.json", f"{plugin_id}/.claude-plugin/plugin.json"]
+        blobs = {
+            str(item.get("path")): item
+            for item in tree_items
+            if isinstance(item, dict) and item.get("type") == "blob" and item.get("path") in manifest_paths
+        }
+        for manifest_path in manifest_paths:
+            item = blobs.get(manifest_path)
+            if not item:
+                continue
+            manifest = self.read_blob_json(target_repo, require_non_blank_string(item.get("sha"), "sha"))
+            if manifest.get("name") == plugin_id:
+                return "" if manifest_path.startswith(".claude-plugin/") else plugin_id
+        raise SkillManagerError(f"Target repository does not contain plugin {plugin_id!r} at root or {plugin_id}/.")
+
+    def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
+        proposal_id = require_non_blank_string(payload.get("proposal_id"), "proposal_id")
+        plugin_id = require_non_blank_string(payload.get("plugin_id"), "plugin_id")
+        skill_id = require_non_blank_string(payload.get("skill_id"), "skill_id")
+        branch_name = require_non_blank_string(payload.get("branch_name"), "branch_name")
+        target_repo = require_target_repo(payload.get("target_repo"))
+        owner, _repo = target_repo.split("/", 1)
+        draft_path = Path(require_non_blank_string(payload.get("draft_path"), "draft_path"))
+        validation_tree_digest = require_non_blank_string(
+            payload.get("validation_tree_digest"), "validation_tree_digest"
+        )
+
+        repo_meta = require_github_object(
+            self.request_json("GET", target_repo, ""),
+            action="Check GitHub repository access",
+        )
+        default_branch = require_non_blank_string(repo_meta.get("default_branch"), "default_branch")
+        permissions = repo_meta.get("permissions")
+        if isinstance(permissions, dict) and permissions.get("push") is False:
+            raise SkillManagerError(f"Authenticated GitHub user does not have push permission for {target_repo}.")
+
+        base_ref = require_github_object(
+            self.request_json("GET", target_repo, github_ref_path(default_branch)),
+            action="Read default branch ref",
+        )
+        base_commit_sha = require_non_blank_string(
+            require_github_object(base_ref.get("object"), action="Read default branch ref").get("sha"),
+            "sha",
+        )
+        base_commit = require_github_object(
+            self.request_json("GET", target_repo, f"/git/commits/{quote(base_commit_sha, safe='')}"),
+            action="Read default branch commit",
+        )
+        base_tree_sha = require_non_blank_string(
+            require_github_object(base_commit.get("tree"), action="Read default branch commit").get("sha"),
+            "tree.sha",
+        )
+        recursive_tree = require_github_object(
+            self.request_json("GET", target_repo, f"/git/trees/{quote(base_tree_sha, safe='')}", query={"recursive": "1"}),
+            action="Read repository tree",
+        )
+        tree_items = require_github_list(recursive_tree.get("tree"), action="Read repository tree")
+        plugin_prefix = self.find_plugin_prefix(target_repo, tree_items, plugin_id)
+        skill_prefix = f"{plugin_prefix + '/' if plugin_prefix else ''}skills/{skill_id}"
+        existing_skill_paths = [
+            str(item.get("path"))
+            for item in tree_items
+            if isinstance(item, dict)
+            and item.get("type") == "blob"
+            and item.get("path")
+            and str(item.get("path")).startswith(f"{skill_prefix}/")
+        ]
+        if any(
+            isinstance(item, dict)
+            and item.get("mode") == "120000"
+            and item.get("path")
+            and str(item.get("path")).startswith(f"{skill_prefix}/")
+            for item in tree_items
+        ):
+            raise SkillManagerError(f"Target skill folder must not contain symlinks: {skill_prefix}")
+        if not existing_skill_paths:
+            raise SkillManagerError(f"Target skill folder is missing: {skill_prefix}")
+
+        tree_entries: list[dict[str, Any]] = [
+            {"path": path, "mode": "100644", "type": "blob", "sha": None}
+            for path in existing_skill_paths
+        ]
+        source_skill_root = draft_path / "skills" / skill_id
+        for relative, content in list_source_skill_files(source_skill_root):
+            blob = require_github_object(
+                self.request_json(
+                    "POST",
+                    target_repo,
+                    "/git/blobs",
+                    payload={
+                        "content": base64.b64encode(content).decode("ascii"),
+                        "encoding": "base64",
+                    },
+                ),
+                action="Create GitHub blob",
+            )
+            tree_entries.append(
+                {
+                    "path": f"{skill_prefix}/{relative}",
+                    "mode": "100644",
+                    "type": "blob",
+                    "sha": require_non_blank_string(blob.get("sha"), "sha"),
+                }
+            )
+
+        created_tree = require_github_object(
+            self.request_json(
+                "POST",
+                target_repo,
+                "/git/trees",
+                payload={"base_tree": base_tree_sha, "tree": tree_entries},
+            ),
+            action="Create GitHub tree",
+        )
+        new_tree_sha = require_non_blank_string(created_tree.get("sha"), "sha")
+        if new_tree_sha == base_tree_sha:
+            return {
+                "status": "no_changes_to_submit",
+                "branch_name": branch_name,
+                "validation_tree_digest": validation_tree_digest,
+            }
+
+        commit = require_github_object(
+            self.request_json(
+                "POST",
+                target_repo,
+                "/git/commits",
+                payload={
+                    "message": f"AIWS proposal {proposal_id}: update {plugin_id}/{skill_id}",
+                    "tree": new_tree_sha,
+                    "parents": [base_commit_sha],
+                },
+            ),
+            action="Create GitHub commit",
+        )
+        commit_sha = require_non_blank_string(commit.get("sha"), "sha")
+
+        branch_ref_path = github_ref_path(branch_name)
+        existing_branch = self.request_json("GET", target_repo, branch_ref_path, allow_404=True)
+        if existing_branch is None:
+            self.request_json(
+                "POST",
+                target_repo,
+                "/git/refs",
+                payload={"ref": f"refs/heads/{branch_name}", "sha": commit_sha},
+            )
+        else:
+            self.request_json(
+                "PATCH",
+                target_repo,
+                branch_ref_path,
+                payload={"sha": commit_sha, "force": True},
+            )
+
+        body = pr_body_text(payload, codeowners_status=detect_codeowners_in_tree(tree_items))
+        existing_prs = require_github_list(
+            self.request_json(
+                "GET",
+                target_repo,
+                "/pulls",
+                query={"head": f"{owner}:{branch_name}", "state": "open"},
+            ),
+            action="Check existing proposal pull request",
+        )
+        if existing_prs and isinstance(existing_prs[0], dict):
+            pr_url = require_non_blank_string(existing_prs[0].get("html_url") or existing_prs[0].get("url"), "pr_url")
+            number = existing_prs[0].get("number")
+            if isinstance(number, int):
+                self.request_json("PATCH", target_repo, f"/pulls/{number}", payload={"body": body})
+            return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
+
+        created_pr = require_github_object(
+            self.request_json(
+                "POST",
+                target_repo,
+                "/pulls",
+                payload={
+                    "title": str(payload.get("summary", "")).strip() or f"AIWS proposal {proposal_id}",
+                    "head": branch_name,
+                    "base": default_branch,
+                    "body": body,
+                    "draft": False,
+                },
+            ),
+            action="Create GitHub pull request",
+        )
+        pr_url = require_non_blank_string(created_pr.get("html_url") or created_pr.get("url"), "pr_url")
         return {"status": "submitted_for_review", "branch_name": branch_name, "pr_url": pr_url}
 
 
