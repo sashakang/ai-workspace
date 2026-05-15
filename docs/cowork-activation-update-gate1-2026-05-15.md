@@ -39,7 +39,7 @@ Evidence files:
 - `docs/cowork-pending-upload-deactivation-report-2026-05-15.md`
 - `docs/cowork-proposal-submit-report-2026-05-15.md`
 
-Current code facts:
+Pre-implementation code facts:
 
 - `aiws-mcp/aiws_mcp/skill_manager.py::activate_draft` always returns `host_capability_missing` with `activation_status: pending_upload` for modified Cowork drafts.
 - `aiws-mcp/aiws_mcp/runtime.py` reports Cowork as `capability_exposure: plugin-package` and `direct_host_install_supported: false`.

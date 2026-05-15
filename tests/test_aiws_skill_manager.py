@@ -648,6 +648,113 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(activation_record["package_path"], result["package_path"])
             self.assertEqual(load_draft_record(aiws_root, record_id).last_validation_status, "passed")
 
+    def test_activate_draft_can_prepare_cowork_package_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            package_dir = temp_root / "packages"
+            upload_dir = temp_root / "cowork-packages"
+            upload_dir.mkdir()
+
+            result = activate_draft(
+                aiws_root,
+                record_id,
+                "cowork",
+                package_dir,
+                host_id="cowork-test",
+                package_upload_dir=upload_dir,
+            )
+
+            package_path = Path(result["package_path"])
+            copied_package_path = Path(result["copied_package_path"])
+            self.assertEqual(result["status"], "handoff_prepared")
+            self.assertEqual(result["activation_status"], "pending_upload")
+            self.assertFalse(result["activation_effective"])
+            self.assertFalse(result["requires_manual_upload"])
+            self.assertTrue(result["requires_cowork_confirmation"])
+            self.assertEqual(result["package_upload_surface"], str(upload_dir.resolve()))
+            self.assertTrue(package_path.is_file())
+            self.assertTrue(copied_package_path.is_file())
+            self.assertEqual(copied_package_path.parent, upload_dir.resolve())
+            self.assertEqual(copied_package_path.read_bytes(), package_path.read_bytes())
+            self.assertEqual(
+                result["actions"][0],
+                {
+                    "type": "cowork_package_handoff",
+                    "terminal": False,
+                    "host_kind": "cowork",
+                    "package_path": result["package_path"],
+                    "copied_package_path": result["copied_package_path"],
+                    "label": "Confirm draft package in Cowork",
+                },
+            )
+            activation_record = json.loads(Path(result["activation_record_path"]).read_text())
+            self.assertEqual(activation_record["status"], "pending_upload")
+            self.assertEqual(activation_record["handoff_status"], "handoff_prepared")
+            self.assertEqual(activation_record["copied_package_path"], result["copied_package_path"])
+
+    def test_activate_draft_reuses_existing_identical_cowork_handoff_package(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            package_dir = temp_root / "packages"
+            upload_dir = temp_root / "cowork-packages"
+            upload_dir.mkdir()
+
+            first = activate_draft(
+                aiws_root,
+                record_id,
+                "cowork",
+                package_dir,
+                host_id="cowork-test",
+                package_upload_dir=upload_dir,
+            )
+            second = activate_draft(
+                aiws_root,
+                record_id,
+                "cowork",
+                package_dir,
+                host_id="cowork-test",
+                package_upload_dir=upload_dir,
+            )
+
+            self.assertEqual(second["status"], "handoff_prepared")
+            self.assertEqual(second["copied_package_path"], first["copied_package_path"])
+            self.assertEqual(Path(second["copied_package_path"]).read_bytes(), Path(second["package_path"]).read_bytes())
+
+    def test_activate_draft_refuses_unsafe_cowork_package_handoff_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            package_dir = temp_root / "packages"
+
+            with self.assertRaisesRegex(SkillManagerError, "must already exist"):
+                activate_draft(
+                    aiws_root,
+                    record_id,
+                    "cowork",
+                    package_dir,
+                    host_id="cowork-test",
+                    package_upload_dir=temp_root / "missing-upload-dir",
+                )
+
+            upload_dir = temp_root / "cowork-packages"
+            upload_dir.mkdir()
+            destination = upload_dir / f"{record_id}.zip"
+            destination.write_text("different package")
+            with self.assertRaisesRegex(SkillManagerError, "already exists with different content"):
+                activate_draft(
+                    aiws_root,
+                    record_id,
+                    "cowork",
+                    package_dir,
+                    host_id="cowork-test",
+                    package_upload_dir=upload_dir,
+                )
+
     def test_activate_draft_unchanged_returns_not_modified_without_package(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)

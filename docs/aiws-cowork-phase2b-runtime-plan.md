@@ -297,7 +297,7 @@ Acceptance:
 - Activation does not leave two active visible copies of `aiws-productivity:meeting-followup` unless the user explicitly chooses a separate uploaded copy or scope.
 - Cleanup semantics are explicit: clearing AIWS pending state is separate from uninstalling a Cowork-uploaded plugin.
 - Re-running activation is idempotent or returns the existing pending/active state without creating duplicate packages or duplicate visible skills.
-- The action reports whether Cowork activation is `active`, `pending_upload`, `handoff_required`, or `host_capability_missing`.
+- The action reports whether Cowork activation is `active`, `pending_upload`, `handoff_prepared`, `handoff_required`, or `host_capability_missing`.
 - The test manual includes the new scenario and the old manual-upload scenario remains labeled fallback/technical-pilot only.
 
 ### Slice 2B.9: Non-CLI GitHub Submitter

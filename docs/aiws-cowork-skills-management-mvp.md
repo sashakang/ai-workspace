@@ -103,7 +103,7 @@ For Phase 2 MVP acceptance, the required staging operation is `stage_proposal(dr
 
 `submit_pr` or an equivalent submitter flow is a separate explicit action after staging. It consumes the staged `proposal_id` and uses the proposal's stored `target_repo`; it must not ask for or accept a fresh repository value at submit time. In the Cowork UX, this should appear as a friendly submit-for-review action, not as a git workflow. The backend may create or update a GitHub pull request, and maintainers may use GitHub UI to review and merge it.
 
-For the current Cowork MVP, `activate_draft` should use the reinstall-draft strategy: build a package under the same plugin identity and replace the active user-level plugin package through the supported Cowork/plugin install path. If Cowork cannot activate the draft programmatically, the operation should return `host_capability_missing` with one non-terminal package-upload action instead of pretending activation succeeded.
+For the current Cowork MVP, `activate_draft` should use the reinstall-draft strategy: build a package under the same plugin identity and replace the active user-level plugin package through the supported Cowork/plugin install path. If Cowork cannot activate the draft programmatically, the operation should return a truthful non-terminal state such as `handoff_prepared` or `host_capability_missing` instead of pretending activation succeeded.
 
 ## Validation
 

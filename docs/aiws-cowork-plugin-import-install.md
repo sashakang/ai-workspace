@@ -39,7 +39,7 @@ dist/cowork-import/
 Expected files:
 
 ```text
-core-aiws-0.3.8.zip
+core-aiws-0.3.9.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -55,7 +55,7 @@ The passing runtime test used the individual plugin ZIPs. Cowork accepted a flat
    - Install from zip
    - Install local plugin
    - Developer mode import
-3. Import `core-aiws-0.3.8.zip`.
+3. Import `core-aiws-0.3.9.zip`.
 4. Confirm `core-aiws` appears as installed or active.
 5. Import `aiws-productivity-0.2.1.zip`.
 6. Confirm `aiws-productivity` appears as installed or active.

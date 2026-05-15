@@ -6,7 +6,7 @@ This manual is the starting point for AIWS testing. It lists the currently imple
 
 Current version assumptions:
 
-- `core-aiws` package version: `0.3.8`
+- `core-aiws` package version: `0.3.9`
 - `aiws-productivity` package version: `0.2.1`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
@@ -39,7 +39,7 @@ Common placeholders:
 | CW-05 | Clean draft validation | Manual Cowork | PASS |
 | CW-06 | Out-of-scope edit fails closed | Manual Cowork safety | PASS when rejected or failed closed |
 | CW-07 | Missing `SKILL.md` fails closed | Manual Cowork safety | PASS when failed closed |
-| CW-08 | Prepare Cowork package and pending upload | Manual Cowork technical pilot | PASS with `pending_upload` |
+| CW-08 | Prepare Cowork package and activation handoff | Manual Cowork technical pilot | PASS with `pending_upload` or `handoff_prepared` |
 | CW-09 | Manual upload of modified draft package | Manual Cowork technical pilot | PASS |
 | CW-10 | Deactivate pending upload marker | Manual Cowork cleanup | PASS |
 | CW-11 | Stage proposal without submitting | Manual Cowork | PASS |
@@ -62,7 +62,7 @@ Check my AIWS setup.
 
 Verify:
 1. Marketplace `sashakang/ai-workspace` is installed.
-2. `core-aiws` is installed and updated to version 0.3.8 or newer.
+2. `core-aiws` is installed and updated to version 0.3.9 or newer.
 3. `aiws-productivity` is installed.
 4. `meeting-followup` skill is visible.
 
@@ -101,7 +101,7 @@ python scripts/build_cowork_import.py
 Expected command output:
 
 ```text
-dist/cowork-import/core-aiws-0.3.8.zip
+dist/cowork-import/core-aiws-0.3.9.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -114,7 +114,7 @@ Organization settings -> Plugins -> Add plugin -> Upload a file
 Upload:
 
 ```text
-core-aiws-0.3.8.zip
+core-aiws-0.3.9.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -369,9 +369,9 @@ After this scenario, discard or restore the disposable draft.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-e-missing-skill-fails-closed).
 
-## Scenario 8: Prepare Cowork Package And Pending Upload
+## Scenario 8: Prepare Cowork Package And Activation Handoff
 
-Purpose: confirm `activate_draft` builds a package and records pending upload state without claiming Cowork activation.
+Purpose: confirm `activate_draft` builds a package and records pending upload or handoff state without claiming Cowork activation.
 
 Chat/session rule: run this in the same Cowork chat as Scenario 3 and Scenario 4, using the modified `draft_id` from that chat. Do not start a new chat for this scenario unless you first reopen the same draft and confirm it is still modified and valid.
 
@@ -396,7 +396,9 @@ Report:
 - activation_status
 - activation_effective
 - requires_manual_upload
+- requires_cowork_confirmation, if returned
 - package_path
+- copied_package_path, if returned
 - activation_record_path
 - host_id
 - whether the pending upload record is under ~/.aiws/state/draft-activations/<host-id>/<draft_id>.json
@@ -418,6 +420,26 @@ Cowork runtime files directly mutated: no
 proposal staged: no
 GitHub touched: no
 ```
+
+Alternative expected answer when Cowork has a safe package-upload surface available:
+
+```text
+status: handoff_prepared
+activation_status: pending_upload
+activation_effective: false
+requires_manual_upload: false
+requires_cowork_confirmation: true
+package_path: ~/.aiws/tmp/cowork-phase2-packages/<draft_id>.zip
+copied_package_path: <Cowork package_uploads>/<draft_id>.zip
+activation_record_path: ~/.aiws/state/draft-activations/<host-id>/<draft_id>.json
+installed plugin files touched: no
+~/.claude touched: no
+Cowork runtime files directly mutated: no
+proposal staged: no
+GitHub touched: no
+```
+
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -712,7 +734,7 @@ OK
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.8.zip` is produced.
+- `core-aiws-0.3.9.zip` is produced.
 - `aiws-productivity-0.2.1.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.

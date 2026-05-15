@@ -1256,12 +1256,18 @@ class AiwsRuntime:
         if package_output_dir is None:
             raise ValueError("package_output_dir is required.")
         host = self.ensure_host(host_kind=host_kind, host_id=host_id)
+        package_upload_dir = None
+        if host.host_kind == "cowork":
+            candidate = host.config_root / "packages"
+            if candidate.exists():
+                package_upload_dir = candidate
         return skill_manager.activate_draft(
             self.root,
             draft_id,
             host.host_kind,
             Path(package_output_dir).expanduser(),
             host_id=host.host_id,
+            package_upload_dir=package_upload_dir,
         )
 
     def deactivate_draft(

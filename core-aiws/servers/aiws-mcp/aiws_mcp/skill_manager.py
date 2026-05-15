@@ -1194,6 +1194,46 @@ def build_draft_package(aiws_root: Path, record_id: str, package_output_dir: Pat
     }
 
 
+def copy_package_to_upload_surface(package_path: Path, package_upload_dir: Path) -> dict[str, Any]:
+    package_path = package_path.expanduser()
+    reject_existing_symlink_components(package_path.parent, label="Package handoff source parent")
+    if package_path.is_symlink():
+        raise SkillManagerError(f"Package handoff source must not be a symlink: {package_path}")
+    if not package_path.is_file():
+        raise SkillManagerError(f"Package handoff source must be a regular file: {package_path}")
+    package_path = package_path.resolve()
+
+    package_upload_dir = package_upload_dir.expanduser()
+    reject_existing_symlink_components(package_upload_dir, label="Cowork package upload surface")
+    if package_upload_dir.is_symlink():
+        raise SkillManagerError(f"Cowork package upload surface must not be a symlink: {package_upload_dir}")
+    if not package_upload_dir.exists():
+        raise SkillManagerError(f"Cowork package upload surface must already exist: {package_upload_dir}")
+    if not package_upload_dir.is_dir():
+        raise SkillManagerError(f"Cowork package upload surface must be a directory: {package_upload_dir}")
+
+    upload_root = package_upload_dir.resolve()
+    destination = upload_root / package_path.name
+    reject_existing_symlink_components(destination.parent, label="Cowork package handoff destination parent")
+    if destination.is_symlink():
+        raise SkillManagerError(f"Cowork package handoff destination must not be a symlink: {destination}")
+    if destination.exists():
+        if not destination.is_file():
+            raise SkillManagerError(f"Cowork package handoff destination is not a regular file: {destination}")
+        if destination.read_bytes() != package_path.read_bytes():
+            raise SkillManagerError(
+                f"Cowork package handoff destination already exists with different content: {destination}"
+            )
+    else:
+        with destination.open("xb") as handle:
+            handle.write(package_path.read_bytes())
+    return {
+        "handoff_status": "handoff_prepared",
+        "package_upload_surface": str(upload_root),
+        "copied_package_path": str(destination),
+    }
+
+
 def validate_draft(aiws_root: Path, record_id: str) -> dict[str, Any]:
     record_id = require_non_blank_string(record_id, "record_id")
     record = safely_identify_draft_record(aiws_root, record_id)
@@ -1282,6 +1322,7 @@ def write_draft_activation_record(
     host_id: str,
     record: DraftRecord,
     package: dict[str, Any],
+    handoff: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = draft_activation_root(aiws_root)
     path = draft_activation_record_path(aiws_root, host_id, record_id)
@@ -1307,6 +1348,8 @@ def write_draft_activation_record(
         "created_at": now,
         "updated_at": now,
     }
+    if handoff:
+        payload.update(handoff)
     write_json_atomic(path, payload)
     return {"activation_record_path": str(path), **payload}
 
@@ -1356,6 +1399,7 @@ def activate_draft(
     package_output_dir: Path,
     *,
     host_id: str,
+    package_upload_dir: Path | None = None,
 ) -> dict[str, Any]:
     if host_kind != "cowork":
         raise SkillManagerError("Only host_kind='cowork' is supported for draft activation in this slice.")
@@ -1392,6 +1436,9 @@ def activate_draft(
 
     record = require_canonical_draft_record(aiws_root, record_id)
     package = build_draft_package(aiws_root, record_id, package_output_dir)
+    handoff = None
+    if package_upload_dir is not None:
+        handoff = copy_package_to_upload_surface(Path(package["package_path"]), package_upload_dir)
     activation_record = write_draft_activation_record(
         aiws_root,
         record_id=record_id,
@@ -1399,7 +1446,30 @@ def activate_draft(
         host_id=host_id,
         record=record,
         package=package,
+        handoff=handoff,
     )
+    if handoff:
+        return {
+            **package,
+            **handoff,
+            "status": "handoff_prepared",
+            "activation_status": "pending_upload",
+            "host_id": host_id,
+            "activation_effective": False,
+            "requires_manual_upload": False,
+            "requires_cowork_confirmation": True,
+            "activation_record_path": activation_record["activation_record_path"],
+            "actions": [
+                {
+                    "type": "cowork_package_handoff",
+                    "terminal": False,
+                    "host_kind": "cowork",
+                    "package_path": package["package_path"],
+                    "copied_package_path": handoff["copied_package_path"],
+                    "label": "Confirm draft package in Cowork",
+                },
+            ],
+        }
     return {
         **package,
         "status": "host_capability_missing",

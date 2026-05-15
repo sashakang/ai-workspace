@@ -116,7 +116,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.write_cowork_plugin(uploads)
         runtime = AiwsRuntime(
             root=self.root,
-            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+            env={
+                **self.env,
+                "COWORK_HOME": str(Path(self.tempdir.name) / ".cowork-no-packages"),
+                "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads),
+            },
         )
 
         discovered = runtime.discover_installed_plugins(plugin_id="example-plugin")
@@ -207,6 +211,51 @@ class AiwsMcpSkillTests(unittest.TestCase):
         deactivated = runtime.deactivate_draft(record_id, host_kind="cowork")
         self.assertEqual(deactivated["status"], "deactivated")
         self.assertFalse(Path(activated["activation_record_path"]).exists())
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_activate_draft_hands_off_to_existing_package_upload_surface(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        cowork_home = Path(self.tempdir.name) / ".cowork"
+        package_uploads = cowork_home / "packages"
+        package_uploads.mkdir(parents=True)
+        self.write_cowork_plugin(uploads)
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={
+                **self.env,
+                "COWORK_HOME": str(cowork_home),
+                "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads),
+            },
+        )
+        draft = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/review",
+        )
+        record_id = draft["record_id"]
+        runtime.write_draft_file(
+            record_id,
+            "skills/meeting-followup/SKILL.md",
+            "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n\nUpdated.\n",
+        )
+
+        activated = runtime.activate_draft(
+            record_id,
+            host_kind="cowork",
+            package_output_dir=self.root / "packages",
+        )
+
+        self.assertEqual(activated["status"], "handoff_prepared")
+        self.assertEqual(activated["activation_status"], "pending_upload")
+        self.assertEqual(activated["actions"][0]["type"], "cowork_package_handoff")
+        self.assertFalse(activated["activation_effective"])
+        self.assertFalse(activated["requires_manual_upload"])
+        self.assertTrue(activated["requires_cowork_confirmation"])
+        self.assertEqual(Path(activated["copied_package_path"]).parent, package_uploads.resolve())
+        self.assertEqual(
+            Path(activated["copied_package_path"]).read_bytes(),
+            Path(activated["package_path"]).read_bytes(),
+        )
         self.assert_no_memory_or_claude_writes()
 
     def test_cowork_runtime_submit_for_review_uses_gh_cli_submitter(self) -> None:
