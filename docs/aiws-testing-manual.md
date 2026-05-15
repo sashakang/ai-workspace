@@ -540,6 +540,8 @@ Cowork runtime mutation: no
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-g-stage-proposal-without-submitting).
 
+Latest evidence: [Cowork Proposal Submit Report](./cowork-proposal-submit-report-2026-05-15.md).
+
 ## Scenario 12: Submit Proposal For Review
 
 Purpose: confirm staged proposals can be submitted or handed off safely.
@@ -603,7 +605,9 @@ package built: no
 Cowork runtime mutation: no
 ```
 
-Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-h-submit-for-review-optional-and-guarded) and [Regular User Draft Submit Report](./cowork-regular-user-draft-submit-report-2026-05-14.md).
+If a proposal was accidentally staged with the literal placeholder `<test review repository>`, the repository guard must block submit when the allowlist contains the real repository. Record this as a guard PASS and re-stage with the real target repo before testing successful submit.
+
+Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-h-submit-for-review-optional-and-guarded), [Regular User Draft Submit Report](./cowork-regular-user-draft-submit-report-2026-05-14.md), and [Cowork Proposal Submit Report](./cowork-proposal-submit-report-2026-05-15.md).
 
 ## Scenario 13: Cowork Package Intake Probe
 
