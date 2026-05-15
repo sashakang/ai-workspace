@@ -185,6 +185,8 @@ Record the returned `draft_id`. The draft path must not be inside the installed 
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-a-create-or-open-draft).
 
+Latest 0.3.13 evidence: [Cowork Inspected Draft Proposal Submit PASS](./cowork-inspected-draft-proposal-submit-pass-2026-05-15.md).
+
 ## Scenario 4: Edit Draft And Validate
 
 Purpose: confirm a safe draft edit can be validated with no package, proposal, GitHub action, or runtime mutation.
@@ -248,6 +250,8 @@ proposal staged: no
 GitHub touched: no
 installed marketplace plugin files touched: no
 ```
+
+Latest 0.3.13 evidence: [Cowork Inspected Draft Proposal Submit PASS](./cowork-inspected-draft-proposal-submit-pass-2026-05-15.md).
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-b-happy-path-draft-validation).
 
@@ -621,6 +625,8 @@ Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-
 
 Latest evidence: [Cowork Proposal Submit Report](./cowork-proposal-submit-report-2026-05-15.md).
 
+Latest 0.3.13 evidence: [Cowork Inspected Draft Proposal Submit PASS](./cowork-inspected-draft-proposal-submit-pass-2026-05-15.md).
+
 ## Scenario 12: Submit Proposal For Review
 
 Purpose: confirm staged proposals can be submitted or handed off safely.
@@ -687,6 +693,8 @@ Cowork runtime mutation: no
 If a proposal was accidentally staged with the literal placeholder `<test review repository>`, the repository guard must block submit when the allowlist contains the real repository. Record this as a guard PASS and re-stage with the real target repo before testing successful submit.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-h-submit-for-review-optional-and-guarded), [Regular User Draft Submit Report](./cowork-regular-user-draft-submit-report-2026-05-14.md), and [Cowork Proposal Submit Report](./cowork-proposal-submit-report-2026-05-15.md).
+
+Latest 0.3.13 evidence: [Cowork Inspected Draft Proposal Submit PASS](./cowork-inspected-draft-proposal-submit-pass-2026-05-15.md).
 
 ## Scenario 13: Cowork Package Intake Probe
 

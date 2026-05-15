@@ -106,6 +106,8 @@ Runtime update after `core-aiws` 0.3.12: Scenario 9A passed. AIWS found one inst
 
 Implementation update in `core-aiws` 0.3.13: `create_or_open_draft` now uses the installed-copy inspection result when no explicit `source_plugin_root` is provided. This makes the safety check part of the normal draft-open path.
 
+Runtime update after `core-aiws` 0.3.13: the inspected draft/edit/validate/stage/submit path passed through Cowork and created PR #4 in `sashakang/aiws-skill-tests`.
+
 Likely files, modules, and contracts to inspect: `docs/cowork-registry-alignment-gate1-2026-05-15.md`, `docs/cowork-activation-handoff-039-runtime-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `tests/test_aiws_skill_manager.py`, and `tests/test_aiws_mcp.py`.
 
 ## Slice 4: Track Modified Locally Status
