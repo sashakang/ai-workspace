@@ -114,6 +114,8 @@ Implementation update in `core-aiws` 0.3.15: `aiws.skills.revert_draft` is now e
 
 Runtime update after `core-aiws` 0.3.15: stale draft cleanup passed through Cowork. Eight explicitly listed stale drafts were reverted, the intentional keep draft remained active, and drift protection still blocked a new parallel draft. See [Cowork Stale Draft Cleanup PASS](./cowork-stale-draft-cleanup-pass-2026-05-15.md).
 
+Implementation and runtime update in `core-aiws` 0.3.16: submit responses now include `post_merge_delivery` guidance. Cowork Scenario 12A passed: regular users are told to wait for maintainer review, merge, and Cowork marketplace update/sync, while manual ZIP upload is kept as a maintainer/admin fallback for manual marketplaces. See [Cowork Post-Merge Delivery Guidance PASS](./cowork-post-merge-delivery-guidance-pass-2026-05-15.md).
+
 Likely files, modules, and contracts to inspect: `docs/cowork-registry-alignment-gate1-2026-05-15.md`, `docs/cowork-activation-handoff-039-runtime-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `tests/test_aiws_skill_manager.py`, and `tests/test_aiws_mcp.py`.
 
 ## Slice 4: Track Modified Locally Status

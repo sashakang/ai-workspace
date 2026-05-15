@@ -335,6 +335,8 @@ Implementation update in `core-aiws` 0.3.15: the existing `revert_draft` manager
 
 Runtime update after `core-aiws` 0.3.15: Scenario CW-10A passed. Cowork refreshed and reverted eight explicitly listed stale `aiws-productivity:meeting-followup` drafts, kept `aiws-productivity--meeting-followup--25bf8e1a23`, and confirmed `create_or_open_draft` still fails closed while that keep draft remains active. See [Cowork Stale Draft Cleanup PASS](./cowork-stale-draft-cleanup-pass-2026-05-15.md).
 
+Implementation and runtime update in `core-aiws` 0.3.16: submit responses now include `post_merge_delivery` guidance. Scenario 12A passed in Cowork: after submit, the regular user is told to wait for maintainer review, merge, and Cowork marketplace update/sync. Manual ZIP upload is explicitly not required for regular users and remains a maintainer/admin fallback for manual marketplaces. See [Cowork Post-Merge Delivery Guidance PASS](./cowork-post-merge-delivery-guidance-pass-2026-05-15.md).
+
 ### Slice 2B.9: Non-CLI GitHub Submitter
 
 Replace normal-user reliance on host `gh` with a GitHub App, bot, API, or Cowork-compatible GitHub connection.

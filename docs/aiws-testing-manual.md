@@ -777,7 +777,7 @@ Latest 0.3.13 evidence: [Cowork Inspected Draft Proposal Submit PASS](./cowork-i
 
 Purpose: confirm the normal user path does not ask users to activate local ZIP packages after a proposal is submitted. The updated skill reaches Cowork through marketplace update/sync after maintainer merge.
 
-Status: implemented in `core-aiws` 0.3.16; runtime Cowork retest pending.
+Status: implemented and runtime-tested in `core-aiws` 0.3.16.
 
 Prompt to Cowork after Scenario 12 succeeds:
 
@@ -804,6 +804,8 @@ regular user manual ZIP upload: no
 local package activation: fallback/technical pilot only
 duplicate visible skill copies: not acceptable in the normal path
 ```
+
+Latest evidence: [Cowork Post-Merge Delivery Guidance PASS](./cowork-post-merge-delivery-guidance-pass-2026-05-15.md).
 
 ## Scenario 13: Cowork Package Intake Probe
 
