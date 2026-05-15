@@ -319,7 +319,7 @@ Evidence:
 - Unit tests cover one installed copy, duplicate installed copies, missing skill, explicit source pinning, and no-write behavior.
 - Runtime testing records whether `meeting-followup` is visible once or duplicated.
 
-Runtime update: the first `core-aiws` 0.3.10 test partially passed. `inspect_installed_skill` worked with an explicit RPM plugin root, but default discovery missed the RPM install path. The next approved implementation is to add known Cowork RPM/plugin install roots to default discovery while keeping the check read-only and preserving duplicate handling.
+Runtime update: the first `core-aiws` 0.3.10 test partially passed. `inspect_installed_skill` worked with an explicit RPM plugin root, but default discovery missed the RPM install path. The next approved implementation is to add known Cowork RPM/plugin install roots and bounded Claude local-agent session RPM roots to default discovery while keeping the check read-only and preserving duplicate handling.
 
 ### Slice 2B.9: Non-CLI GitHub Submitter
 

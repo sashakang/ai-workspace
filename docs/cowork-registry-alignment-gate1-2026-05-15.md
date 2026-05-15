@@ -78,12 +78,12 @@ Gate result: **approved for the small read-only duplicate/source check.**
 
 The first runtime test of `aiws.skills.inspect_installed_skill` on `core-aiws` 0.3.10 partially passed. The tool worked when Cowork supplied the explicit RPM plugin root, but default discovery returned `installed_skill_not_found` because the RPM install path was not in the default search roots.
 
-The next implementation is intentionally narrow: add known Cowork install roots to default discovery so a normal Cowork user does not need to know or pass `source_plugin_root`.
+The next implementation is intentionally narrow: add known Cowork and Claude local-agent session install roots to default discovery so a normal Cowork user does not need to know or pass `source_plugin_root`.
 
 Approved behavior:
 
 - keep `inspect_installed_skill(plugin_id, skill_id)` read-only
-- add Cowork RPM/plugin install roots to default search roots when they are safely discoverable
+- add Cowork RPM/plugin install roots and Claude local-agent session RPM roots to default search roots when they are safely discoverable
 - preserve current status behavior:
   - zero copies -> `installed_skill_not_found`
   - one copy -> `ok`
@@ -99,6 +99,9 @@ The implementation should prefer concrete known roots, for example:
 <COWORK_HOME>/plugins
 ~/.cowork/rpm
 ~/.cowork/plugins
+~/Library/Application Support/Claude/local-agent-mode-sessions/*/rpm
+~/Library/Application Support/Claude/local-agent-mode-sessions/*/*/rpm
+~/Library/Application Support/Claude/local-agent-mode-sessions/*/*/*/rpm
 ```
 
 and keep the existing environment override:
@@ -107,12 +110,19 @@ and keep the existing environment override:
 AIWS_PLUGIN_SEARCH_ROOTS
 ```
 
+For tests and unusual host layouts, the local-agent session root may be overridden with:
+
+```text
+AIWS_CLAUDE_LOCAL_AGENT_SESSIONS_ROOT
+```
+
 Required tests:
 
 - default discovery includes a Cowork RPM root under `COWORK_HOME`
+- default discovery includes a bounded Claude local-agent session RPM root
 - `inspect_installed_skill` finds one skill from that RPM root without explicit `source_plugin_root`
 - duplicate RPM plugin roots still return `duplicate_visible_identity`
 - missing roots are ignored safely
 - no writes occur
 
-Gate result: **approved for default Cowork RPM/plugin root discovery.**
+Gate result: **approved for default Cowork RPM/plugin and local-agent session RPM root discovery.**

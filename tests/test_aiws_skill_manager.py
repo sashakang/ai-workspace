@@ -1640,6 +1640,23 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertIn(str(rpm_root), found["searched_roots"])
             self.assertEqual(found["plugins"][0]["source_plugin_root"], str(plugin_root.resolve()))
 
+    def test_discover_installed_plugins_includes_claude_local_agent_session_rpm_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            sessions_root = temp_root / "local-agent-mode-sessions"
+            rpm_root = sessions_root / "session-1" / "workspace-1" / "local-1" / "rpm"
+            plugin_root = self.write_plugin(rpm_root / "plugin_123", public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            found = discover_installed_plugins(
+                plugin_id="example-plugin",
+                env={"AIWS_CLAUDE_LOCAL_AGENT_SESSIONS_ROOT": str(sessions_root)},
+            )
+
+            self.assertEqual(found["status"], "ok")
+            self.assertIn(str(rpm_root), found["searched_roots"])
+            self.assertEqual(found["plugins"][0]["source_plugin_root"], str(plugin_root.resolve()))
+
     def test_inspect_installed_skill_reports_single_duplicate_and_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)
@@ -1690,6 +1707,24 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 plugin_id="example-plugin",
                 skill_id="meeting-followup",
                 env={"COWORK_HOME": str(cowork_home)},
+            )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["instance_count"], 1)
+            self.assertEqual(result["selected_instance"]["source_plugin_root"], str(plugin_root.resolve()))
+
+    def test_inspect_installed_skill_uses_claude_local_agent_session_rpm_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            sessions_root = temp_root / "local-agent-mode-sessions"
+            rpm_root = sessions_root / "session-1" / "workspace-1" / "local-1" / "rpm"
+            plugin_root = self.write_plugin(rpm_root / "plugin_123", public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+
+            result = inspect_installed_skill(
+                plugin_id="example-plugin",
+                skill_id="meeting-followup",
+                env={"AIWS_CLAUDE_LOCAL_AGENT_SESSIONS_ROOT": str(sessions_root)},
             )
 
             self.assertEqual(result["status"], "ok")

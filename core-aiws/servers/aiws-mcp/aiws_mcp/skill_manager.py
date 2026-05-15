@@ -516,6 +516,12 @@ def default_plugin_search_roots(env: dict[str, str] | None = None) -> list[Path]
         roots.extend([root, root / "rpm", root / "plugins"])
     default_cowork_home = Path("~/.cowork").expanduser()
     roots.extend([default_cowork_home, default_cowork_home / "rpm", default_cowork_home / "plugins"])
+    sessions_root = Path(
+        env.get("AIWS_CLAUDE_LOCAL_AGENT_SESSIONS_ROOT", "~/Library/Application Support/Claude/local-agent-mode-sessions")
+    ).expanduser()
+    if sessions_root.exists() and sessions_root.is_dir() and not sessions_root.is_symlink():
+        for pattern in ("*/rpm", "*/*/rpm", "*/*/*/rpm"):
+            roots.extend(path for path in sessions_root.glob(pattern) if path.is_dir())
 
     result: list[Path] = []
     seen: set[str] = set()
