@@ -1850,6 +1850,25 @@ class AiwsSkillManagerTests(unittest.TestCase):
             proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
             self.assertEqual(proposal["required_review_roles"], ["Skill maintainer"])
 
+    def test_submit_pr_returns_post_merge_marketplace_delivery_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
+                Path(temp)
+            )
+
+            result = submit_pr(aiws_root, staged["proposal_id"], FakeProposalSubmitter())
+
+            guidance = result["post_merge_delivery"]
+            self.assertEqual(guidance["status"], "marketplace_update_required_after_merge")
+            self.assertFalse(guidance["normal_user_manual_zip_upload_required"])
+            self.assertEqual(guidance["local_activation"], "technical_pilot_fallback_only")
+            self.assertIn("Wait for maintainer review", guidance["regular_user_next_step"])
+            self.assertEqual(
+                [path["marketplace_type"] for path in guidance["delivery_paths"]],
+                ["github_synced", "manual"],
+            )
+            self.assertIn("review-repo", guidance["delivery_paths"][0]["maintainer_action"])
+
     def test_submit_pr_already_submitted_proposal_still_honors_target_repo_allowlist(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             aiws_root, _record_id, _plugin_root, _record, staged = self.create_staged_meeting_followup_proposal(
@@ -1988,6 +2007,8 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(result["branch_name"], expected_branch)
             self.assertFalse(result["terminal"])
             self.assertTrue(result["no_pr_created"])
+            self.assertEqual(result["post_merge_delivery"]["status"], "marketplace_update_required_after_merge")
+            self.assertFalse(result["post_merge_delivery"]["normal_user_manual_zip_upload_required"])
             self.assertNotIn("required_review_roles", result)
             self.assertGreaterEqual(len(result["actions"]), 1)
             self.assertEqual(len(submitter.calls), 1)
@@ -2155,6 +2176,10 @@ class AiwsSkillManagerTests(unittest.TestCase):
             body = body_files[0].read_text()
             self.assertIn("CODEOWNERS: not_detected", body)
             self.assertIn("Review and merge are managed by the target repository's maintainers and policies.", body)
+            self.assertIn("Post-merge Cowork delivery:", body)
+            self.assertIn("GitHub-synced marketplace: trigger Cowork marketplace update/sync", body)
+            self.assertIn("Manual marketplace: upload a new plugin ZIP with the same plugin name", body)
+            self.assertIn("Regular users should not manually upload ZIP files for the normal path.", body)
             self.assertNotIn("Required review role", body)
             self.assertNotIn("AI engineer", body)
 
@@ -2213,6 +2238,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
             body = body_files[0].read_text()
             self.assertIn("CODEOWNERS: detected", body)
             self.assertIn("Review and merge are managed by the target repository's maintainers and policies.", body)
+            self.assertIn("Post-merge Cowork delivery:", body)
             self.assertNotIn("Required review role", body)
             self.assertNotIn("AI engineer", body)
 

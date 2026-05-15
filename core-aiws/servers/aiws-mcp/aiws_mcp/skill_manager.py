@@ -1839,9 +1839,35 @@ def call_proposal_submitter(submitter: Any, payload: dict[str, Any]) -> dict[str
     return result
 
 
+def post_merge_delivery_guidance(target_repo: str) -> dict[str, Any]:
+    target_repo = require_non_blank_string(target_repo, "target_repo")
+    return {
+        "status": "marketplace_update_required_after_merge",
+        "regular_user_next_step": "Wait for maintainer review, merge, and Cowork marketplace update/sync.",
+        "normal_user_manual_zip_upload_required": False,
+        "local_activation": "technical_pilot_fallback_only",
+        "delivery_paths": [
+            {
+                "marketplace_type": "github_synced",
+                "maintainer_action": (
+                    f"Merge the proposal in {target_repo}, then trigger Cowork marketplace update/sync "
+                    "or rely on automatic sync if enabled."
+                ),
+            },
+            {
+                "marketplace_type": "manual",
+                "maintainer_action": (
+                    "Upload a new plugin ZIP with the same plugin name so Cowork overwrites the existing plugin."
+                ),
+            },
+        ],
+    }
+
+
 def submitted_review_response(proposal: dict[str, Any]) -> dict[str, Any]:
     branch_name = require_non_blank_string(proposal.get("branch_name"), "branch_name")
     pr_url = require_non_blank_string(proposal.get("pr_url"), "pr_url")
+    target_repo = require_non_blank_string(proposal.get("target_repo"), "target_repo")
     return {
         "status": "submitted_for_review",
         "status_label": "Submitted for review",
@@ -1850,9 +1876,10 @@ def submitted_review_response(proposal: dict[str, Any]) -> dict[str, Any]:
         "plugin_id": proposal["plugin_id"],
         "skill_id": proposal["skill_id"],
         "target_scope": proposal["target_scope"],
-        "target_repo": proposal["target_repo"],
+        "target_repo": target_repo,
         "branch_name": branch_name,
         "pr_url": pr_url,
+        "post_merge_delivery": post_merge_delivery_guidance(target_repo),
     }
 
 
@@ -1976,6 +2003,11 @@ def write_pr_body(path: Path, payload: dict[str, Any], *, codeowners_status: str
         str(payload.get("rationale", "")).strip(),
         "",
         "Review and merge are managed by the target repository's maintainers and policies.",
+        "",
+        "Post-merge Cowork delivery:",
+        "- GitHub-synced marketplace: trigger Cowork marketplace update/sync, or rely on automatic sync if enabled.",
+        "- Manual marketplace: upload a new plugin ZIP with the same plugin name so Cowork overwrites the existing plugin.",
+        "- Regular users should not manually upload ZIP files for the normal path.",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -2292,6 +2324,7 @@ def submit_pr(
             "branch_name": branch_name,
             "terminal": False,
             "no_pr_created": True,
+            "post_merge_delivery": post_merge_delivery_guidance(target_repo),
         }
         returned_review_roles = []
         if review_roles:

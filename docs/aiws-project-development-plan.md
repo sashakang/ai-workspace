@@ -180,7 +180,7 @@ The regular Cowork user draft/edit/validate/stage/submit path is also proven end
 
 This is not yet the full Phase 2B end-user path because the launcher still depends on `uvx`, production-grade submit must move from host `gh` to a GitHub App, bot, API, or Cowork-compatible adapter path, and review assignment needs repository policy such as CODEOWNERS or branch protection before it can be called enforced.
 
-Current testing scenario: `docs/cowork-skills-management-phase2-test-plan.md` covers the Phase 2A path from marketplace-installed `core-aiws` and `aiws-productivity` through `meeting-followup`, draft creation, safe draft edits, `aiws.skills.validate_draft`, activation fallback, proposal staging, submit-for-review, stale-draft cleanup, and maintainer merge. Retest with refreshed `core-aiws >= 0.3.15`; if Cowork cannot see the AIWS tools, the draft-management scenarios remain blocked.
+Current testing scenario: `docs/cowork-skills-management-phase2-test-plan.md` covers the Phase 2A path from marketplace-installed `core-aiws` and `aiws-productivity` through `meeting-followup`, draft creation, safe draft edits, `aiws.skills.validate_draft`, activation fallback, proposal staging, submit-for-review, stale-draft cleanup, post-merge delivery guidance, and maintainer merge. Retest with refreshed `core-aiws >= 0.3.16`; if Cowork cannot see the AIWS tools, the draft-management scenarios remain blocked.
 
 ### Phase 3: Shared Memory Sync Foundation
 
