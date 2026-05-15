@@ -321,6 +321,8 @@ Evidence:
 
 Runtime update: the first `core-aiws` 0.3.10 test partially passed. `inspect_installed_skill` worked with an explicit RPM plugin root, but default discovery missed the RPM install path. The next approved implementation is to add known Cowork RPM/plugin install roots and bounded Claude local-agent session RPM roots to default discovery while keeping the check read-only and preserving duplicate handling.
 
+Runtime update after `core-aiws` 0.3.12: Scenario 9A passed. `inspect_installed_skill` found one `aiws-productivity:meeting-followup` instance in the Cowork session RPM tree without an explicit source path, returned `status: ok`, and performed no mutations. See [Cowork Installed Skill Inspection PASS](./cowork-installed-skill-inspection-pass-2026-05-15.md).
+
 ### Slice 2B.9: Non-CLI GitHub Submitter
 
 Replace normal-user reliance on host `gh` with a GitHub App, bot, API, or Cowork-compatible GitHub connection.

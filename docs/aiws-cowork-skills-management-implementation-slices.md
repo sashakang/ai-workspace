@@ -102,6 +102,8 @@ Evidence: Tests should cover one installed copy, duplicate installed copies, mis
 
 Runtime update: the first `core-aiws` 0.3.10 test showed that explicit `source_plugin_root` works, but default discovery missed Cowork's RPM install path. The next implementation should add known Cowork RPM/plugin roots and bounded Claude local-agent session RPM roots to default discovery without broad filesystem scanning or any Cowork runtime mutation.
 
+Runtime update after `core-aiws` 0.3.12: Scenario 9A passed. AIWS found one installed `aiws-productivity:meeting-followup` instance without explicit source pinning and did not mutate state. The installed-copy safety check is now usable before draft/edit work proceeds.
+
 Likely files, modules, and contracts to inspect: `docs/cowork-registry-alignment-gate1-2026-05-15.md`, `docs/cowork-activation-handoff-039-runtime-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `tests/test_aiws_skill_manager.py`, and `tests/test_aiws_mcp.py`.
 
 ## Slice 4: Track Modified Locally Status

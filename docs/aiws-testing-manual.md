@@ -539,6 +539,8 @@ mutated anything: no
 
 If the tool is not available, update `core-aiws` from the marketplace and start a new Cowork chat before retesting.
 
+Latest evidence: [Cowork Installed Skill Inspection PASS](./cowork-installed-skill-inspection-pass-2026-05-15.md).
+
 ## Scenario 10: Deactivate Pending Upload Marker
 
 Purpose: confirm pending-upload cleanup only clears AIWS state and does not remove Cowork-uploaded plugins or draft edits.
