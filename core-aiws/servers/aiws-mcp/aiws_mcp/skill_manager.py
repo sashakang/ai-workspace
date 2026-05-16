@@ -95,6 +95,10 @@ def draft_base_tree_path(aiws_root: Path, record_id: str) -> Path:
     return aiws_root / "state" / "skill-drafts" / f"{record_id}.base-tree.json"
 
 
+def draft_base_snapshot_path(aiws_root: Path, record_id: str) -> Path:
+    return aiws_root / "state" / "skill-drafts" / f"{record_id}.base-snapshot"
+
+
 def update_candidate_root(aiws_root: Path) -> Path:
     return aiws_root / "state" / "update-candidates"
 
@@ -297,6 +301,41 @@ def write_base_tree_manifest(aiws_root: Path, record_id: str, draft_path: Path) 
     path = draft_base_tree_path(aiws_root, record_id)
     require_record_path_under(path, aiws_root / "state" / "skill-drafts")
     write_json_atomic(path, {"files": tree_file_hashes(draft_path)})
+
+
+def write_base_tree_snapshot(aiws_root: Path, record_id: str, source_path: Path) -> Path:
+    root = aiws_root / "state" / "skill-drafts"
+    snapshot_path = draft_base_snapshot_path(aiws_root, record_id)
+    require_record_path_under(snapshot_path, root)
+    temp_path = snapshot_path.with_name(f"{snapshot_path.name}.tmp-{uuid.uuid4().hex}")
+    require_record_path_under(temp_path, root)
+    reject_tree_symlinks(source_path, label="Draft base snapshot source")
+    if temp_path.exists():
+        shutil.rmtree(temp_path)
+    shutil.copytree(source_path, temp_path, symlinks=False)
+    if snapshot_path.exists():
+        if snapshot_path.is_symlink() or not snapshot_path.is_dir():
+            raise SkillManagerError(f"Draft base snapshot path is unsafe: {snapshot_path}")
+        shutil.rmtree(snapshot_path)
+    temp_path.replace(snapshot_path)
+    return snapshot_path
+
+
+def ensure_base_tree_snapshot(aiws_root: Path, record_id: str, draft_path: Path, record: DraftRecord) -> Path:
+    snapshot_path = draft_base_snapshot_path(aiws_root, record_id)
+    require_record_path_under(snapshot_path, aiws_root / "state" / "skill-drafts")
+    if snapshot_path.exists():
+        reject_tree_symlinks(snapshot_path, label="Draft base snapshot")
+        if record.base_tree_digest is not None and tree_digest(snapshot_path) != record.base_tree_digest:
+            raise SkillManagerError(f"Draft base snapshot digest does not match draft record: {record_id}")
+        return snapshot_path
+    current_digest = tree_digest(draft_path)
+    if record.modified or record.base_tree_digest != current_digest:
+        raise SkillManagerError(
+            "Draft base snapshot is missing and cannot be reconstructed after local modifications. "
+            "Recreate the draft before reviewing marketplace updates."
+        )
+    return write_base_tree_snapshot(aiws_root, record_id, draft_path)
 
 
 def load_base_tree_manifest(aiws_root: Path, record_id: str) -> dict[str, str]:
@@ -802,6 +841,9 @@ def create_draft_record(
         updated_at=utc_now(),
     )
     write_json_atomic(draft_record_path(aiws_root, record_id), record.to_json())
+    if draft_path.exists():
+        write_base_tree_manifest(aiws_root, record_id, draft_path)
+        write_base_tree_snapshot(aiws_root, record_id, draft_path)
     return record
 
 
@@ -1064,6 +1106,8 @@ def create_or_open_draft(
             refreshed = refresh_modified_status(aiws_root, record_id)
             if not draft_base_tree_path(aiws_root, record_id).exists() and not refreshed.modified:
                 write_base_tree_manifest(aiws_root, record_id, existing_draft_path)
+            if not draft_base_snapshot_path(aiws_root, record_id).exists() and not refreshed.modified:
+                ensure_base_tree_snapshot(aiws_root, record_id, existing_draft_path, refreshed)
             return refreshed
 
     if not allow_parallel_draft:
@@ -1091,6 +1135,7 @@ def create_or_open_draft(
     shutil.copytree(source_plugin_root, expected_draft_path)
     base_tree_digest = tree_digest(expected_draft_path)
     write_base_tree_manifest(aiws_root, record_id, expected_draft_path)
+    write_base_tree_snapshot(aiws_root, record_id, expected_draft_path)
 
     record = DraftRecord(
         plugin_id=plugin_id,
@@ -1705,6 +1750,35 @@ def create_update_candidate(
     }
 
 
+def prepare_update_candidate(aiws_root: Path, record_id: str, remote_plugin_root: Path) -> dict[str, Any]:
+    record_id = require_non_blank_string(record_id, "record_id")
+    record = refresh_modified_status(aiws_root, record_id)
+    draft_path = require_path_under(Path(record.draft_path), aiws_root / "plugins", label="Draft path")
+    base_snapshot = ensure_base_tree_snapshot(aiws_root, record_id, draft_path, record)
+    remote_plugin_root = Path(remote_plugin_root).expanduser()
+    require_text_plugin_tree(remote_plugin_root, label="Remote update candidate tree")
+    remote_validation = require_plugin_contains_skill(remote_plugin_root, record.plugin_id, record.skill_id)
+    remote_digest = tree_digest(remote_plugin_root)
+    if remote_digest == record.base_tree_digest:
+        return {
+            "status": "no_update_available",
+            "draft_id": record_id,
+            "plugin_id": record.plugin_id,
+            "skill_id": record.skill_id,
+            "base_version": record.base_version,
+            "remote_version": remote_validation["version"],
+            "base_tree_digest": record.base_tree_digest,
+            "remote_tree_digest": remote_digest,
+            "update_candidate_id": None,
+        }
+    candidate = create_update_candidate(aiws_root, record_id, base_snapshot, remote_plugin_root)
+    return {
+        **candidate,
+        "status": "update_candidate_created",
+        "update_available": True,
+    }
+
+
 def load_update_candidate(aiws_root: Path, candidate_id: str) -> dict[str, Any]:
     candidate_id = require_non_blank_string(candidate_id, "update_candidate_id")
     path = update_candidate_record_path(aiws_root, candidate_id)
@@ -1981,6 +2055,7 @@ def resolve_update_conflict(
         raise
     write_base_tree_manifest(aiws_root, record_id, draft_path)
     new_digest = tree_digest(draft_path)
+    write_base_tree_snapshot(aiws_root, record_id, draft_path)
     cleared = clear_pending_upload_records(aiws_root, record_id) if clear_pending_upload else 0
     updated = DraftRecord(
         **{
@@ -3209,6 +3284,12 @@ def revert_draft(aiws_root: Path, record_id: str) -> dict[str, str]:
         if not draft_path.is_dir():
             raise SkillManagerError(f"Draft path is not a directory: {draft_path}")
         shutil.rmtree(draft_path)
+    snapshot_path = draft_base_snapshot_path(aiws_root, record_id)
+    require_record_path_under(snapshot_path, state_root)
+    if snapshot_path.exists():
+        if snapshot_path.is_symlink() or not snapshot_path.is_dir():
+            raise SkillManagerError(f"Draft base snapshot path is unsafe: {snapshot_path}")
+        shutil.rmtree(snapshot_path)
     record_path.unlink()
     return {"status": "reverted", "record_id": record_id}
 

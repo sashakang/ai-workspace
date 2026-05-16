@@ -48,6 +48,7 @@ build_draft_package(draft_id, package_output_dir)
 activate_draft(draft_id, host_kind, host_id, package_output_dir)
 deactivate_draft(draft_id, host_kind, host_id)
 update_from_github(plugin_id, marketplace_id)
+prepare_update_candidate(draft_id)
 review_update_conflict(draft_id, update_candidate_id)
 resolve_update_conflict(review_id, choice)
 stage_proposal(draft_id, target_scope, target_repo, summary, rationale)
@@ -142,6 +143,8 @@ updated_at
 
 `base_tree_digest` is captured when the draft is created and is the immutable comparison point for local modified-state tracking. `current_tree_digest` is refreshed by explicit status refresh and by validation-gated operations such as package build, activation, and proposal staging. The digest covers sorted relative paths and file bytes so content changes, additions, and deletions are detected. Refresh must fail closed on symlinks or path escapes and must update only the draft registry record; it must not overwrite draft files or source plugin files.
 
+New drafts also store a base snapshot under the draft state root. The snapshot is used only to prepare marketplace update candidates and compute remote-vs-base diffs. It must be created from the original source plugin tree, refreshed only when a clean draft can prove its current digest still equals the base digest, and replaced only after an explicit discard-and-update resolver action succeeds.
+
 Validation success persists `last_validation_status='passed'` and `last_validation_tree_digest=<current_tree_digest>`. Validation failure persists `last_validation_status='failed'` and clears `last_validation_tree_digest`.
 
 ## Proposal Registry
@@ -193,6 +196,8 @@ keep_local_draft_and_pending_package
 discard_local_changes_and_update
 submit_or_upload_first
 ```
+
+Marketplace update candidate preparation compares the draft's stored base snapshot with the currently installed Cowork plugin selected by the installed-skill inspector. It accepts only `draft_id` on the Cowork-facing surface and returns either `no_update_available` or a server-owned `update_candidate_id`. It must not ask normal users for filesystem paths. If a legacy modified draft has no base snapshot, candidate preparation must fail closed and ask the user to recreate the draft before reviewing marketplace updates.
 
 Marketplace update conflict review is a non-mutating inspection step. It accepts only a `draft_id` and a server-owned `update_candidate_id`; Cowork-facing callers must not pass raw local filesystem paths for base or remote plugin trees. The manager stores trusted candidate snapshots under `~/.aiws/state/update-candidates/` and stores review records under `~/.aiws/state/update-reviews/`. Review responses may show changed file lists and bounded local-vs-base and remote-vs-base diff previews, but must not expose mutable candidate paths as user-editable inputs.
 

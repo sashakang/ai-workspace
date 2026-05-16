@@ -25,6 +25,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     create_update_candidate,
     create_or_open_draft,
     create_draft_record,
+    draft_base_snapshot_path,
     deactivate_draft,
     delete_draft_file,
     discover_installed_plugins,
@@ -40,6 +41,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     list_draft_files,
     read_draft_file,
     refresh_modified_status,
+    prepare_update_candidate,
     resolve_update_conflict,
     revert_draft,
     review_update_conflict,
@@ -446,6 +448,45 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertIsInstance(record.base_tree_digest, str)
             self.assertIsInstance(record.current_tree_digest, str)
             self.assertEqual(record.base_tree_digest, record.current_tree_digest)
+            self.assertEqual(tree_digest(draft_base_snapshot_path(aiws_root, record_id)), record.base_tree_digest)
+
+    def test_prepare_update_candidate_uses_base_snapshot_and_current_installed_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            original_base_digest = record.base_tree_digest
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            self.update_plugin_version_and_skill(plugin_root, version="1.1.0", edit="\nRemote marketplace update.\n")
+
+            candidate = prepare_update_candidate(aiws_root, record_id, plugin_root)
+            review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+
+            self.assertEqual(candidate["status"], "update_candidate_created")
+            self.assertEqual(candidate["base_tree_digest"], original_base_digest)
+            self.assertEqual(review["status"], "update_conflict")
+            self.assertIn("Local draft edit", review["local_vs_base_diff"]["content"])
+            self.assertIn("Remote marketplace update", review["remote_vs_base_diff"]["content"])
+
+    def test_prepare_update_candidate_reports_no_update_for_same_installed_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, _record = self.create_meeting_followup_draft(temp_root)
+
+            candidate = prepare_update_candidate(aiws_root, record_id, plugin_root)
+
+            self.assertEqual(candidate["status"], "no_update_available")
+            self.assertIsNone(candidate["update_candidate_id"])
+
+    def test_prepare_update_candidate_requires_base_snapshot_for_modified_legacy_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            shutil.rmtree(draft_base_snapshot_path(aiws_root, record_id))
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            self.update_plugin_version_and_skill(plugin_root, version="1.1.0", edit="\nRemote marketplace update.\n")
+
+            with self.assertRaisesRegex(SkillManagerError, "base snapshot is missing"):
+                prepare_update_candidate(aiws_root, record_id, plugin_root)
 
     def test_create_or_open_draft_rejects_source_plugin_symlinks_before_copy(self) -> None:
         for planted in ("skill-file", "nested-file", "directory"):
@@ -2973,17 +3014,20 @@ class AiwsSkillManagerTests(unittest.TestCase):
     def copy_plugin_with_skill_edit(self, temp_root: Path, plugin_root: Path, name: str, edit: str) -> Path:
         destination = temp_root / name
         shutil.copytree(plugin_root, destination)
-        manifest_path = destination / ".claude-plugin" / "plugin.json"
-        manifest = json.loads(manifest_path.read_text())
-        manifest["version"] = "1.1.0"
-        manifest_path.write_text(json.dumps(manifest))
-        contract_path = destination / "contracts" / "example-plugin.contract.json"
-        contract = json.loads(contract_path.read_text())
-        contract["version"] = "1.1.0"
-        contract_path.write_text(json.dumps(contract))
-        skill_file = destination / "skills" / "meeting-followup" / "SKILL.md"
-        skill_file.write_text(skill_file.read_text() + edit)
+        self.update_plugin_version_and_skill(destination, version="1.1.0", edit=edit)
         return destination
+
+    def update_plugin_version_and_skill(self, plugin_root: Path, *, version: str, edit: str) -> None:
+        manifest_path = plugin_root / ".claude-plugin" / "plugin.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["version"] = version
+        manifest_path.write_text(json.dumps(manifest))
+        contract_path = plugin_root / "contracts" / "example-plugin.contract.json"
+        contract = json.loads(contract_path.read_text())
+        contract["version"] = version
+        contract_path.write_text(json.dumps(contract))
+        skill_file = plugin_root / "skills" / "meeting-followup" / "SKILL.md"
+        skill_file.write_text(skill_file.read_text() + edit)
 
     def create_meeting_followup_draft(self, temp_root: Path) -> tuple[Path, str, Path, object]:
         aiws_root = temp_root / ".aiws"

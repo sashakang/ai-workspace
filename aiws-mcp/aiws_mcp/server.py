@@ -127,6 +127,10 @@ def create_server(root: Path | None = None):
     def deactivate_draft(draft_id: str, host_kind: str, host_id: str | None = None) -> dict[str, Any]:
         return runtime.deactivate_draft(draft_id, host_kind=host_kind, host_id=host_id)
 
+    @server.tool(name="aiws.skills.prepare_update_candidate")
+    def prepare_update_candidate(draft_id: str) -> dict[str, Any]:
+        return runtime.prepare_update_candidate(draft_id)
+
     @server.tool(name="aiws.skills.review_update_conflict")
     def review_update_conflict(draft_id: str, update_candidate_id: str) -> dict[str, Any]:
         return runtime.review_update_conflict(draft_id, update_candidate_id)

@@ -1309,6 +1309,24 @@ class AiwsRuntime:
         host = self.ensure_host(host_kind=host_kind, host_id=host_id)
         return skill_manager.deactivate_draft(self.root, draft_id, host.host_kind, host.host_id)
 
+    def prepare_update_candidate(self, draft_id: str) -> dict[str, Any]:
+        record = skill_manager.require_canonical_draft_record(self.root, draft_id)
+        inspection = self.inspect_installed_skill(plugin_id=record.plugin_id, skill_id=record.skill_id)
+        selected = inspection.get("selected_instance")
+        if inspection.get("status") != "ok" or not isinstance(selected, dict):
+            raise ValueError(
+                f"{inspection.get('status')}: cannot select one installed update candidate for "
+                f"{record.plugin_id!r}:{record.skill_id!r}."
+            )
+        result = skill_manager.prepare_update_candidate(self.root, draft_id, Path(selected["source_plugin_root"]))
+        return {
+            **result,
+            "installed_selection": inspection.get("selection"),
+            "installed_instance_count": inspection.get("instance_count"),
+            "origin_marketplace": selected.get("origin_marketplace"),
+            "origin_ref": selected.get("origin_ref"),
+        }
+
     def review_update_conflict(self, draft_id: str, update_candidate_id: str) -> dict[str, Any]:
         return skill_manager.review_update_conflict(self.root, draft_id, update_candidate_id)
 

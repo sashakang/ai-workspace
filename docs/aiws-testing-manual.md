@@ -6,7 +6,7 @@ This manual is the starting point for AIWS testing. It lists the currently imple
 
 Current version assumptions:
 
-- `core-aiws` package version: `0.3.19`
+- `core-aiws` package version: `0.3.20`
 - `aiws-productivity` package version: `0.2.1`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
@@ -66,7 +66,7 @@ Check my AIWS setup.
 
 Verify:
 1. Marketplace `sashakang/ai-workspace` is installed.
-2. `core-aiws` is installed and updated to version 0.3.19 or newer.
+2. `core-aiws` is installed and updated to version 0.3.20 or newer.
 3. `aiws-productivity` is installed.
 4. `meeting-followup` skill is visible.
 
@@ -105,7 +105,7 @@ python scripts/build_cowork_import.py
 Expected command output:
 
 ```text
-dist/cowork-import/core-aiws-0.3.19.zip
+dist/cowork-import/core-aiws-0.3.20.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -118,7 +118,7 @@ Organization settings -> Plugins -> Add plugin -> Upload a file
 Upload:
 
 ```text
-core-aiws-0.3.19.zip
+core-aiws-0.3.20.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -455,7 +455,7 @@ proposal staged: no
 GitHub touched: no
 ```
 
-`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.19 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.20 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -508,7 +508,7 @@ Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-u
 
 Purpose: confirm AIWS can tell whether Cowork has zero, one, or multiple installed copies of the same logical skill before AIWS tries to manage it.
 
-Run this in a Cowork chat after updating `core-aiws` to `0.3.19` or later.
+Run this in a Cowork chat after updating `core-aiws` to `0.3.20` or later.
 
 Prompt to Cowork:
 
@@ -1004,6 +1004,40 @@ Purpose: confirm that AIWS does not silently overwrite a locally modified draft 
 
 Current implementation note: Cowork-facing tools use server-owned IDs. A normal user should see `draft_id`, `update_candidate_id`, and `review_id`; they should not be asked to paste filesystem paths.
 
+Prompt to Cowork after a marketplace/plugin update:
+
+```text
+Prepare a marketplace update candidate for this draft:
+
+draft_id: <draft_id>
+
+Call aiws.skills.prepare_update_candidate.
+
+Report:
+1. status
+2. update_candidate_id, if one was created
+3. remote_version
+4. whether any filesystem paths were required from the user
+
+Do not review or resolve the conflict yet.
+Do not stage, submit, upload, or mutate installed plugin files.
+```
+
+Expected candidate answer when a newer installed plugin differs from the draft base:
+
+```text
+status: update_candidate_created
+update_candidate_id: updcand_<opaque id>
+filesystem paths required from user: no
+```
+
+Expected answer when the installed plugin still matches the draft base:
+
+```text
+status: no_update_available
+update_candidate_id: null
+```
+
 Prompt to Cowork after an update candidate exists:
 
 ```text
@@ -1151,7 +1185,7 @@ OK
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.19.zip` is produced.
+- `core-aiws-0.3.20.zip` is produced.
 - `aiws-productivity-0.2.1.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.
@@ -1225,6 +1259,10 @@ Run from the repo root:
 
 ```bash
 python -m unittest \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_prepare_update_candidate_uses_base_snapshot_and_current_installed_plugin \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_prepare_update_candidate_reports_no_update_for_same_installed_plugin \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_prepare_update_candidate_requires_base_snapshot_for_modified_legacy_draft \
+  tests.test_aiws_mcp.AiwsMcpSkillTests.test_cowork_runtime_prepares_update_candidate_from_installed_plugin \
   tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_review_update_conflict_reports_local_and_remote_diffs_and_stores_digest_gate \
   tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_resolve_update_conflict_stale_review_blocks_without_mutation \
   tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_review_update_conflict_allows_clean_update_without_resolution_choices \
@@ -1239,12 +1277,15 @@ python -m unittest \
 Expected answer:
 
 ```text
-Ran 9 tests
+Ran 13 tests
 OK
 ```
 
 Key expectations covered by the test:
 
+- Candidate preparation creates a trusted `update_candidate_id` from the installed plugin without user-supplied paths.
+- Candidate preparation reports `no_update_available` when the installed plugin still matches the draft base.
+- Legacy modified drafts without a base snapshot fail closed before conflict review.
 - Review returns local-vs-base and remote-vs-base diff previews.
 - Review records store base/current/remote digests.
 - Clean updates return `update_allowed` without conflict resolver choices.

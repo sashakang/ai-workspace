@@ -88,6 +88,18 @@ class AiwsMcpSkillTests(unittest.TestCase):
         )
         return plugin_root
 
+    def update_cowork_plugin(self, plugin_root: Path, *, version: str, skill_edit: str) -> None:
+        manifest_path = plugin_root / ".claude-plugin" / "plugin.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["version"] = version
+        manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n")
+        contract_path = plugin_root / "contracts" / f"{manifest['name']}.contract.json"
+        contract = json.loads(contract_path.read_text())
+        contract["version"] = version
+        contract_path.write_text(json.dumps(contract, sort_keys=True) + "\n")
+        skill_file = plugin_root / "skills" / "meeting-followup" / "SKILL.md"
+        skill_file.write_text(skill_file.read_text() + skill_edit)
+
     def read_tree(self, root: Path) -> dict[str, bytes]:
         return {
             str(path.relative_to(root)): path.read_bytes()
@@ -208,6 +220,36 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["instance_count"], 1)
         self.assertEqual(result["selected_instance"]["source_plugin_root"], str(plugin_root.resolve()))
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_prepares_update_candidate_from_installed_plugin(self) -> None:
+        uploads = Path(self.tempdir.name) / "cowork-uploads"
+        plugin_root = self.write_cowork_plugin(uploads, version="0.1.0")
+        runtime = AiwsRuntime(
+            root=self.root,
+            env={**self.env, "AIWS_PLUGIN_SEARCH_ROOTS": str(uploads)},
+        )
+        draft = runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="example/review",
+        )
+        runtime.write_draft_file(
+            draft["record_id"],
+            "skills/meeting-followup/SKILL.md",
+            "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n\nLocal edit.\n",
+        )
+        self.update_cowork_plugin(plugin_root, version="0.2.0", skill_edit="\nRemote marketplace update.\n")
+
+        candidate = runtime.prepare_update_candidate(draft["record_id"])
+        review = runtime.review_update_conflict(draft["record_id"], candidate["update_candidate_id"])
+
+        self.assertEqual(candidate["status"], "update_candidate_created")
+        self.assertEqual(candidate["remote_version"], "0.2.0")
+        self.assertNotIn("source_plugin_root", candidate)
+        self.assertEqual(review["status"], "update_conflict")
+        self.assertIn("Local edit", review["local_vs_base_diff"]["content"])
+        self.assertIn("Remote marketplace update", review["remote_vs_base_diff"]["content"])
         self.assert_no_memory_or_claude_writes()
 
     def test_cowork_runtime_create_draft_selects_single_matching_skill_when_plugin_discovery_is_ambiguous(self) -> None:
