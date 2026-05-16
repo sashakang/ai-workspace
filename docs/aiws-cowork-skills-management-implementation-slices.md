@@ -254,7 +254,7 @@ Lifecycle language: `Draft -> Validated -> Submitted -> Accepted -> Released -> 
 
 Evidence: `tests.test_aiws_release_workflow` covers release metadata bumping, ambiguous/invalid version inputs, version drift rejection, schema-backed contract validation, scaffold install/check idempotency, drift reporting, and force-only overwrite. `tests.test_cowork_packaging` now derives package names from plugin manifests and covers generic plugin packaging by `plugin_id`.
 
-Runtime update on 2026-05-16: Slice 14 passed against `sashakang/ai-workspace`. The AIWS GitHub App secrets were configured, the `AIWS Release Plugin` workflow completed successfully in run `25972162666`, and it opened release PR #3 as `app/aiws-release-bot` from branch `aiws/release/aiws-productivity/0.2.4`. The maintainer reported the release loop as pass. The next reuse check is applying the scaffold to a second participating repo.
+Runtime update on 2026-05-16: Slice 14 passed against `sashakang/ai-workspace`. The AIWS GitHub App secrets were configured, the `AIWS Release Plugin` workflow completed successfully in run `25972162666`, and it opened release PR #3 as `app/aiws-release-bot` from branch `aiws/release/aiws-productivity/0.2.4`. The maintainer reported the release loop as pass. On 2026-05-17, Cowork showed `aiws-productivity` version `0.2.4`, confirming `Released -> Marketplace synced` for the primary repo. The next reuse check is applying the scaffold to a second participating repo.
 
 ## Suggested Developer Session Order
 

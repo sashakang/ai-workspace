@@ -1363,6 +1363,16 @@ workflow conclusion: success
 maintainer reported release loop result: pass
 ```
 
+Marketplace sync verification, 2026-05-17:
+
+```text
+status: PASS
+repo: sashakang/ai-workspace
+plugin_id: aiws-productivity
+version visible in Cowork: 0.2.4
+result: Released -> Marketplace synced confirmed
+```
+
 ## Automated Scenario AUTO-06: AIWS Release Workflow And Repo Scaffold Tests
 
 Purpose: confirm the reusable repo scaffold and maintainer release helper stay safe and idempotent.
