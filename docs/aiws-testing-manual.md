@@ -7,7 +7,7 @@ This manual is the starting point for AIWS testing. It lists the currently imple
 Current version assumptions:
 
 - `core-aiws` package version: `0.3.20`
-- `aiws-productivity` package version: `0.2.1`
+- `aiws-productivity` package version: `0.2.2`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
 
@@ -106,7 +106,7 @@ Expected command output:
 
 ```text
 dist/cowork-import/core-aiws-0.3.20.zip
-dist/cowork-import/aiws-productivity-0.2.1.zip
+dist/cowork-import/aiws-productivity-0.2.2.zip
 ```
 
 Cowork UI path:
@@ -119,7 +119,7 @@ Upload:
 
 ```text
 core-aiws-0.3.20.zip
-aiws-productivity-0.2.1.zip
+aiws-productivity-0.2.2.zip
 ```
 
 Prompt to Cowork after upload:
@@ -1186,7 +1186,7 @@ OK
 Key expectations covered by the test:
 
 - `core-aiws-0.3.20.zip` is produced.
-- `aiws-productivity-0.2.1.zip` is produced.
+- `aiws-productivity-0.2.2.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.
 

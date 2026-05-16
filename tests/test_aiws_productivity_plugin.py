@@ -28,9 +28,9 @@ class AiwsProductivityPluginTests(unittest.TestCase):
             entry for entry in marketplace["plugins"] if entry["name"] == "aiws-productivity"
         )
 
-        self.assertEqual(plugin_json["version"], "0.2.1")
-        self.assertEqual(contract["version"], "0.2.1")
-        self.assertEqual(marketplace_entry["version"], "0.2.1")
+        self.assertEqual(plugin_json["version"], "0.2.2")
+        self.assertEqual(contract["version"], "0.2.2")
+        self.assertEqual(marketplace_entry["version"], "0.2.2")
 
     def test_meeting_followup_belongs_to_aiws_productivity_not_core(self) -> None:
         productivity_contract = json.loads(

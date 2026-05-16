@@ -13,7 +13,7 @@ Use this skill when the user provides a meeting transcript, recording transcript
 - decisions made
 - action items with owner and due date when available
 - unresolved questions
-- draft follow-up messages
+- draft follow-up messages (keep them direct and clear — lead with the key action or decision, avoid filler)
 
 ## Slack Connector
 
