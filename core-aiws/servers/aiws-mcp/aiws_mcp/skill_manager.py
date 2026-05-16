@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import difflib
 import hashlib
 import json
 import os
@@ -34,6 +35,12 @@ SECRET_VALUE_RE = re.compile(
     r"(?:xox[baprs]-[A-Za-z0-9-]+|gh[pousr]_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]+)",
     re.IGNORECASE,
 )
+UPDATE_CONFLICT_CHOICES = [
+    "keep_local_draft_and_pending_package",
+    "discard_local_changes_and_update",
+    "submit_or_upload_first",
+]
+UPDATE_DIFF_PREVIEW_LIMIT = 20_000
 
 
 class SkillManagerError(ValueError):
@@ -86,6 +93,22 @@ def draft_record_path(aiws_root: Path, record_id: str) -> Path:
 
 def draft_base_tree_path(aiws_root: Path, record_id: str) -> Path:
     return aiws_root / "state" / "skill-drafts" / f"{record_id}.base-tree.json"
+
+
+def update_candidate_root(aiws_root: Path) -> Path:
+    return aiws_root / "state" / "update-candidates"
+
+
+def update_candidate_record_path(aiws_root: Path, candidate_id: str) -> Path:
+    return update_candidate_root(aiws_root) / f"{candidate_id}.json"
+
+
+def update_review_root(aiws_root: Path) -> Path:
+    return aiws_root / "state" / "update-reviews"
+
+
+def update_review_record_path(aiws_root: Path, review_id: str) -> Path:
+    return update_review_root(aiws_root) / f"{review_id}.json"
 
 
 def draft_worktree_path(aiws_root: Path, marketplace: str, plugin_id: str, origin_repo: str) -> Path:
@@ -197,6 +220,21 @@ def require_activation_path_under(path: Path, root: Path) -> Path:
         resolved_path.relative_to(resolved_root)
     except ValueError as exc:
         raise SkillManagerError(f"Activation record path is outside AIWS activation state root: {path}") from exc
+    return resolved_path
+
+
+def require_update_state_path_under(path: Path, root: Path) -> Path:
+    reject_symlinked_root(root.parent, label="AIWS update state parent")
+    reject_symlinked_root(root, label="AIWS update state root")
+    reject_existing_symlink_components(path.parent, label="AIWS update state path")
+    resolved_path = path.resolve()
+    resolved_root = root.resolve()
+    if resolved_path == resolved_root:
+        raise SkillManagerError(f"Update state path is outside AIWS update state root: {path}")
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise SkillManagerError(f"Update state path is outside AIWS update state root: {path}") from exc
     return resolved_path
 
 
@@ -1583,6 +1621,396 @@ def deactivate_draft(aiws_root: Path, record_id: str, host_kind: str, host_id: s
     }
 
 
+def require_text_plugin_tree(root: Path, *, label: str) -> None:
+    reject_tree_symlinks(root, label=label)
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        if path.is_dir():
+            continue
+        try:
+            path.read_text()
+        except UnicodeDecodeError as exc:
+            raise SkillManagerError(f"{label} contains binary or non-UTF-8 content: {path.relative_to(root).as_posix()}") from exc
+        if b"\0" in path.read_bytes():
+            raise SkillManagerError(f"{label} contains binary content: {path.relative_to(root).as_posix()}")
+
+
+def require_plugin_contains_skill(plugin_root: Path, plugin_id: str, skill_id: str) -> dict[str, Any]:
+    validation = validate_plugin(plugin_root, expected_name=plugin_id)
+    skill_names = {skill["name"] for skill in validation["skills"]}
+    if skill_id not in skill_names:
+        raise SkillManagerError(f"Requested skill {skill_id!r} does not exist in plugin {plugin_id!r}.")
+    return validation
+
+
+def copy_update_tree(source: Path, destination: Path, *, label: str) -> None:
+    source = Path(source).expanduser()
+    require_text_plugin_tree(source, label=label)
+    if destination.exists():
+        raise SkillManagerError(f"Update candidate destination already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, destination, symlinks=False)
+
+
+def create_update_candidate(
+    aiws_root: Path,
+    record_id: str,
+    base_plugin_root: Path,
+    remote_plugin_root: Path,
+) -> dict[str, Any]:
+    record = require_canonical_draft_record(aiws_root, require_non_blank_string(record_id, "record_id"))
+    base_plugin_root = Path(base_plugin_root).expanduser()
+    remote_plugin_root = Path(remote_plugin_root).expanduser()
+    require_text_plugin_tree(base_plugin_root, label="Base update candidate tree")
+    require_text_plugin_tree(remote_plugin_root, label="Remote update candidate tree")
+    require_plugin_contains_skill(base_plugin_root, record.plugin_id, record.skill_id)
+    remote_validation = require_plugin_contains_skill(remote_plugin_root, record.plugin_id, record.skill_id)
+    base_digest = tree_digest(base_plugin_root)
+    if record.base_tree_digest is not None and base_digest != record.base_tree_digest:
+        raise SkillManagerError("Update candidate base tree does not match the draft base digest.")
+    remote_digest = tree_digest(remote_plugin_root)
+    candidate_id = "updcand_" + uuid.uuid4().hex
+    root = update_candidate_root(aiws_root)
+    candidate_dir = root / candidate_id
+    require_update_state_path_under(candidate_dir, root)
+    copied_base = candidate_dir / "base"
+    copied_remote = candidate_dir / "remote"
+    copy_update_tree(base_plugin_root, copied_base, label="Base update candidate tree")
+    copy_update_tree(remote_plugin_root, copied_remote, label="Remote update candidate tree")
+    payload = {
+        "candidate_id": candidate_id,
+        "update_candidate_id": candidate_id,
+        "draft_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "base_plugin_root": str(copied_base),
+        "remote_plugin_root": str(copied_remote),
+        "base_tree_digest": base_digest,
+        "remote_tree_digest": remote_digest,
+        "remote_version": remote_validation["version"],
+        "created_at": utc_now(),
+    }
+    path = update_candidate_record_path(aiws_root, candidate_id)
+    require_update_state_path_under(path, root)
+    write_json_atomic(path, payload)
+    return {
+        "status": "created",
+        "update_candidate_id": candidate_id,
+        "candidate_id": candidate_id,
+        "draft_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "base_tree_digest": base_digest,
+        "remote_tree_digest": remote_digest,
+        "remote_version": remote_validation["version"],
+    }
+
+
+def load_update_candidate(aiws_root: Path, candidate_id: str) -> dict[str, Any]:
+    candidate_id = require_non_blank_string(candidate_id, "update_candidate_id")
+    path = update_candidate_record_path(aiws_root, candidate_id)
+    require_update_state_path_under(path, update_candidate_root(aiws_root))
+    if not path.is_file():
+        raise SkillManagerError(f"Update candidate not found: {candidate_id}")
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError(f"Update candidate must be a JSON object: {path}")
+    return payload
+
+
+def load_update_review(aiws_root: Path, review_id: str) -> dict[str, Any]:
+    review_id = require_non_blank_string(review_id, "review_id")
+    path = update_review_record_path(aiws_root, review_id)
+    require_update_state_path_under(path, update_review_root(aiws_root))
+    if not path.is_file():
+        raise SkillManagerError(f"Update review not found: {review_id}")
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError(f"Update review must be a JSON object: {path}")
+    return payload
+
+
+def changed_paths_between(base_root: Path, other_root: Path) -> list[str]:
+    base = tree_file_hashes(base_root)
+    other = tree_file_hashes(other_root)
+    paths = sorted(set(base) | set(other))
+    return [path for path in paths if base.get(path) != other.get(path)]
+
+
+def split_non_skill_changes(paths: list[str], skill_id: str) -> list[str]:
+    allowed_prefix = f"skills/{skill_id}/"
+    return [path for path in paths if not path.startswith(allowed_prefix)]
+
+
+def read_tree_text(root: Path, relative_path: str) -> list[str]:
+    path = root / relative_path
+    if not path.exists():
+        return []
+    if path.is_dir():
+        return []
+    try:
+        return path.read_text().splitlines(keepends=True)
+    except UnicodeDecodeError as exc:
+        raise SkillManagerError(f"Cannot diff binary or non-UTF-8 file: {relative_path}") from exc
+
+
+def unified_tree_diff(base_root: Path, other_root: Path, changed_paths: list[str], *, label: str) -> dict[str, Any]:
+    chunks: list[str] = []
+    truncated = False
+    for relative_path in changed_paths:
+        base_lines = read_tree_text(base_root, relative_path)
+        other_lines = read_tree_text(other_root, relative_path)
+        diff = difflib.unified_diff(
+            base_lines,
+            other_lines,
+            fromfile=f"base/{relative_path}",
+            tofile=f"{label}/{relative_path}",
+        )
+        chunks.extend(diff)
+        content = "".join(chunks)
+        if len(content) > UPDATE_DIFF_PREVIEW_LIMIT:
+            truncated = True
+            content = content[:UPDATE_DIFF_PREVIEW_LIMIT]
+            return {
+                "content": content,
+                "truncated": True,
+                "limit": UPDATE_DIFF_PREVIEW_LIMIT,
+                "changed_files": changed_paths,
+            }
+    return {
+        "content": "".join(chunks),
+        "truncated": truncated,
+        "limit": UPDATE_DIFF_PREVIEW_LIMIT,
+        "changed_files": changed_paths,
+    }
+
+
+def pending_upload_records(aiws_root: Path, record_id: str) -> list[dict[str, Any]]:
+    root = draft_activation_root(aiws_root)
+    if not root.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    for path in sorted(root.glob(f"*/{record_id}.json")):
+        require_activation_path_under(path, root)
+        payload = load_json(path)
+        if not isinstance(payload, dict):
+            raise SkillManagerError(f"Activation record must be a JSON object: {path}")
+        if payload.get("draft_id") != record_id:
+            raise SkillManagerError(f"Activation record draft_id does not match requested draft: {record_id}")
+        if payload.get("activation_status") == "pending_upload" or payload.get("status") == "pending_upload":
+            records.append({"path": path, "payload": payload})
+    return records
+
+
+def pending_upload_summary(aiws_root: Path, record_id: str) -> dict[str, Any]:
+    records = pending_upload_records(aiws_root, record_id)
+    return {
+        "present": bool(records),
+        "count": len(records),
+        "hosts": [item["payload"].get("host_id") for item in records],
+    }
+
+
+def pending_upload_digest(aiws_root: Path, record_id: str) -> str:
+    records = pending_upload_records(aiws_root, record_id)
+    stable = [
+        {
+            "host_id": item["payload"].get("host_id"),
+            "host_kind": item["payload"].get("host_kind"),
+            "package_path": item["payload"].get("package_path"),
+            "activation_status": item["payload"].get("activation_status"),
+            "status": item["payload"].get("status"),
+            "validation_tree_digest": item["payload"].get("validation_tree_digest"),
+            "current_tree_digest": item["payload"].get("current_tree_digest"),
+        }
+        for item in records
+    ]
+    content = json.dumps(stable, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(content).hexdigest()
+
+
+def clear_pending_upload_records(aiws_root: Path, record_id: str) -> int:
+    records = pending_upload_records(aiws_root, record_id)
+    for item in records:
+        item["path"].unlink()
+    return len(records)
+
+
+def review_update_conflict(aiws_root: Path, record_id: str, update_candidate_id: str) -> dict[str, Any]:
+    record = refresh_modified_status(aiws_root, require_non_blank_string(record_id, "record_id"))
+    candidate = load_update_candidate(aiws_root, update_candidate_id)
+    if candidate.get("draft_id") != record_id:
+        raise SkillManagerError("Update candidate draft_id does not match requested draft.")
+    if candidate.get("plugin_id") != record.plugin_id or candidate.get("skill_id") != record.skill_id:
+        raise SkillManagerError("Update candidate identity does not match requested draft.")
+    plugins_root = aiws_root / "plugins"
+    draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")
+    candidate_root = update_candidate_root(aiws_root)
+    base_root = require_update_state_path_under(Path(str(candidate["base_plugin_root"])), candidate_root)
+    remote_root = require_update_state_path_under(Path(str(candidate["remote_plugin_root"])), candidate_root)
+    require_plugin_contains_skill(remote_root, record.plugin_id, record.skill_id)
+    base_digest = tree_digest(base_root)
+    current_digest = tree_digest(draft_path)
+    remote_digest = tree_digest(remote_root)
+    if base_digest != candidate.get("base_tree_digest") or base_digest != record.base_tree_digest:
+        raise SkillManagerError("Update candidate base digest does not match the draft base.")
+    if remote_digest != candidate.get("remote_tree_digest"):
+        raise SkillManagerError("Update candidate remote digest changed after creation.")
+    local_changed = changed_paths_between(base_root, draft_path)
+    remote_changed = changed_paths_between(base_root, remote_root)
+    local_non_skill = split_non_skill_changes(local_changed, record.skill_id)
+    remote_non_skill = split_non_skill_changes(remote_changed, record.skill_id)
+    pending = pending_upload_summary(aiws_root, record_id)
+    status = "update_conflict" if local_changed or pending["present"] else "update_allowed"
+    review_id = "updrev_" + uuid.uuid4().hex
+    review_payload = {
+        "review_id": review_id,
+        "candidate_id": update_candidate_id,
+        "update_candidate_id": update_candidate_id,
+        "draft_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "base_tree_digest": base_digest,
+        "current_tree_digest": current_digest,
+        "remote_tree_digest": remote_digest,
+        "local_changed_files": local_changed,
+        "remote_changed_files": remote_changed,
+        "local_non_skill_changed_files": local_non_skill,
+        "remote_non_skill_changed_files": remote_non_skill,
+        "pending_upload": pending,
+        "pending_upload_digest": pending_upload_digest(aiws_root, record_id),
+        "choices": UPDATE_CONFLICT_CHOICES if status == "update_conflict" else [],
+        "created_at": utc_now(),
+    }
+    review_path = update_review_record_path(aiws_root, review_id)
+    require_update_state_path_under(review_path, update_review_root(aiws_root))
+    write_json_atomic(review_path, review_payload)
+    return {
+        "status": status,
+        "reason": "modified_draft_or_pending_upload" if status == "update_conflict" else "no_modified_draft_or_pending_upload",
+        "review_id": review_id,
+        "draft_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "base_tree_digest": base_digest,
+        "current_tree_digest": current_digest,
+        "remote_tree_digest": remote_digest,
+        "local_changed_files": local_changed,
+        "remote_changed_files": remote_changed,
+        "local_non_skill_changed_files": local_non_skill,
+        "remote_non_skill_changed_files": remote_non_skill,
+        "local_vs_base_diff": unified_tree_diff(base_root, draft_path, local_changed, label="local"),
+        "remote_vs_base_diff": unified_tree_diff(base_root, remote_root, remote_changed, label="remote"),
+        "pending_upload": pending,
+        "choices": UPDATE_CONFLICT_CHOICES if status == "update_conflict" else [],
+    }
+
+
+def resolve_update_conflict(
+    aiws_root: Path,
+    review_id: str,
+    choice: str,
+    *,
+    clear_pending_upload: bool = False,
+    allow_full_plugin_discard: bool = False,
+) -> dict[str, Any]:
+    choice = require_non_blank_string(choice, "choice")
+    if choice not in UPDATE_CONFLICT_CHOICES:
+        raise SkillManagerError(f"Unsupported update conflict choice: {choice}")
+    review = load_update_review(aiws_root, review_id)
+    record_id = require_non_blank_string(review.get("draft_id"), "draft_id")
+    record = require_canonical_draft_record(aiws_root, record_id)
+    candidate = load_update_candidate(aiws_root, require_non_blank_string(review.get("candidate_id"), "candidate_id"))
+    if candidate.get("draft_id") != record_id:
+        raise SkillManagerError("Update review candidate does not match draft.")
+    if candidate.get("plugin_id") != record.plugin_id or candidate.get("skill_id") != record.skill_id:
+        raise SkillManagerError("Update review identity does not match draft.")
+    draft_path = require_path_under(Path(record.draft_path), aiws_root / "plugins", label="Draft path")
+    candidate_root = update_candidate_root(aiws_root)
+    base_root = require_update_state_path_under(Path(str(candidate["base_plugin_root"])), candidate_root)
+    remote_root = require_update_state_path_under(Path(str(candidate["remote_plugin_root"])), candidate_root)
+    require_plugin_contains_skill(remote_root, record.plugin_id, record.skill_id)
+    base_digest = tree_digest(base_root)
+    current_digest = tree_digest(draft_path)
+    remote_digest = tree_digest(remote_root)
+    if record.base_tree_digest != review.get("base_tree_digest") or base_digest != review.get("base_tree_digest"):
+        return {"status": "stale_review", "reason": "base_digest_changed", "review_id": review_id, "mutated": False}
+    if current_digest != review.get("current_tree_digest"):
+        return {"status": "stale_review", "reason": "current_draft_digest_changed", "review_id": review_id, "mutated": False}
+    if remote_digest != review.get("remote_tree_digest"):
+        return {"status": "stale_review", "reason": "remote_candidate_digest_changed", "review_id": review_id, "mutated": False}
+    if pending_upload_digest(aiws_root, record_id) != review.get("pending_upload_digest"):
+        return {"status": "stale_review", "reason": "pending_upload_state_changed", "review_id": review_id, "mutated": False}
+    if choice == "keep_local_draft_and_pending_package":
+        return {"status": "update_skipped", "review_id": review_id, "draft_id": record_id, "mutated": False}
+    if choice == "submit_or_upload_first":
+        return {
+            "status": "submit_or_upload_first",
+            "review_id": review_id,
+            "draft_id": record_id,
+            "mutated": False,
+            "next_action": "Submit the current draft for review or upload the pending package before updating.",
+        }
+    pending = pending_upload_records(aiws_root, record_id)
+    if pending and not clear_pending_upload:
+        return {
+            "status": "pending_upload_must_be_cleared",
+            "review_id": review_id,
+            "draft_id": record_id,
+            "pending_upload": pending_upload_summary(aiws_root, record_id),
+            "mutated": False,
+        }
+    local_non_skill = list(review.get("local_non_skill_changed_files") or [])
+    if local_non_skill and not allow_full_plugin_discard:
+        return {
+            "status": "full_plugin_discard_confirmation_required",
+            "review_id": review_id,
+            "draft_id": record_id,
+            "local_non_skill_changed_files": local_non_skill,
+            "mutated": False,
+        }
+    temp_draft_path = draft_path.with_name(f"{draft_path.name}.update-{uuid.uuid4().hex}.tmp")
+    require_path_under(temp_draft_path, aiws_root / "plugins", label="Temporary draft update path")
+    shutil.copytree(remote_root, temp_draft_path, symlinks=False)
+    try:
+        validation = require_plugin_contains_skill(temp_draft_path, record.plugin_id, record.skill_id)
+        shutil.rmtree(draft_path)
+        temp_draft_path.replace(draft_path)
+    except Exception:
+        if temp_draft_path.exists():
+            shutil.rmtree(temp_draft_path)
+        raise
+    write_base_tree_manifest(aiws_root, record_id, draft_path)
+    new_digest = tree_digest(draft_path)
+    cleared = clear_pending_upload_records(aiws_root, record_id) if clear_pending_upload else 0
+    updated = DraftRecord(
+        **{
+            **record.to_json(),
+            "base_version": validation["version"],
+            "base_commit": "remote-update-candidate",
+            "base_tree_digest": new_digest,
+            "current_tree_digest": new_digest,
+            "modified": False,
+            "last_validation_status": "passed",
+            "last_validation_tree_digest": new_digest,
+            "updated_at": utc_now(),
+        }
+    )
+    write_json_atomic(draft_record_path(aiws_root, record_id), updated.to_json())
+    return {
+        "status": "discarded_local_changes_and_updated",
+        "review_id": review_id,
+        "draft_id": record_id,
+        "plugin_id": record.plugin_id,
+        "skill_id": record.skill_id,
+        "current_tree_digest": new_digest,
+        "base_tree_digest": new_digest,
+        "modified": False,
+        "cleared_pending_uploads": cleared,
+        "remote_non_skill_changed_files": review.get("remote_non_skill_changed_files") or [],
+        "mutated": True,
+    }
+
+
 def activate_draft(
     aiws_root: Path,
     record_id: str,
@@ -2790,6 +3218,6 @@ def update_from_github_decision(record: DraftRecord | None) -> dict[str, Any]:
         return {
             "allowed": False,
             "reason": "modified_draft_or_pending_upload",
-            "choices": ["keep_local_draft_and_pending_package", "discard_local_changes_and_update", "submit_or_upload_first"],
+            "choices": UPDATE_CONFLICT_CHOICES,
         }
     return {"allowed": True, "reason": "no_modified_draft_or_pending_upload", "choices": []}

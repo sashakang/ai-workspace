@@ -15,6 +15,8 @@ Allowed write roots:
 ~/.aiws/state/skill-drafts/
 ~/.aiws/state/skill-proposals/
 ~/.aiws/state/draft-activations/
+~/.aiws/state/update-candidates/
+~/.aiws/state/update-reviews/
 ~/.aiws/state/git-worktrees/
 temporary package build output
 explicit package output directories supplied by the caller
@@ -46,6 +48,8 @@ build_draft_package(draft_id, package_output_dir)
 activate_draft(draft_id, host_kind, host_id, package_output_dir)
 deactivate_draft(draft_id, host_kind, host_id)
 update_from_github(plugin_id, marketplace_id)
+review_update_conflict(draft_id, update_candidate_id)
+resolve_update_conflict(review_id, choice)
 stage_proposal(draft_id, target_scope, target_repo, summary, rationale)
 submit_pr(proposal_id, submitter)
 revert_draft(draft_id)
@@ -189,6 +193,12 @@ keep_local_draft_and_pending_package
 discard_local_changes_and_update
 submit_or_upload_first
 ```
+
+Marketplace update conflict review is a non-mutating inspection step. It accepts only a `draft_id` and a server-owned `update_candidate_id`; Cowork-facing callers must not pass raw local filesystem paths for base or remote plugin trees. The manager stores trusted candidate snapshots under `~/.aiws/state/update-candidates/` and stores review records under `~/.aiws/state/update-reviews/`. Review responses may show changed file lists and bounded local-vs-base and remote-vs-base diff previews, but must not expose mutable candidate paths as user-editable inputs.
+
+`review_update_conflict` records the reviewed `base_tree_digest`, current draft digest, remote candidate digest, pending-upload state digest, and the exact local and remote changed file lists. `resolve_update_conflict` consumes a `review_id` and one of the three choices above. Before any mutation, it must recheck the draft identity, candidate identity, candidate paths, base digest, current draft digest, remote candidate digest, and pending-upload digest. If any reviewed state changed, it returns `stale_review` and mutates nothing.
+
+`keep_local_draft_and_pending_package` and `submit_or_upload_first` are no-op resolver choices. `discard_local_changes_and_update` may replace the AIWS draft worktree and base-tree manifest with the reviewed remote candidate, then mark the draft clean. It must not touch installed marketplace plugins, Cowork runtime files, uploaded Cowork packages, GitHub state, `~/.claude`, or memory paths. If pending-upload state exists, discard must fail with `pending_upload_must_be_cleared` unless the caller explicitly confirms clearing the AIWS pending-upload record; clearing removes only `~/.aiws/state/draft-activations/<host-id>/<draft_id>.json` records for that draft and never deletes Cowork-uploaded packages. If local non-skill draft files changed, discard must fail with `full_plugin_discard_confirmation_required` unless the caller explicitly confirms full-plugin discard. Remote non-skill changes may be adopted only as part of replacing the draft base with the reviewed remote candidate, and the response must report them.
 
 ## Skill Compatibility
 

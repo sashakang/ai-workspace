@@ -127,6 +127,24 @@ def create_server(root: Path | None = None):
     def deactivate_draft(draft_id: str, host_kind: str, host_id: str | None = None) -> dict[str, Any]:
         return runtime.deactivate_draft(draft_id, host_kind=host_kind, host_id=host_id)
 
+    @server.tool(name="aiws.skills.review_update_conflict")
+    def review_update_conflict(draft_id: str, update_candidate_id: str) -> dict[str, Any]:
+        return runtime.review_update_conflict(draft_id, update_candidate_id)
+
+    @server.tool(name="aiws.skills.resolve_update_conflict")
+    def resolve_update_conflict(
+        review_id: str,
+        choice: str,
+        clear_pending_upload: bool = False,
+        allow_full_plugin_discard: bool = False,
+    ) -> dict[str, Any]:
+        return runtime.resolve_update_conflict(
+            review_id,
+            choice=choice,
+            clear_pending_upload=clear_pending_upload,
+            allow_full_plugin_discard=allow_full_plugin_discard,
+        )
+
     @server.tool(name="aiws.skills.stage_proposal")
     def stage_proposal(
         draft_id: str,

@@ -22,6 +22,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     SkillManagerError,
     activate_draft,
     build_draft_package,
+    create_update_candidate,
     create_or_open_draft,
     create_draft_record,
     deactivate_draft,
@@ -39,7 +40,9 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     list_draft_files,
     read_draft_file,
     refresh_modified_status,
+    resolve_update_conflict,
     revert_draft,
+    review_update_conflict,
     stage_proposal,
     submit_pr,
     tree_digest,
@@ -889,6 +892,231 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 deactivate_draft(aiws_root, record_id, "cowork", "cowork-test")
 
             self.assertTrue(activation_record_path.exists())
+
+    def test_review_update_conflict_reports_local_and_remote_diffs_and_stores_digest_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            remote_root = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "remote-plugin", "\nRemote update.\n")
+            candidate = create_update_candidate(aiws_root, record_id, plugin_root, remote_root)
+
+            review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+            review_path = aiws_root / "state" / "update-reviews" / f"{review['review_id']}.json"
+            stored = json.loads(review_path.read_text())
+
+            self.assertEqual(review["status"], "update_conflict")
+            self.assertEqual(review["choices"], [
+                "keep_local_draft_and_pending_package",
+                "discard_local_changes_and_update",
+                "submit_or_upload_first",
+            ])
+            self.assertEqual(review["local_changed_files"], ["skills/meeting-followup/SKILL.md"])
+            self.assertEqual(
+                review["remote_changed_files"],
+                [".claude-plugin/plugin.json", "contracts/example-plugin.contract.json", "skills/meeting-followup/SKILL.md"],
+            )
+            self.assertEqual(
+                review["remote_non_skill_changed_files"],
+                [".claude-plugin/plugin.json", "contracts/example-plugin.contract.json"],
+            )
+            self.assertIn("Local draft edit", review["local_vs_base_diff"]["content"])
+            self.assertIn("Remote update", review["remote_vs_base_diff"]["content"])
+            self.assertFalse(review["pending_upload"]["present"])
+            self.assertEqual(stored["draft_id"], record_id)
+            self.assertEqual(stored["base_tree_digest"], record.base_tree_digest)
+            self.assertEqual(stored["current_tree_digest"], review["current_tree_digest"])
+            self.assertEqual(stored["remote_tree_digest"], review["remote_tree_digest"])
+
+    def test_resolve_update_conflict_stale_review_blocks_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            remote_root = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "remote-plugin", "\nRemote update.\n")
+            candidate = create_update_candidate(aiws_root, record_id, plugin_root, remote_root)
+            review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+            self.edit_draft_skill(record, "\nSecond local edit after review.\n")
+
+            result = resolve_update_conflict(
+                aiws_root,
+                review["review_id"],
+                "discard_local_changes_and_update",
+                allow_full_plugin_discard=True,
+            )
+
+            self.assertEqual(result["status"], "stale_review")
+            self.assertEqual(result["reason"], "current_draft_digest_changed")
+            self.assertIn("Second local edit after review", (Path(record.draft_path) / "skills/meeting-followup/SKILL.md").read_text())
+
+    def test_review_update_conflict_allows_clean_update_without_resolution_choices(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, _record = self.create_meeting_followup_draft(temp_root)
+            remote_root = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "remote-plugin", "\nRemote update.\n")
+            candidate = create_update_candidate(aiws_root, record_id, plugin_root, remote_root)
+
+            review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+
+            self.assertEqual(review["status"], "update_allowed")
+            self.assertEqual(review["reason"], "no_modified_draft_or_pending_upload")
+            self.assertEqual(review["choices"], [])
+            self.assertEqual(review["local_changed_files"], [])
+            self.assertEqual(
+                review["remote_changed_files"],
+                [".claude-plugin/plugin.json", "contracts/example-plugin.contract.json", "skills/meeting-followup/SKILL.md"],
+            )
+
+    def test_resolve_update_conflict_keep_and_submit_first_are_no_ops(self) -> None:
+        for choice, expected_status in (
+            ("keep_local_draft_and_pending_package", "update_skipped"),
+            ("submit_or_upload_first", "submit_or_upload_first"),
+        ):
+            with self.subTest(choice=choice):
+                with tempfile.TemporaryDirectory() as temp:
+                    temp_root = Path(temp)
+                    aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+                    self.edit_draft_skill(record, "\nLocal draft edit.\n")
+                    remote_root = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "remote-plugin", "\nRemote update.\n")
+                    candidate = create_update_candidate(aiws_root, record_id, plugin_root, remote_root)
+                    review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+                    before = tree_digest(Path(record.draft_path))
+
+                    result = resolve_update_conflict(aiws_root, review["review_id"], choice)
+
+                    self.assertEqual(result["status"], expected_status)
+                    self.assertEqual(tree_digest(Path(record.draft_path)), before)
+                    self.assertTrue(load_draft_record(aiws_root, record_id).modified)
+
+    def test_resolve_update_conflict_discard_adopts_remote_and_marks_draft_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            remote_root = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "remote-plugin", "\nRemote update.\n")
+            candidate = create_update_candidate(aiws_root, record_id, plugin_root, remote_root)
+            review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+
+            result = resolve_update_conflict(aiws_root, review["review_id"], "discard_local_changes_and_update")
+            loaded = load_draft_record(aiws_root, record_id)
+            skill_content = (Path(loaded.draft_path) / "skills" / "meeting-followup" / "SKILL.md").read_text()
+
+            self.assertEqual(result["status"], "discarded_local_changes_and_updated")
+            self.assertFalse(loaded.modified)
+            self.assertEqual(loaded.base_tree_digest, loaded.current_tree_digest)
+            self.assertEqual(loaded.base_tree_digest, result["current_tree_digest"])
+            self.assertIn("Remote update", skill_content)
+            self.assertNotIn("Local draft edit", skill_content)
+            self.assertEqual(json.loads((Path(loaded.draft_path) / ".claude-plugin" / "plugin.json").read_text())["version"], "1.1.0")
+
+    def test_resolve_update_conflict_pending_upload_requires_explicit_clear_and_only_clears_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            activated = activate_draft(aiws_root, record_id, "cowork", temp_root / "packages", host_id="cowork-test")
+            package_path = Path(activated["package_path"])
+            activation_record_path = Path(activated["activation_record_path"])
+            remote_root = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "remote-plugin", "\nRemote update.\n")
+            candidate = create_update_candidate(aiws_root, record_id, plugin_root, remote_root)
+            review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+
+            blocked = resolve_update_conflict(aiws_root, review["review_id"], "discard_local_changes_and_update")
+            self.assertEqual(blocked["status"], "pending_upload_must_be_cleared")
+            self.assertTrue(activation_record_path.exists())
+            cleared = resolve_update_conflict(
+                aiws_root,
+                review["review_id"],
+                "discard_local_changes_and_update",
+                clear_pending_upload=True,
+            )
+
+            self.assertEqual(cleared["status"], "discarded_local_changes_and_updated")
+            self.assertEqual(cleared["cleared_pending_uploads"], 1)
+            self.assertFalse(activation_record_path.exists())
+            self.assertTrue(package_path.exists())
+
+    def test_resolve_update_conflict_rejects_pending_upload_state_created_after_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            remote_root = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "remote-plugin", "\nRemote update.\n")
+            candidate = create_update_candidate(aiws_root, record_id, plugin_root, remote_root)
+            review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+            activated = activate_draft(aiws_root, record_id, "cowork", temp_root / "packages", host_id="cowork-test")
+
+            result = resolve_update_conflict(
+                aiws_root,
+                review["review_id"],
+                "discard_local_changes_and_update",
+                clear_pending_upload=True,
+            )
+
+            self.assertEqual(result["status"], "stale_review")
+            self.assertEqual(result["reason"], "pending_upload_state_changed")
+            self.assertTrue(Path(activated["activation_record_path"]).exists())
+            self.assertIn("Local draft edit", (Path(record.draft_path) / "skills" / "meeting-followup" / "SKILL.md").read_text())
+
+    def test_resolve_update_conflict_blocks_local_non_skill_discard_without_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, record = self.create_meeting_followup_draft(temp_root)
+            self.edit_draft_skill(record, "\nLocal draft edit.\n")
+            draft_manifest = Path(record.draft_path) / ".claude-plugin" / "plugin.json"
+            manifest = json.loads(draft_manifest.read_text())
+            manifest["description"] = "Local non-skill change."
+            draft_manifest.write_text(json.dumps(manifest))
+            remote_root = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "remote-plugin", "\nRemote update.\n")
+            candidate = create_update_candidate(aiws_root, record_id, plugin_root, remote_root)
+            review = review_update_conflict(aiws_root, record_id, candidate["update_candidate_id"])
+
+            blocked = resolve_update_conflict(aiws_root, review["review_id"], "discard_local_changes_and_update")
+            allowed = resolve_update_conflict(
+                aiws_root,
+                review["review_id"],
+                "discard_local_changes_and_update",
+                allow_full_plugin_discard=True,
+            )
+
+            self.assertEqual(blocked["status"], "full_plugin_discard_confirmation_required")
+            self.assertEqual(blocked["local_non_skill_changed_files"], [".claude-plugin/plugin.json"])
+            self.assertEqual(allowed["status"], "discarded_local_changes_and_updated")
+
+    def test_update_candidate_validation_fails_closed_for_wrong_identity_missing_skill_and_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root, record_id, plugin_root, _record = self.create_meeting_followup_draft(temp_root)
+
+            wrong = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "wrong-plugin", "\nRemote update.\n")
+            wrong_manifest = json.loads((wrong / ".claude-plugin" / "plugin.json").read_text())
+            wrong_manifest["name"] = "other-plugin"
+            (wrong / ".claude-plugin" / "plugin.json").write_text(json.dumps(wrong_manifest))
+            with self.assertRaisesRegex(SkillManagerError, "points to plugin"):
+                create_update_candidate(aiws_root, record_id, plugin_root, wrong)
+
+            missing = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "missing-skill-plugin", "\nRemote update.\n")
+            shutil.rmtree(missing / "skills" / "meeting-followup")
+            with self.assertRaisesRegex(SkillManagerError, "does not exist|public_skills missing"):
+                create_update_candidate(aiws_root, record_id, plugin_root, missing)
+
+            binary = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "binary-plugin", "\nRemote update.\n")
+            (binary / "skills" / "meeting-followup" / "asset.bin").write_bytes(b"\x00\xff")
+            with self.assertRaisesRegex(SkillManagerError, "binary"):
+                create_update_candidate(aiws_root, record_id, plugin_root, binary)
+
+            symlinked = self.copy_plugin_with_skill_edit(temp_root, plugin_root, "symlinked-plugin", "\nRemote update.\n")
+            outside = temp_root / "outside.md"
+            outside.write_text("outside\n")
+            linked = symlinked / "skills" / "meeting-followup" / "linked.md"
+            linked.symlink_to(outside)
+            with self.assertRaisesRegex(SkillManagerError, "symlinks"):
+                create_update_candidate(aiws_root, record_id, plugin_root, symlinked)
+
+            root_symlink = temp_root / "root-symlink-plugin"
+            root_symlink.symlink_to(plugin_root, target_is_directory=True)
+            with self.assertRaisesRegex(SkillManagerError, "symlink"):
+                create_update_candidate(aiws_root, record_id, plugin_root, root_symlink)
 
     def test_activate_draft_rejects_tampered_record_id_before_package_or_pending_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -2741,6 +2969,21 @@ class AiwsSkillManagerTests(unittest.TestCase):
         skill_file = skill_root / "SKILL.md"
         skill_file.write_text(f"---\nname: {name}\ndescription: Test skill.\n---\n\n# Test Skill\n")
         return skill_file
+
+    def copy_plugin_with_skill_edit(self, temp_root: Path, plugin_root: Path, name: str, edit: str) -> Path:
+        destination = temp_root / name
+        shutil.copytree(plugin_root, destination)
+        manifest_path = destination / ".claude-plugin" / "plugin.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["version"] = "1.1.0"
+        manifest_path.write_text(json.dumps(manifest))
+        contract_path = destination / "contracts" / "example-plugin.contract.json"
+        contract = json.loads(contract_path.read_text())
+        contract["version"] = "1.1.0"
+        contract_path.write_text(json.dumps(contract))
+        skill_file = destination / "skills" / "meeting-followup" / "SKILL.md"
+        skill_file.write_text(skill_file.read_text() + edit)
+        return destination
 
     def create_meeting_followup_draft(self, temp_root: Path) -> tuple[Path, str, Path, object]:
         aiws_root = temp_root / ".aiws"

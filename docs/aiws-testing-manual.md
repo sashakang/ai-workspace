@@ -1,12 +1,12 @@
 # AIWS Testing Manual
 
-Last updated: 2026-05-15.
+Last updated: 2026-05-16.
 
 This manual is the starting point for AIWS testing. It lists the currently implemented scenarios, the prompt or command to use, and the expected answer. Keep detailed historical reports in their original files; keep this page current when a new scenario becomes part of the maintained test set.
 
 Current version assumptions:
 
-- `core-aiws` package version: `0.3.18`
+- `core-aiws` package version: `0.3.19`
 - `aiws-productivity` package version: `0.2.1`
 - Primary Cowork journey: marketplace install from `sashakang/ai-workspace`
 - Fallback Cowork journey: ZIP upload through Cowork plugin settings
@@ -48,10 +48,12 @@ Common placeholders:
 | CW-12A | Post-merge marketplace delivery guidance | Cowork/product workflow | Planned |
 | CW-13 | Cowork package intake probe | Local command + new Cowork chat | Evidence-gathering |
 | CW-14 | Hosted/uploaded MCP smoke experiments | Manual Cowork diagnostic | Currently BLOCKED |
+| CW-15 | Marketplace update conflict review and safe resolution | Cowork/API lifecycle | PASS when diff review and chosen resolution behave safely |
 | AUTO-01 | Cowork ZIP package builder tests | Automated unittest | PASS |
 | AUTO-02 | Cowork package intake probe tests | Automated unittest | PASS |
 | AUTO-03 | AIWS MCP lifecycle regression tests | Automated unittest | PASS |
 | AUTO-04 | Full repository unittest suite | Automated unittest | PASS |
+| AUTO-05 | Marketplace update conflict regression tests | Automated unittest | PASS |
 
 ## Scenario 1: Cowork Marketplace Install And Skill Invocation
 
@@ -64,7 +66,7 @@ Check my AIWS setup.
 
 Verify:
 1. Marketplace `sashakang/ai-workspace` is installed.
-2. `core-aiws` is installed and updated to version 0.3.18 or newer.
+2. `core-aiws` is installed and updated to version 0.3.19 or newer.
 3. `aiws-productivity` is installed.
 4. `meeting-followup` skill is visible.
 
@@ -103,7 +105,7 @@ python scripts/build_cowork_import.py
 Expected command output:
 
 ```text
-dist/cowork-import/core-aiws-0.3.18.zip
+dist/cowork-import/core-aiws-0.3.19.zip
 dist/cowork-import/aiws-productivity-0.2.1.zip
 ```
 
@@ -116,7 +118,7 @@ Organization settings -> Plugins -> Add plugin -> Upload a file
 Upload:
 
 ```text
-core-aiws-0.3.18.zip
+core-aiws-0.3.19.zip
 aiws-productivity-0.2.1.zip
 ```
 
@@ -453,7 +455,7 @@ proposal staged: no
 GitHub touched: no
 ```
 
-`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.18 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
+`handoff_prepared` is not `active`. It means AIWS copied the package to a Cowork package-upload surface, but Cowork has not yet confirmed that the modified skill is visible and callable. If `core-aiws` 0.3.19 still returns `host_capability_missing`, record it as a fallback-path PASS when the package and pending-upload record are produced safely.
 
 Source: [Cowork Skills-Management Phase 2 Test Plan](./cowork-skills-management-phase2-test-plan.md#scenario-f-activation-technical-pilot-check).
 
@@ -506,7 +508,7 @@ Latest evidence: [Cowork Modified Draft Upload Report](./cowork-modified-draft-u
 
 Purpose: confirm AIWS can tell whether Cowork has zero, one, or multiple installed copies of the same logical skill before AIWS tries to manage it.
 
-Run this in a Cowork chat after updating `core-aiws` to `0.3.18` or later.
+Run this in a Cowork chat after updating `core-aiws` to `0.3.19` or later.
 
 Prompt to Cowork:
 
@@ -861,7 +863,7 @@ Latest evidence: [Cowork GitHub API Submitter PASS](./cowork-github-api-submitte
 
 Purpose: confirm Cowork submit results report repository-owned review policy without asking the normal user to choose GitHub reviewers.
 
-Status: implemented and runtime-tested in `core-aiws` 0.3.18 for a repository without CODEOWNERS.
+Status: implemented and runtime-tested in `core-aiws` 0.3.18 and later for a repository without CODEOWNERS.
 
 Automated verification from the repo root:
 
@@ -996,6 +998,140 @@ Do not treat these failures as failure of normal skill invocation. `meeting-foll
 
 Source: [AIWS Cowork Phase 2B Runtime Plan](./aiws-cowork-phase2b-runtime-plan.md).
 
+## Scenario 15: Marketplace Update Conflict Review And Safe Resolution
+
+Purpose: confirm that AIWS does not silently overwrite a locally modified draft when a marketplace update is available. The user must be able to review local and remote diffs, then choose one of the safe resolution paths.
+
+Current implementation note: Cowork-facing tools use server-owned IDs. A normal user should see `draft_id`, `update_candidate_id`, and `review_id`; they should not be asked to paste filesystem paths.
+
+Prompt to Cowork after an update candidate exists:
+
+```text
+Review the marketplace update conflict for this draft:
+
+draft_id: <draft_id>
+update_candidate_id: <update_candidate_id>
+
+Call aiws.skills.review_update_conflict.
+
+Report:
+1. review_id
+2. status
+3. local_changed_files
+4. remote_changed_files
+5. local_non_skill_changed_files
+6. remote_non_skill_changed_files
+7. whether a pending upload exists
+8. local-vs-base diff preview
+9. remote-vs-base diff preview
+10. the available resolver choices
+
+Do not resolve the conflict yet.
+Do not stage, submit, upload, or mutate installed plugin files.
+```
+
+Expected review answer:
+
+```text
+status: update_conflict
+review_id: updrev_<opaque id>
+choices:
+- keep_local_draft_and_pending_package
+- discard_local_changes_and_update
+- submit_or_upload_first
+local-vs-base diff: present
+remote-vs-base diff: present
+installed plugin files touched: no
+Cowork runtime files touched: no
+~/.claude touched: no
+```
+
+Prompt to keep the local draft:
+
+```text
+Resolve this update conflict by keeping my local draft:
+
+review_id: <review_id>
+choice: keep_local_draft_and_pending_package
+
+Report whether anything was mutated.
+```
+
+Expected answer:
+
+```text
+status: update_skipped
+mutated: false
+```
+
+Prompt to submit or upload first:
+
+```text
+Resolve this update conflict by choosing submit/upload first:
+
+review_id: <review_id>
+choice: submit_or_upload_first
+
+Report whether anything was mutated and what the next action is.
+```
+
+Expected answer:
+
+```text
+status: submit_or_upload_first
+mutated: false
+next_action: submit or upload the current draft before updating
+```
+
+Prompt to discard local changes and update:
+
+```text
+Resolve this update conflict by discarding my local draft changes and updating to the remote version:
+
+review_id: <review_id>
+choice: discard_local_changes_and_update
+
+Use clear_pending_upload=true only if the review says a pending upload exists.
+Use allow_full_plugin_discard=true only if the review says there are local non-skill changes and I explicitly confirm I want to discard the whole local plugin draft.
+
+Report:
+1. status
+2. whether stale-review protection passed
+3. whether pending upload records were cleared
+4. whether the draft is now clean
+5. installed plugin files touched
+6. Cowork runtime files touched
+7. ~/.claude touched
+```
+
+Expected answer when all gates pass:
+
+```text
+status: discarded_local_changes_and_updated
+modified: false
+cleared_pending_uploads: 0 or more
+installed plugin files touched: no
+Cowork runtime files touched: no
+~/.claude touched: no
+```
+
+Expected fail-closed answers:
+
+```text
+status: stale_review
+mutated: false
+```
+
+```text
+status: pending_upload_must_be_cleared
+mutated: false
+```
+
+```text
+status: full_plugin_discard_confirmation_required
+mutated: false
+```
+
 ## Automated Scenario AUTO-01: Cowork ZIP Package Builder
 
 Purpose: confirm the fallback ZIP package builder creates the expected Cowork-importable artifacts.
@@ -1015,7 +1151,7 @@ OK
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.18.zip` is produced.
+- `core-aiws-0.3.19.zip` is produced.
 - `aiws-productivity-0.2.1.zip` is produced.
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.
@@ -1080,6 +1216,45 @@ OK
 ```
 
 Record the number of tests run in the test report because it changes as new scenarios are automated.
+
+## Automated Scenario AUTO-05: Marketplace Update Conflict Regression Tests
+
+Purpose: confirm the conflict review and resolver safety gates without requiring Cowork UI access.
+
+Run from the repo root:
+
+```bash
+python -m unittest \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_review_update_conflict_reports_local_and_remote_diffs_and_stores_digest_gate \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_resolve_update_conflict_stale_review_blocks_without_mutation \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_review_update_conflict_allows_clean_update_without_resolution_choices \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_resolve_update_conflict_keep_and_submit_first_are_no_ops \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_resolve_update_conflict_discard_adopts_remote_and_marks_draft_clean \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_resolve_update_conflict_pending_upload_requires_explicit_clear_and_only_clears_state \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_resolve_update_conflict_rejects_pending_upload_state_created_after_review \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_resolve_update_conflict_blocks_local_non_skill_discard_without_confirmation \
+  tests.test_aiws_skill_manager.AiwsSkillManagerTests.test_update_candidate_validation_fails_closed_for_wrong_identity_missing_skill_and_binary
+```
+
+Expected answer:
+
+```text
+Ran 9 tests
+OK
+```
+
+Key expectations covered by the test:
+
+- Review returns local-vs-base and remote-vs-base diff previews.
+- Review records store base/current/remote digests.
+- Clean updates return `update_allowed` without conflict resolver choices.
+- Stale reviews fail closed without mutation.
+- Keep-local and submit/upload-first are no-op choices.
+- Discard replaces the draft/base with the remote candidate and marks the draft clean.
+- Pending upload records block discard unless explicitly cleared.
+- Pending upload state created or changed after review makes the review stale.
+- Local non-skill changes require explicit full-plugin discard confirmation.
+- Wrong plugin identity, missing remote skill, symlinked roots/content, and binary candidate content fail closed.
 
 ## Maintenance Checklist
 

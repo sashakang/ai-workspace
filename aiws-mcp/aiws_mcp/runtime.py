@@ -1309,6 +1309,25 @@ class AiwsRuntime:
         host = self.ensure_host(host_kind=host_kind, host_id=host_id)
         return skill_manager.deactivate_draft(self.root, draft_id, host.host_kind, host.host_id)
 
+    def review_update_conflict(self, draft_id: str, update_candidate_id: str) -> dict[str, Any]:
+        return skill_manager.review_update_conflict(self.root, draft_id, update_candidate_id)
+
+    def resolve_update_conflict(
+        self,
+        review_id: str,
+        *,
+        choice: str,
+        clear_pending_upload: bool = False,
+        allow_full_plugin_discard: bool = False,
+    ) -> dict[str, Any]:
+        return skill_manager.resolve_update_conflict(
+            self.root,
+            review_id,
+            choice,
+            clear_pending_upload=clear_pending_upload,
+            allow_full_plugin_discard=allow_full_plugin_discard,
+        )
+
     def stage_proposal(
         self,
         draft_id: str,
