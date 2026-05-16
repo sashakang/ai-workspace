@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import stat
+import sys
 import zipfile
 from pathlib import Path
 from typing import Iterable
@@ -62,7 +63,7 @@ def build_plugin_package(repo_root: Path, plugin_name: str, output_dir: Path) ->
     repo_root = repo_root.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    plugin_root = repo_root / plugin_name
+    plugin_root = resolve_marketplace_plugin_root(repo_root, plugin_name)
     manifest_path = plugin_root / ".claude-plugin" / "plugin.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     package_path = output_dir / f"{manifest['name']}-{manifest['version']}.zip"
@@ -72,6 +73,30 @@ def build_plugin_package(repo_root: Path, plugin_name: str, output_dir: Path) ->
             _write_file(package, source, source.relative_to(plugin_root))
 
     return package_path
+
+
+def resolve_marketplace_plugin_root(repo_root: Path, plugin_name: str) -> Path:
+    repo_root = repo_root.resolve()
+    marketplace_path = repo_root / ".claude-plugin" / "marketplace.json"
+    marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+    matches = [
+        item
+        for item in marketplace.get("plugins", [])
+        if isinstance(item, dict) and item.get("name") == plugin_name
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"Plugin {plugin_name!r} must appear exactly once in marketplace.json.")
+    source = matches[0].get("source")
+    if not isinstance(source, str) or not source:
+        raise ValueError(f"Plugin {plugin_name!r} must define marketplace source.")
+    plugin_root = (repo_root / source).resolve()
+    try:
+        plugin_root.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError(f"Marketplace source escapes repository: {source}") from exc
+    if not plugin_root.is_dir():
+        raise ValueError(f"Marketplace source is not a plugin directory: {source}")
+    return plugin_root
 
 
 def _iter_files(root: Path) -> Iterable[Path]:
@@ -104,6 +129,10 @@ def _write_file(package: zipfile.ZipFile, source: Path, archive_name: Path) -> N
 
 
 if __name__ == "__main__":
-    packages = build_cowork_import_packages(Path(__file__).resolve().parents[1], Path("dist/cowork-import"))
+    if "--plugin-id" in sys.argv:
+        plugin_id = sys.argv[sys.argv.index("--plugin-id") + 1]
+        packages = [build_plugin_package(Path(__file__).resolve().parents[1], plugin_id, Path("dist/cowork-import"))]
+    else:
+        packages = build_cowork_import_packages(Path(__file__).resolve().parents[1], Path("dist/cowork-import"))
     for package in packages:
         print(package)

@@ -49,11 +49,13 @@ Common placeholders:
 | CW-13 | Cowork package intake probe | Local command + new Cowork chat | Evidence-gathering |
 | CW-14 | Hosted/uploaded MCP smoke experiments | Manual Cowork diagnostic | Currently BLOCKED |
 | CW-15 | Marketplace update conflict review and safe resolution | Cowork/API lifecycle | PASS when diff review and chosen resolution behave safely |
+| REL-01 | Maintainer release PR workflow | GitHub maintainer release | PASS when release PR is generated safely |
 | AUTO-01 | Cowork ZIP package builder tests | Automated unittest | PASS |
 | AUTO-02 | Cowork package intake probe tests | Automated unittest | PASS |
 | AUTO-03 | AIWS MCP lifecycle regression tests | Automated unittest | PASS |
 | AUTO-04 | Full repository unittest suite | Automated unittest | PASS |
 | AUTO-05 | Marketplace update conflict regression tests | Automated unittest | PASS |
+| AUTO-06 | AIWS release workflow and repo scaffold tests | Automated unittest | PASS |
 
 ## Scenario 1: Cowork Marketplace Install And Skill Invocation
 
@@ -1179,16 +1181,16 @@ python -m unittest tests.test_cowork_packaging
 Expected answer:
 
 ```text
-Ran 6 tests
+Ran 7 tests
 OK
 ```
 
 Key expectations covered by the test:
 
-- `core-aiws-0.3.20.zip` is produced.
-- `aiws-productivity-0.2.2.zip` is produced.
+- package names are derived from plugin manifests, not hardcoded release versions
 - `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.
+- the generic package builder can package a declared plugin by `plugin_id`
 
 ## Automated Scenario AUTO-02: Cowork Package Intake Probe
 
@@ -1296,6 +1298,79 @@ Key expectations covered by the test:
 - Pending upload state created or changed after review makes the review stale.
 - Local non-skill changes require explicit full-plugin discard confirmation.
 - Wrong plugin identity, missing remote skill, symlinked roots/content, and binary candidate content fail closed.
+
+## Scenario REL-01: Maintainer Release PR Workflow
+
+Purpose: confirm the maintainer-owned release path after a skill proposal is accepted. This is not a normal Cowork user action. Normal users may propose skill-folder changes only; maintainers release plugin versions.
+
+Current lifecycle terms:
+
+```text
+Draft -> Validated -> Submitted -> Accepted -> Released -> Marketplace synced
+```
+
+`Accepted` means the skill PR was merged. It does not mean Cowork users can see a new plugin version yet.
+
+Maintainer action in GitHub:
+
+```text
+Run workflow: AIWS Release Plugin
+plugin_id: aiws-productivity
+bump_type: patch
+explicit_version: <blank>
+```
+
+Expected release workflow behavior:
+
+```text
+release PR created or updated: yes
+direct push to master: no
+plugin manifest version bumped: yes
+plugin contract version bumped: yes
+marketplace plugin entry version bumped: yes
+root marketplace metadata version bumped: only if marketplace-level metadata changed
+validation/package checks: pass before merge
+normal user proposal scope changed: no
+```
+
+Failure expectations:
+
+```text
+both bump_type and explicit_version set: fail
+neither bump_type nor explicit_version set: fail
+invalid SemVer: fail
+downgrade or no-op version: fail
+existing manifest/contract/marketplace drift: fail
+unknown plugin_id: fail
+```
+
+After the release PR is merged, the repo maintainer or marketplace owner triggers or waits for Cowork marketplace sync. If sync fails, the release is merged but not marketplace-synced; do not tell users the update is available in Cowork until sync is verified.
+
+## Automated Scenario AUTO-06: AIWS Release Workflow And Repo Scaffold Tests
+
+Purpose: confirm the reusable repo scaffold and maintainer release helper stay safe and idempotent.
+
+Run from the repo root:
+
+```bash
+python -m unittest tests.test_aiws_release_workflow
+```
+
+Expected answer:
+
+```text
+Ran 5 tests
+OK
+```
+
+Key expectations covered by the test:
+
+- Release helper bumps plugin manifest, contract, and marketplace plugin entry together.
+- Root marketplace metadata version is not bumped for a plugin-only release.
+- Ambiguous version inputs, invalid SemVer, downgrade, no-op, and existing version drift fail.
+- Contract validation rejects schema violations.
+- Scaffold install/check is idempotent and reports drift.
+- Scaffold install refuses to overwrite modified owned files unless forced.
 
 ## Maintenance Checklist
 

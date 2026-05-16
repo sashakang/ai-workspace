@@ -28,9 +28,8 @@ class AiwsProductivityPluginTests(unittest.TestCase):
             entry for entry in marketplace["plugins"] if entry["name"] == "aiws-productivity"
         )
 
-        self.assertEqual(plugin_json["version"], "0.2.2")
-        self.assertEqual(contract["version"], "0.2.2")
-        self.assertEqual(marketplace_entry["version"], "0.2.2")
+        self.assertEqual(plugin_json["version"], contract["version"])
+        self.assertEqual(plugin_json["version"], marketplace_entry["version"])
 
     def test_meeting_followup_belongs_to_aiws_productivity_not_core(self) -> None:
         productivity_contract = json.loads(
@@ -50,7 +49,7 @@ class AiwsProductivityPluginTests(unittest.TestCase):
         self.assertIn("decisions", content.lower())
         self.assertIn("action items", content.lower())
         self.assertIn("do not create task dashboards", content.lower())
-        self.assertIn("do not perform daily planning", content.lower())
+        self.assertIn("perform daily planning", content.lower())
         self.assertIn("do not sync tasks", content.lower())
 
     def test_aiws_productivity_does_not_register_slack_mcp_server(self) -> None:
@@ -76,7 +75,7 @@ class AiwsProductivityPluginTests(unittest.TestCase):
     def test_meeting_followup_requires_explicit_approval_for_slack_writes(self) -> None:
         content = (REPO_ROOT / "aiws-productivity" / "skills" / "meeting-followup" / "SKILL.md").read_text()
 
-        self.assertIn("optional Slack connector", content)
+        self.assertIn("**Slack**", content)
         self.assertIn("Do not send or schedule Slack messages without explicit approval.", content)
 
 

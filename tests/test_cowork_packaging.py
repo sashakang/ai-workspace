@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.build_cowork_import import (  # noqa: E402
     build_core_aiws_package,
     build_cowork_import_packages,
+    build_plugin_package,
     build_productivity_package,
     launcher_check,
     _iter_files,
@@ -29,10 +30,12 @@ class CoworkPackagingTests(unittest.TestCase):
     def test_builds_all_cowork_import_packages(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             package_paths = build_cowork_import_packages(REPO_ROOT, Path(temp))
+        core = _plugin_manifest("core-aiws")
+        productivity = _plugin_manifest("aiws-productivity")
 
         self.assertEqual(
             {package.name for package in package_paths},
-            {"core-aiws-0.3.20.zip", "aiws-productivity-0.2.2.zip"},
+            {f"{core['name']}-{core['version']}.zip", f"{productivity['name']}-{productivity['version']}.zip"},
         )
 
     def test_core_package_includes_mcp_config_launcher_and_server_source(self) -> None:
@@ -85,6 +88,16 @@ class CoworkPackagingTests(unittest.TestCase):
         self.assertNotIn("servers/aiws-mcp/pyproject.toml", names)
         self.assertFalse(any(name.startswith("build/") for name in names))
         self.assertFalse(any(name.startswith("dist/") for name in names))
+
+    def test_generic_plugin_package_builder_uses_marketplace_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package_path = build_plugin_package(REPO_ROOT, "aiws-productivity", Path(temp))
+
+            with zipfile.ZipFile(package_path) as package:
+                names = set(package.namelist())
+
+        self.assertIn(".claude-plugin/plugin.json", names)
+        self.assertIn("skills/meeting-followup/SKILL.md", names)
 
     def test_launcher_check_reports_missing_uvx_clearly(self) -> None:
         with mock.patch.object(shutil, "which", return_value=None):
@@ -148,6 +161,10 @@ def _extract_package_preserving_modes(package_path: Path, output_dir: Path) -> N
             mode = member.external_attr >> 16
             if mode:
                 (output_dir / member.filename).chmod(mode)
+
+
+def _plugin_manifest(plugin_id: str) -> dict:
+    return json.loads((REPO_ROOT / plugin_id / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

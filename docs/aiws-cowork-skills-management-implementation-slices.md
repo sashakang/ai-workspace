@@ -236,6 +236,24 @@ Evidence: Unit tests for reviewer-enforcement status parsing and proposal-state 
 
 Implementation and runtime update in `core-aiws` 0.3.18: submit responses and proposal records now include `repository_review_policy`. The normal Cowork flow reports repository policy status without hardcoding reviewer roles or asking users to choose reviewers. Cowork Scenario 12C passed against `sashakang/aiws-skill-tests`, where CODEOWNERS was not detected and PR #7 was still created. See [Cowork Repository Review Policy PASS](./cowork-repository-review-policy-pass-2026-05-16.md).
 
+## Slice 14: Reusable Repo Scaffold And Maintainer Release PR
+
+Owner: developer session.
+
+Gate 1 result: passed on 2026-05-16 after AI engineer, release-engineering, and product/architecture review. The approved boundary is: normal Cowork users propose only `skills/<skill_id>/...`; maintainers own plugin release metadata and marketplace publication.
+
+Expected output: participating skill/plugin repos can install a reusable AIWS scaffold that adds a GitHub Actions maintainer release workflow, a release runbook, and a scaffold check. The first target is `sashakang/ai-workspace`; later unit/company/customer repos reuse the same scaffold before they are considered AIWS-release-ready.
+
+Acceptance: The release workflow is `workflow_dispatch` only, requires `plugin_id`, requires exactly one of `bump_type` or `explicit_version`, rejects invalid SemVer, downgrade, no-op versions, and pre-existing manifest/contract/marketplace drift, and opens or updates a release PR instead of pushing directly to `master`. Release PR creation uses a least-privilege GitHub App credential; validation/build steps use read-only credentials and do not execute plugin-owned scripts while holding the app token. The workflow does not use `pull_request_target`.
+
+Release metadata rules: plugin manifest version, plugin contract version when present, and the plugin entry in `.claude-plugin/marketplace.json` update together. Root marketplace metadata version changes only for marketplace-level metadata changes, not every plugin release. `plugin_id` is validated against the marketplace plugin registry before path resolution.
+
+Scaffold rules: scaffold install/check is idempotent, produces stable files, reports drift with actionable paths, and refuses to overwrite modified scaffold-owned files unless `--force` is explicit.
+
+Lifecycle language: `Draft -> Validated -> Submitted -> Accepted -> Released -> Marketplace synced`. `Accepted` means the skill PR was merged; it does not mean Cowork users can see the new plugin version. Marketplace sync ownership and failure handling must be documented per repo before customer rollout.
+
+Evidence: `tests.test_aiws_release_workflow` covers release metadata bumping, ambiguous/invalid version inputs, version drift rejection, schema-backed contract validation, scaffold install/check idempotency, drift reporting, and force-only overwrite. `tests.test_cowork_packaging` now derives package names from plugin manifests and covers generic plugin packaging by `plugin_id`.
+
 ## Suggested Developer Session Order
 
 1. Implement Slice 4, modified-state tracking, first. The registry already has `modified` and `last_validation_status`, and draft create/open plus write-root safety are already partially covered. Computing and persisting modified state unlocks activation status, proposal metadata, and conflict handling.
@@ -248,5 +266,6 @@ Implementation and runtime update in `core-aiws` 0.3.18: submit responses and pr
 8. Implement or resume lifecycle work through the clean Cowork path as appropriate, including local proposal-record staging as distinct from submit/upload and update conflict choice handling.
 9. Add GitHub App, bot, API, or Cowork-compatible submit-for-review behavior later than the workshop and runtime/security design; normal-user GitHub CLI submission must be replaced.
 10. Add repository-policy detection and reporting after the submit adapter path is clear. AIWS may report enforcement signals such as CODEOWNERS or review requests, while GitHub repository maintainers and policy own reviewer assignment and approval.
+11. Add reusable repo scaffolding and maintainer release PR workflow for repos that accept AIWS skill proposals. Do this before calling additional customer/unit repos AIWS-release-ready.
 
 The final implementation review should check the AI-engineering reviewer rule for every slice: the behavior must be understandable to an AI agent operating through the skill-management surface, state transitions must be explicit, and no flow may quietly overwrite local work or expose two visible copies of the same logical skill.

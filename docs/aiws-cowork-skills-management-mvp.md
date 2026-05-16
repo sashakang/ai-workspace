@@ -153,7 +153,7 @@ Edit skill -> validate -> stage proposal -> submit for review -> track status
 Maintainers use GitHub for this sequence:
 
 ```text
-Review PR -> comment or request changes -> merge -> release/upload updated plugin package
+Review skill PR -> comment or request changes -> merge -> run release workflow -> review release PR -> merge release PR -> Cowork marketplace sync
 ```
 
 Cowork should show user-facing states such as:
@@ -164,8 +164,12 @@ Modified locally
 Ready to submit
 Submitted for review
 Changes requested
-Merged
+Accepted
+Released
+Marketplace synced
 ```
+
+`Accepted` means the maintainer merged the skill proposal. It does not mean the updated plugin is visible in Cowork. Plugin manifests, contracts, marketplace metadata, release notes, and package outputs are maintainer-owned release files. Normal Cowork proposals remain limited to the managed skill folder; maintainers release plugin versions through the repo scaffold's GitHub Actions release PR workflow.
 
 ## Boundaries
 

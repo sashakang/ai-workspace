@@ -1,0 +1,118 @@
+name: AIWS Release Plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugin_id:
+        description: "Plugin id from .claude-plugin/marketplace.json"
+        required: true
+        type: string
+      bump_type:
+        description: "SemVer bump type. Leave blank when explicit_version is set."
+        required: false
+        type: choice
+        options:
+          - ""
+          - patch
+          - minor
+          - major
+      explicit_version:
+        description: "Explicit MAJOR.MINOR.PATCH version. Leave blank when bump_type is set."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aiws-release-${{ inputs.plugin_id }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout read-only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate current plugin state
+        run: python -m scripts.aiws_release validate --plugin-id "${{ inputs.plugin_id }}"
+
+      - name: Prepare release metadata
+        run: |
+          set -euo pipefail
+          args=(prepare --plugin-id "${{ inputs.plugin_id }}")
+          if [ -n "${{ inputs.bump_type }}" ]; then
+            args+=(--bump-type "${{ inputs.bump_type }}")
+          fi
+          if [ -n "${{ inputs.explicit_version }}" ]; then
+            args+=(--explicit-version "${{ inputs.explicit_version }}")
+          fi
+          python -m scripts.aiws_release "${args[@]}" | tee aiws-release-result.json
+
+      - name: Validate updated plugin state
+        run: python -m scripts.aiws_release validate --plugin-id "${{ inputs.plugin_id }}"
+
+      - name: Build package
+        run: python -m scripts.aiws_release package --plugin-id "${{ inputs.plugin_id }}" --output-dir dist/aiws-release
+
+      - name: Check release credential configuration
+        env:
+          AIWS_RELEASE_APP_ID: ${{ secrets.AIWS_RELEASE_APP_ID }}
+          AIWS_RELEASE_APP_PRIVATE_KEY: ${{ secrets.AIWS_RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AIWS_RELEASE_APP_ID" ] || [ -z "$AIWS_RELEASE_APP_PRIVATE_KEY" ]; then
+            echo "::error::Missing AIWS release GitHub App secrets. Configure AIWS_RELEASE_APP_ID and AIWS_RELEASE_APP_PRIVATE_KEY before running this workflow."
+            exit 1
+          fi
+
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AIWS_RELEASE_APP_ID }}
+          private-key: ${{ secrets.AIWS_RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Open or update release PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PLUGIN_ID: ${{ inputs.plugin_id }}
+        run: |
+          set -euo pipefail
+          version=$(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          plugin_id = os.environ["PLUGIN_ID"]
+          marketplace = json.loads(Path(".claude-plugin/marketplace.json").read_text())
+          print(next(item["version"] for item in marketplace["plugins"] if item["name"] == plugin_id))
+          PY
+          )
+          branch="aiws/release/${PLUGIN_ID}/${version}"
+          git config user.name "aiws-release-app"
+          git config user.email "aiws-release-app@users.noreply.github.com"
+          git checkout -B "$branch"
+          python - <<'PY' > /tmp/aiws-release-files
+          import json
+          from pathlib import Path
+          result = json.loads(Path("aiws-release-result.json").read_text())
+          for path in result["changed"]:
+              print(path)
+          PY
+          while IFS= read -r path; do
+            git add -- "$path"
+          done < /tmp/aiws-release-files
+          git commit -m "chore: release ${PLUGIN_ID} ${version}"
+          gh auth setup-git
+          git push --force-with-lease origin "$branch"
+          gh pr create \
+            --title "Release ${PLUGIN_ID} ${version}" \
+            --body "Maintainer release PR for ${PLUGIN_ID} ${version}. Merging this PR makes the release metadata available for Cowork marketplace sync." \
+            --base "${{ github.ref_name }}" \
+            --head "$branch" \
+          || gh pr edit "$branch" \
+            --title "Release ${PLUGIN_ID} ${version}" \
+            --body "Maintainer release PR for ${PLUGIN_ID} ${version}. Merging this PR makes the release metadata available for Cowork marketplace sync."
