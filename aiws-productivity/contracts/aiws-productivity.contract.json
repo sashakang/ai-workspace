@@ -1,6 +1,6 @@
 {
   "plugin_id": "aiws-productivity",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "public_skills": [
     "meeting-followup"
   ],
