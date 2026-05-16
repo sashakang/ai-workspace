@@ -234,7 +234,7 @@ Acceptance: Submission reports repository review enforcement as present, absent,
 
 Evidence: Unit tests for reviewer-enforcement status parsing and proposal-state reporting, plus one live GitHub validation against a repo with no policy and one against a repo with enforced policy when that repo is available.
 
-Implementation update in `core-aiws` 0.3.18: submit responses and proposal records now include `repository_review_policy`. The normal Cowork flow reports repository policy status without hardcoding reviewer roles or asking users to choose reviewers.
+Implementation and runtime update in `core-aiws` 0.3.18: submit responses and proposal records now include `repository_review_policy`. The normal Cowork flow reports repository policy status without hardcoding reviewer roles or asking users to choose reviewers. Cowork Scenario 12C passed against `sashakang/aiws-skill-tests`, where CODEOWNERS was not detected and PR #7 was still created. See [Cowork Repository Review Policy PASS](./cowork-repository-review-policy-pass-2026-05-16.md).
 
 ## Suggested Developer Session Order
 

@@ -861,7 +861,7 @@ Latest evidence: [Cowork GitHub API Submitter PASS](./cowork-github-api-submitte
 
 Purpose: confirm Cowork submit results report repository-owned review policy without asking the normal user to choose GitHub reviewers.
 
-Status: implemented in `core-aiws` 0.3.18; automated tests pass, runtime Cowork retest pending.
+Status: implemented and runtime-tested in `core-aiws` 0.3.18 for a repository without CODEOWNERS.
 
 Automated verification from the repo root:
 
@@ -909,6 +909,8 @@ repository_review_policy.status: present
 repository_review_policy.codeowners: detected
 repository_review_policy.normal_user_selects_reviewers: false
 ```
+
+Latest evidence: [Cowork Repository Review Policy PASS](./cowork-repository-review-policy-pass-2026-05-16.md).
 
 ## Scenario 13: Cowork Package Intake Probe
 

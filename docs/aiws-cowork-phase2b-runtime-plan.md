@@ -371,7 +371,7 @@ Acceptance:
 - The PR body states that review and merge are managed by repository maintainers and policy.
 - Normal Cowork users do not select GitHub users or teams.
 
-Implementation update in `core-aiws` 0.3.18: submit responses and proposal state include `repository_review_policy` metadata. The metadata reports CODEOWNERS-based review policy as `present`, `absent`, or `unknown`, keeps missing policy as a caveat rather than a submit blocker, and confirms normal users do not select reviewers. Runtime Cowork validation is pending.
+Implementation and runtime update in `core-aiws` 0.3.18: submit responses and proposal state include `repository_review_policy` metadata. The metadata reports CODEOWNERS-based review policy as `present`, `absent`, or `unknown`, keeps missing policy as a caveat rather than a submit blocker, and confirms normal users do not select reviewers. Cowork Scenario 12C passed against `sashakang/aiws-skill-tests`, where CODEOWNERS was not detected and PR #7 was still created. See [Cowork Repository Review Policy PASS](./cowork-repository-review-policy-pass-2026-05-16.md).
 - The docs and UI do not claim review assignment is enforced unless GitHub policy actually enforces it.
 
 ## Gate 1 Questions
