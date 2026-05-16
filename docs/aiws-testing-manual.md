@@ -1346,6 +1346,23 @@ unknown plugin_id: fail
 
 After the release PR is merged, the repo maintainer or marketplace owner triggers or waits for Cowork marketplace sync. If sync fails, the release is merged but not marketplace-synced; do not tell users the update is available in Cowork until sync is verified.
 
+Latest live result, 2026-05-16:
+
+```text
+status: PASS
+repo: sashakang/ai-workspace
+workflow run: https://github.com/sashakang/ai-workspace/actions/runs/25972162666
+release PR: https://github.com/sashakang/ai-workspace/pull/3
+release PR author: app/aiws-release-bot
+plugin_id: aiws-productivity
+version: 0.2.4
+branch: aiws/release/aiws-productivity/0.2.4
+direct push to master: no
+GitHub App secrets configured: yes
+workflow conclusion: success
+maintainer reported release loop result: pass
+```
+
 ## Automated Scenario AUTO-06: AIWS Release Workflow And Repo Scaffold Tests
 
 Purpose: confirm the reusable repo scaffold and maintainer release helper stay safe and idempotent.
