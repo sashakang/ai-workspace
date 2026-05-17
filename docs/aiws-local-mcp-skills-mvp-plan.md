@@ -129,6 +129,8 @@ Host identity:
 
 - `--host-kind`: `claude-code`, `cowork`, or `codex`
 - optional `--host-id`
+- `Claude Code` app and CLI both use `--host-kind claude-code`; `Codex` app and CLI both use `--host-kind codex`
+- separate local installs of the same host kind should differ by `config_root` and therefore by derived `host-id`, not by introducing extra host kinds
 - default config roots:
   - `claude-code`: `$CLAUDE_HOME`, else `~/.claude`
   - `cowork`: `$COWORK_HOME`, else `~/.cowork`

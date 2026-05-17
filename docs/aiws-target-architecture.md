@@ -97,6 +97,8 @@ sequenceDiagram
 - Host adapter contract:
   - `host_id` is the local identity and state boundary.
   - `host_kind` selects a host adapter implementation, not a model provider assumption.
+  - App and CLI surfaces are not separate host kinds by default. `Claude Code` in the app and `Claude Code CLI` both map to `host_kind = claude-code`; `Codex` app and `Codex CLI` both map to `host_kind = codex`.
+  - When two installs of the same host kind use different config roots, they stay under the same `host_kind` and get different `host_id` values. The distinction is local identity, not a second skill-management architecture.
   - `config_root` is host-owned configuration state; AIWS may read declared evidence surfaces there but does not treat host paths as core paths.
   - Host adapters expose `capabilities`, including how a canonical AIWS capability is surfaced in that host: slash command, skill, MCP prompt, command palette, package, or conversational trigger.
   - Host adapters expose logical evidence surfaces. Standard names include `observations`, `project_daily_logs`, `session_history`, `transcripts`, `installed_contracts`, `skill_catalog`, `improvement_markers`, `shared_memory_outbox`, `materialized_skills`, and `staged_skill_changes`.
@@ -160,6 +162,7 @@ sequenceDiagram
 ## Test Plan
 
 - Same-machine cross-host consistency: Claude Code, Claude Co-Work, and Codex return the same ordered local results from the same snapshots and index metadata.
+- Same-host multi-surface consistency: Claude Code app and CLI surfaces, and Codex app and CLI surfaces, resolve through the same `host_kind` contract and differ only by `host_id` when config roots differ.
 - Multi-unit memory read returns separate provenance-preserving records; duplicate shared skill ids fail closed without scope pinning.
 - Snapshot refresh is atomic: readers never see half-written snapshots or half-built indexes.
 - Personal writes and shared refresh are concurrent-safe under AIWS locks.

@@ -66,6 +66,8 @@ Use three explicit states when planning implementation:
 - Transitional state: maintainers can use Claude Code as a skill workshop for private or non-public skill source changes, validation, package builds, GitHub pushes, and marketplace artifact preparation. This is not the normal Cowork user path, and it must not make Claude-specific assumptions part of the product contract.
 - Target state: `~/.aiws/` is the local runtime root for personal memory, host caches, staged writes, indexes, locks, and host identity. Cowork, Claude Code, and Codex are adapters over the same AIWS runtime contract.
 
+For avoidance of doubt: `Claude Code` app and `Claude Code CLI` are two surfaces of the same `claude-code` host adapter unless they truly need different config roots, in which case they stay under the same `host_kind` and get different `host_id`s. The same rule applies to `Codex` app and `Codex CLI` under `host_kind = codex`. App versus CLI is a host-surface detail, not a separate skill-management architecture.
+
 ## Feature Development Plan
 
 ### Phase 1: Cowork Install Gate
@@ -244,7 +246,7 @@ aiws.runtime.info
 
 It must not expose memory tools, private skills, drafts, proposal records, source content, mutate managed Cowork plugin files, or write into marketplace or organization plugin packages.
 
-Host identity is the boundary between the shared AIWS runtime and each host. Each host persists `~/.aiws/hosts/<host-id>/host.json`; `host-kind` is `claude-code`, `cowork`, or `codex`; and if `--host-id` is omitted, the default identity is derived from `host-kind` plus the hash of the canonical resolved host config root. Later commands may use `--host-id` alone. Missing host registration, conflicting CLI values, or duplicate shared skill IDs without pinned scope/version must fail closed.
+Host identity is the boundary between the shared AIWS runtime and each host. Each host persists `~/.aiws/hosts/<host-id>/host.json`; `host-kind` is `claude-code`, `cowork`, or `codex`; and if `--host-id` is omitted, the default identity is derived from `host-kind` plus the hash of the canonical resolved host config root. Later commands may use `--host-id` alone. Missing host registration, conflicting CLI values, or duplicate shared skill IDs without pinned scope/version must fail closed. `Claude Code` app and CLI remain `host-kind = claude-code`; `Codex` app and CLI remain `host-kind = codex`; separate local installs are distinguished by `host_id`, not by inventing new host kinds.
 
 The 2026-05-14 Cowork host-surface check passed only after `host_kind: cowork` was supplied. It returned `host_id: cowork-db8a0e250a1c`, `capability_exposure: plugin-package`, and `direct_host_install_supported: false`. Writable AIWS-owned surfaces were host identity, staged skill changes, materialized skill cache, adapter output, and package uploads. The installed Cowork plugin directory `~/.cowork/plugins` was read-only. This confirms the package boundary: AIWS can prepare package/upload artifacts and adapter output, while Cowork owns installation and update.
 
