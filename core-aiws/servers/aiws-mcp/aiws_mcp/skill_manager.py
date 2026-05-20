@@ -4271,6 +4271,13 @@ def drive_review_state_response(proposal: dict[str, Any]) -> dict[str, Any]:
         "approved_proposed_skill_file_id",
         "approved_proposed_skill_md5",
         "approved_proposed_skill_modified_time",
+        "published_version",
+        "package_file_id",
+        "package_file_url",
+        "release_file_id",
+        "release_file_url",
+        "index_file_id",
+        "index_file_url",
         "rejected_at",
         "released_at",
     ):

@@ -2877,6 +2877,14 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(index_payload["current_version"], "1.0.1")
             self.assertEqual(index_payload["proposal_id"], staged["proposal_id"])
 
+            refreshed = refresh_proposal_state(aiws_root, staged["proposal_id"], drive_client=drive_client)
+            self.assertEqual(refreshed["status"], "released")
+            self.assertEqual(refreshed["backend_review_state"], "released")
+            self.assertEqual(refreshed["published_version"], "1.0.1")
+            self.assertEqual(refreshed["package_file_id"], proposal["package_file_id"])
+            self.assertEqual(refreshed["release_file_id"], proposal["release_file_id"])
+            self.assertEqual(refreshed["index_file_id"], proposal["index_file_id"])
+
     def test_publish_approved_proposal_google_drive_fails_closed_on_stale_index(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
