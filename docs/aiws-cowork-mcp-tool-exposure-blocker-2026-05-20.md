@@ -1,22 +1,20 @@
 # AIWS Cowork MCP Tool Exposure Blocker
 
 **Date:** 2026-05-20  
-**Status:** Open blocker  
+**Status:** Resolved
 **Area:** Cowork runtime / MCP tool exposure  
-**Impact:** Blocks end-to-end Cowork validation of proposal staging and submission flows
+**Impact:** Previously blocked end-to-end Cowork validation of proposal staging and submission flows
 
 ## Summary
 
-The current Cowork runtime does not expose the AIWS MCP tools required for proposal lifecycle testing:
+The blocker was that the Cowork runtime did not expose the AIWS MCP tools required for proposal lifecycle testing:
 
 - `aiws.skills.stage_proposal`
 - `aiws.skills.submit_for_review`
 
-This blocks end-to-end Cowork validation of the new backend-aware proposal staging foundation and any later Google Drive proposal flow.
+This was a **runtime exposure problem**, not a proven feature-logic failure in the local repo implementation.
 
-This is a **runtime exposure problem**, not a proven feature-logic failure in the local repo implementation.
-
-## What was observed
+## Original observation
 
 Multiple Cowork sessions were inspected for active and deferred tools.
 
@@ -33,7 +31,7 @@ Observed behavior in session:
 - The connected runtime exposed `core-aiws`, but only `aiws-improve` was visible from that plugin surface.
 - No usable proposal staging or review-submission MCP surface was available in Cowork.
 
-## Why this matters
+## Why this mattered
 
 The proposal backend work is now split into two distinct questions:
 
@@ -43,10 +41,10 @@ The proposal backend work is now split into two distinct questions:
 2. **Cowork runtime availability**  
    This is currently blocked because the required MCP tools are not exposed in the tested environment.
 
-Without these tools, Cowork cannot validate:
+Without these tools, Cowork could not validate:
 
 - GitHub proposal staging through the normal MCP path
-- Google Drive proposal staging through the normal MCP path
+- backend-aware proposal staging visibility in Cowork
 - non-GitHub submit boundary behavior
 
 ## What is already proven elsewhere
@@ -82,19 +80,56 @@ Expected:
 
 - both tools are exposed when the AIWS MCP runtime is correctly installed and connected
 
-Actual:
+Original actual result:
 
 - neither tool is exposed
 
-## Most likely failure points
+## Resolution evidence
 
-This is likely one of:
+The local bundled MCP runtime repair was implemented in commit `e636216` and re-tested in Cowork.
+
+Verified live in Cowork on 2026-05-20:
+
+- `aiws.health.ping` visible and callable
+- `aiws.runtime.info` visible and callable
+- `aiws.skills.stage_proposal` visible and callable
+- `aiws.skills.submit_for_review` visible and callable
+- `aiws.skills.refresh_proposal_state` visible and callable
+
+`aiws.runtime.info` reported:
+
+```text
+runtime_kind: local-bundled-stdio
+transport: stdio
+launch_mode: uvx-bundled-source
+plugin_version: 0.3.20
+proposal_tools_declared: true
+```
+
+The `declared_tools` payload also included:
+
+- `aiws.skills.stage_proposal`
+- `aiws.skills.submit_for_review`
+- `aiws.skills.refresh_proposal_state`
+
+Cowork proposal-flow regression also passed after the fix:
+
+- draft: `aiws-productivity--meeting-followup--de0e75a572`
+- validation: `passed`
+- digest: `dce697638e9488ee3576e794abf1e198d57adf96568310a2f4b3234f2345fc7c`
+- staged proposal: `skillprop_e42f97a2091e4e4087d9221d3560775a`
+- target repo: `sashakang/aiws-skill-tests`
+- `submit_for_review` available at staging time: yes
+
+## Root cause area
+
+Before the repair, the most likely causes were:
 
 1. **Wrong installed runtime version**
    The Cowork environment may still be using an older packaged `core-aiws`.
 
-2. **MCP server packaging mismatch**
-   The shipped build may not include the updated `server.py` / runtime export surface.
+2. **Installed package drift or stale packaged runtime**
+   Cowork may have been loading an older packaged runtime than the repo source under test.
 
 3. **Server startup / registration failure**
    The AIWS MCP server may be partially connected or failing before tool registration.
@@ -105,7 +140,7 @@ This is likely one of:
 5. **Plugin install/update drift**
    Cowork may be loading a stale plugin copy while source and repo are newer.
 
-## Immediate debugging checklist
+## Debugging checklist used for resolution
 
 1. Confirm the installed `core-aiws` version in the Cowork runtime.
 2. Confirm the shipped `aiws_mcp/server.py` in the installed runtime contains:
@@ -115,7 +150,7 @@ This is likely one of:
 4. Confirm no runtime feature gate suppresses proposal tools.
 5. Confirm Cowork is loading the intended plugin copy, not an older cached copy.
 
-## Current testing status
+## Final testing status
 
 | Area | Status |
 |---|---|
@@ -124,11 +159,13 @@ This is likely one of:
 | GitHub staging metadata logic | Passed |
 | Google Drive staging metadata logic | Passed |
 | Marketplace collision guard | Passed |
-| Cowork MCP tool exposure | Failed |
-| Cowork end-to-end proposal testing | Blocked |
+| Cowork MCP tool exposure | Passed |
+| Cowork end-to-end proposal staging regression | Passed |
 
 ## Recommended next step
 
-Treat this as a **runtime/MCP exposure bug** with separate ownership from the Google Drive backend feature work.
+Treat this blocker as closed. Any follow-on work should focus on:
 
-Do not continue Cowork functional testing of proposal flows until the missing MCP tools are visible in the runtime.
+- keeping the local technical-pilot runtime observable
+- deciding whether the missing on-disk diagnostics files are worth a separate cleanup
+- continuing normal Cowork proposal-flow and backend work on top of the restored runtime

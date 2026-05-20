@@ -1358,6 +1358,83 @@ plugin_id: aiws-productivity
 version: 0.2.4
 branch: aiws/release/aiws-productivity/0.2.4
 direct push to master: no
+
+## Scenario CW-14: Cowork MCP Runtime Exposure Repair Regression
+
+Purpose: confirm that the repaired local bundled `core-aiws` MCP runtime is exposed in Cowork again, and that proposal lifecycle tools are available for real draft work.
+
+Prerequisites:
+
+```text
+core-aiws package rebuilt from commit e636216
+updated package installed in Cowork
+new Cowork chat started after install
+```
+
+Step 1: inspect live runtime tools.
+
+Expected result:
+
+```text
+aiws.health.ping visible: yes
+aiws.runtime.info visible: yes
+aiws.skills.stage_proposal visible: yes
+aiws.skills.submit_for_review visible: yes
+aiws.skills.refresh_proposal_state visible: yes
+```
+
+Step 2: call `aiws.runtime.info`.
+
+Expected result:
+
+```text
+status: ok
+runtime_kind: local-bundled-stdio
+transport: stdio
+launch_mode: uvx-bundled-source
+proposal_tools_declared: true
+declared_tools includes:
+  - aiws.skills.stage_proposal
+  - aiws.skills.submit_for_review
+  - aiws.skills.refresh_proposal_state
+```
+
+Step 3: run a real Cowork proposal-flow regression without submitting.
+
+Flow:
+
+```text
+create_or_open_draft
+read_draft_file
+write_draft_file
+validate_draft
+stage_proposal
+```
+
+Expected result:
+
+```text
+validation_status: passed
+proposal_id created: yes
+submit_for_review available at staging time: yes
+```
+
+Latest live result, 2026-05-20:
+
+```text
+status: PASS
+plugin_version: 0.3.20
+runtime_kind: local-bundled-stdio
+transport: stdio
+launch_mode: uvx-bundled-source
+proposal_tools_declared: true
+draft_id: aiws-productivity--meeting-followup--de0e75a572
+validation_status: passed
+current_tree_digest: dce697638e9488ee3576e794abf1e198d57adf96568310a2f4b3234f2345fc7c
+proposal_id: skillprop_e42f97a2091e4e4087d9221d3560775a
+target_repo: sashakang/aiws-skill-tests
+submit_for_review available at stage: yes
+```
 GitHub App secrets configured: yes
 workflow conclusion: success
 maintainer reported release loop result: pass
