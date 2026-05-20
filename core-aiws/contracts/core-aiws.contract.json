@@ -1,6 +1,6 @@
 {
   "plugin_id": "core-aiws",
-  "version": "0.3.26",
+  "version": "0.3.27",
   "public_skills": [
     "aiws-improve"
   ],
