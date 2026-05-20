@@ -21,6 +21,7 @@ LOCAL_TOOL_NAMES = (
     "aiws.health.ping",
     "aiws.runtime.info",
     "aiws.google_drive.start_oauth",
+    "aiws.google_drive.configure_oauth_client",
     "aiws.google_drive.finish_oauth",
     "aiws.skills.search",
     "aiws.skills.resolve",
