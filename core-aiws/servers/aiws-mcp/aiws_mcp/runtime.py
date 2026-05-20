@@ -1409,6 +1409,9 @@ class AiwsRuntime:
     def refresh_proposal_state(self, proposal_id: str) -> dict[str, Any]:
         return skill_manager.refresh_proposal_state(self.root, proposal_id)
 
+    def publish_approved_proposal(self, proposal_id: str) -> dict[str, Any]:
+        return skill_manager.publish_approved_proposal(self.root, proposal_id)
+
     def start_google_drive_oauth(
         self,
         *,

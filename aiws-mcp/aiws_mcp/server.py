@@ -16,6 +16,7 @@ LOCAL_PROPOSAL_TOOL_NAMES = (
     "aiws.skills.stage_proposal",
     "aiws.skills.submit_for_review",
     "aiws.skills.refresh_proposal_state",
+    "aiws.skills.publish_approved_proposal",
 )
 LOCAL_TOOL_NAMES = (
     "aiws.health.ping",
@@ -46,6 +47,7 @@ LOCAL_TOOL_NAMES = (
     "aiws.skills.stage_proposal",
     "aiws.skills.submit_for_review",
     "aiws.skills.refresh_proposal_state",
+    "aiws.skills.publish_approved_proposal",
     "aiws.skills.stage_change",
     "aiws.skills.list_staged_changes",
     "aiws.host.surfaces",
@@ -355,6 +357,10 @@ def create_server(root: Path | None = None):
     @server.tool(name="aiws.skills.refresh_proposal_state")
     def refresh_proposal_state(proposal_id: str) -> dict[str, Any]:
         return runtime.refresh_proposal_state(proposal_id)
+
+    @server.tool(name="aiws.skills.publish_approved_proposal")
+    def publish_approved_proposal(proposal_id: str) -> dict[str, Any]:
+        return runtime.publish_approved_proposal(proposal_id)
 
     @server.tool(name="aiws.skills.stage_change")
     def stage_change(

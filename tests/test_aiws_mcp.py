@@ -688,6 +688,18 @@ class AiwsMcpSkillTests(unittest.TestCase):
         mocked.assert_called_once_with(self.root.resolve(), "skillprop_123")
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_publish_approved_proposal_delegates_to_skill_manager(self) -> None:
+        with patch.object(
+            runtime_module.skill_manager,
+            "publish_approved_proposal",
+            return_value={"status": "released", "proposal_id": "skillprop_123"},
+        ) as mocked:
+            result = self.runtime.publish_approved_proposal("skillprop_123")
+
+        self.assertEqual(result["status"], "released")
+        mocked.assert_called_once_with(self.root.resolve(), "skillprop_123")
+        self.assert_no_memory_or_claude_writes()
+
     def test_cowork_runtime_start_google_drive_oauth_delegates_to_skill_manager(self) -> None:
         with patch.object(
             runtime_module.skill_manager,

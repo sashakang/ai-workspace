@@ -3745,6 +3745,50 @@ def google_drive_api_token_from_env(env: dict[str, str] | None = None) -> str | 
     return None
 
 
+SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+
+
+def patch_bump_version(version: str) -> str:
+    match = SEMVER_RE.match(require_non_blank_string(version, "version"))
+    if match is None:
+        raise SkillManagerError(f"Version is not valid semver: {version}")
+    major, minor, patch = (int(part) for part in match.groups())
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def drive_publish_lock_root(aiws_root: Path) -> Path:
+    return aiws_root / "state" / "google-drive-publish-locks"
+
+
+def drive_publish_lock_path(aiws_root: Path, marketplace_id: str, plugin_id: str) -> Path:
+    return drive_publish_lock_root(aiws_root) / f"{slug(marketplace_id)}--{slug(plugin_id)}.json"
+
+
+def acquire_drive_publish_lock(aiws_root: Path, marketplace_id: str, plugin_id: str, proposal_id: str) -> Path:
+    path = drive_publish_lock_path(aiws_root, marketplace_id, plugin_id)
+    reject_existing_symlink_components(path.parent, label="Drive publish lock parent")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "marketplace_id": require_marketplace_id(marketplace_id),
+        "plugin_id": require_non_blank_string(plugin_id, "plugin_id"),
+        "proposal_id": require_non_blank_string(proposal_id, "proposal_id"),
+        "acquired_at": utc_now(),
+    }
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    except FileExistsError as exc:
+        raise SkillManagerError(
+            f"Another publish is already in progress for {marketplace_id}:{plugin_id}."
+        ) from exc
+    return path
+
+
+def release_drive_publish_lock(path: Path | None) -> None:
+    if path is not None and path.exists() and not path.is_symlink() and path.is_file():
+        path.unlink()
+
+
 def drive_query_literal(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
@@ -3814,6 +3858,36 @@ class GoogleDriveApiClient:
             return json.loads(raw)
         except json.JSONDecodeError as exc:
             raise SkillManagerError("Google Drive API response was not valid JSON.") from exc
+
+    def request_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, Any] | None = None,
+        allow_404: bool = False,
+    ) -> bytes | None:
+        suffix = path if path.startswith("/") else f"/{path}"
+        if query:
+            suffix = f"{suffix}?{urlencode(query)}"
+        request = Request(
+            f"{self.api_url}{suffix}",
+            method=method,
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "User-Agent": "aiws-mcp",
+            },
+        )
+        try:
+            with urlopen(request, timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS) as response:
+                return response.read()
+        except HTTPError as exc:
+            if allow_404 and exc.code == 404:
+                return None
+            detail = exc.read().decode("utf-8", errors="replace").strip()
+            raise SkillManagerError(f"Google Drive API request failed ({exc.code}): {detail}") from exc
+        except URLError as exc:
+            raise SkillManagerError(f"Google Drive API request failed: {exc.reason}") from exc
 
     def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None) -> dict[str, Any] | None:
         query_parts = [
@@ -3901,6 +3975,9 @@ class GoogleDriveApiClient:
         return created
 
     def upsert_text_file(self, parent_id: str, name: str, content: str, mime_type: str) -> dict[str, Any]:
+        return self.upsert_bytes_file(parent_id, name, content.encode("utf-8"), mime_type)
+
+    def upsert_bytes_file(self, parent_id: str, name: str, content: bytes, mime_type: str) -> dict[str, Any]:
         metadata: dict[str, Any] = {"name": name, "mimeType": mime_type}
         existing = self.find_child(parent_id, name)
         if existing is None:
@@ -3908,7 +3985,6 @@ class GoogleDriveApiClient:
 
         boundary = f"aiws-{uuid.uuid4().hex}"
         metadata_bytes = json.dumps(metadata).encode("utf-8")
-        content_bytes = content.encode("utf-8")
         multipart_body = b"".join(
             [
                 f"--{boundary}\r\n".encode("ascii"),
@@ -3916,8 +3992,8 @@ class GoogleDriveApiClient:
                 metadata_bytes,
                 b"\r\n",
                 f"--{boundary}\r\n".encode("ascii"),
-                f"Content-Type: {mime_type}; charset=UTF-8\r\n\r\n".encode("ascii"),
-                content_bytes,
+                f"Content-Type: {mime_type}\r\n\r\n".encode("ascii"),
+                content,
                 b"\r\n",
                 f"--{boundary}--\r\n".encode("ascii"),
             ]
@@ -3939,6 +4015,19 @@ class GoogleDriveApiClient:
         if not isinstance(uploaded, dict):
             raise SkillManagerError("Google Drive file upload returned invalid metadata.")
         return uploaded
+
+    def read_text_file(self, file_id: str) -> str:
+        raw = self.request_bytes(
+            "GET",
+            f"/files/{quote(require_non_blank_string(file_id, 'file_id'), safe='')}",
+            query={"alt": "media", "supportsAllDrives": "true"},
+        )
+        if raw is None:
+            raise SkillManagerError(f"Google Drive file is missing: {file_id}")
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise SkillManagerError(f"Google Drive file is not valid UTF-8 text: {file_id}") from exc
 
 
 def require_drive_file(value: Any, *, label: str) -> dict[str, Any]:
@@ -4283,6 +4372,316 @@ def refresh_proposal_state(
         "application/json",
     )
     return drive_review_state_response(updated)
+
+
+def write_drive_proposal_json(client: Any, proposal: dict[str, Any]) -> None:
+    proposal_folder_id = require_non_blank_string(proposal.get("proposal_folder_id"), "proposal_folder_id")
+    proposal_json = dict(proposal)
+    proposal_json.pop("draft_path", None)
+    client.upsert_text_file(
+        proposal_folder_id,
+        "proposal.json",
+        json.dumps(proposal_json, indent=2, sort_keys=True) + "\n",
+        "application/json",
+    )
+
+
+def read_drive_json_file(client: Any, parent_id: str, name: str) -> dict[str, Any] | None:
+    existing = client.find_child(parent_id, name)
+    if existing is None:
+        return None
+    file_id = require_non_blank_string(existing.get("id"), "id")
+    raw = client.read_text_file(file_id)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SkillManagerError(f"Google Drive JSON file {name!r} did not contain valid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise SkillManagerError(f"Google Drive JSON file {name!r} did not contain a JSON object.")
+    return payload
+
+
+def prepare_drive_release_tree(
+    aiws_root: Path,
+    proposal: dict[str, Any],
+    *,
+    approved_skill_markdown: str,
+    new_version: str,
+) -> tuple[Path, Path]:
+    record_id = require_non_blank_string(proposal.get("draft_id"), "draft_id")
+    record = require_canonical_draft_record(aiws_root, record_id)
+    canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
+    if canonical_record_id != record_id:
+        raise SkillManagerError(f"Draft record id does not match canonical draft id {canonical_record_id}.")
+
+    draft_path = require_path_under(Path(record.draft_path), aiws_root / "plugins", label="Draft path")
+    expected_draft_path = require_path_under(
+        draft_worktree_path(aiws_root, record.origin_marketplace, record.plugin_id, record.origin_repo),
+        aiws_root / "plugins",
+        label="Expected draft path",
+    )
+    if draft_path != expected_draft_path:
+        raise SkillManagerError(f"Draft record {record_id} points to an unexpected draft path.")
+
+    current_tree_digest = tree_digest(draft_path)
+    validation_tree_digest = require_non_blank_string(
+        proposal.get("validation_tree_digest"),
+        "validation_tree_digest",
+    )
+    if current_tree_digest != validation_tree_digest:
+        raise SkillManagerError(f"Draft {record_id} changed since approval; restage before publish.")
+
+    work_root = aiws_root / "tmp" / "google-drive-publish" / require_non_blank_string(
+        proposal.get("proposal_id"), "proposal_id"
+    )
+    if work_root.exists():
+        shutil.rmtree(work_root)
+    work_root.parent.mkdir(parents=True, exist_ok=True)
+    release_root = work_root / "plugin"
+    shutil.copytree(draft_path, release_root)
+
+    skill_path = release_root / "skills" / require_non_blank_string(proposal.get("skill_id"), "skill_id") / "SKILL.md"
+    if not skill_path.is_file() or skill_path.is_symlink():
+        raise SkillManagerError(f"Released skill file is missing: {skill_path}")
+    skill_path.write_text(approved_skill_markdown, encoding="utf-8")
+
+    manifest_file = plugin_manifest_path(release_root)
+    manifest = load_json(manifest_file)
+    if not isinstance(manifest, dict):
+        raise SkillManagerError(f"Plugin manifest must be an object: {manifest_file}")
+    manifest["version"] = require_non_blank_string(new_version, "new_version")
+    write_json_atomic(manifest_file, manifest)
+
+    contract_file = contract_path(release_root, require_non_blank_string(proposal.get("plugin_id"), "plugin_id"))
+    if contract_file.exists():
+        contract = load_json(contract_file)
+        if not isinstance(contract, dict):
+            raise SkillManagerError(f"Contract file must be an object: {contract_file}")
+        contract["version"] = require_non_blank_string(new_version, "new_version")
+        write_json_atomic(contract_file, contract)
+
+    validate_plugin(
+        release_root,
+        expected_name=require_non_blank_string(proposal.get("plugin_id"), "plugin_id"),
+        expected_version=require_non_blank_string(new_version, "new_version"),
+    )
+
+    package_path = work_root / f"{require_non_blank_string(proposal.get('plugin_id'), 'plugin_id')}-{new_version}.zip"
+    if package_path.exists():
+        package_path.unlink()
+    with zipfile.ZipFile(package_path, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+        for path in sorted(release_root.rglob("*"), key=lambda item: item.relative_to(release_root).as_posix()):
+            if path.is_symlink():
+                raise SkillManagerError(f"Release path must not contain symlinks: {path}")
+            if path.is_dir():
+                continue
+            if not path.is_file():
+                raise SkillManagerError(f"Unsupported release tree entry: {path}")
+            package.write(path, zip_entry_name(path, release_root))
+    return work_root, package_path
+
+
+def drive_release_response(proposal: dict[str, Any]) -> dict[str, Any]:
+    response = drive_review_state_response(proposal)
+    for key in (
+        "published_version",
+        "package_file_id",
+        "package_file_url",
+        "release_file_id",
+        "release_file_url",
+        "index_file_id",
+        "index_file_url",
+    ):
+        value = proposal.get(key)
+        if isinstance(value, str) and value.strip():
+            response[key] = value
+    return response
+
+
+def publish_approved_proposal(
+    aiws_root: Path,
+    proposal_id: str,
+    *,
+    drive_client: Any | None = None,
+) -> dict[str, Any]:
+    proposal = load_proposal_record(aiws_root, proposal_id)
+    backend_kind = require_backend_kind(proposal.get("backend_kind", "github"))
+    if backend_kind != "google_drive":
+        raise SkillManagerError(
+            f"publish_approved_proposal is only implemented for google_drive proposals, got {backend_kind}."
+        )
+    if proposal.get("status") == "released":
+        return drive_release_response(proposal)
+    if proposal.get("status") != "approved_pending_publish":
+        raise SkillManagerError(f"Proposal {proposal_id} is not approved_pending_publish.")
+
+    client = drive_client
+    if client is None:
+        token = google_drive_api_token(aiws_root)
+        if token is None:
+            raise SkillManagerError(
+                "Google Drive publish requires host token env or ~/.aiws Google Drive credentials."
+            )
+        client = GoogleDriveApiClient(token=token)
+
+    marketplace_id = require_marketplace_id(proposal.get("marketplace_id"))
+    plugin_id = require_non_blank_string(proposal.get("plugin_id"), "plugin_id")
+    lock_path = acquire_drive_publish_lock(aiws_root, marketplace_id, plugin_id, proposal_id)
+    work_root: Path | None = None
+    updated = dict(proposal)
+    try:
+        index_payload = read_drive_json_file(
+            client,
+            require_non_blank_string(updated.get("plugin_folder_id"), "plugin_folder_id"),
+            "index.json",
+        )
+        current_index_version = None
+        if index_payload is not None:
+            current_index_version = require_non_blank_string(index_payload.get("current_version"), "current_version")
+        base_version = require_non_blank_string(updated.get("base_version"), "base_version")
+        if current_index_version is not None and current_index_version != base_version:
+            raise SkillManagerError(
+                f"Marketplace version advanced to {current_index_version}; proposal base_version {base_version} is stale."
+            )
+
+        approved_file_id = require_non_blank_string(
+            updated.get("approved_proposed_skill_file_id") or updated.get("proposed_skill_file_id"),
+            "approved_proposed_skill_file_id",
+        )
+        approved_file = require_drive_file(client.get_file(approved_file_id), label="Google Drive approved skill file")
+        approved_md5 = require_non_blank_string(approved_file.get("md5Checksum"), "md5Checksum")
+        approved_modified_time = require_non_blank_string(approved_file.get("modifiedTime"), "modifiedTime")
+        recorded_md5 = require_non_blank_string(updated.get("approved_proposed_skill_md5"), "approved_proposed_skill_md5")
+        recorded_modified_time = require_non_blank_string(
+            updated.get("approved_proposed_skill_modified_time"),
+            "approved_proposed_skill_modified_time",
+        )
+        if approved_md5 != recorded_md5 or approved_modified_time != recorded_modified_time:
+            raise SkillManagerError("Approved proposed.SKILL.md changed after approval; reapproval is required.")
+
+        updated["status"] = "publishing"
+        updated["updated_at"] = utc_now()
+        write_proposal_record(aiws_root, proposal_id, updated)
+        write_drive_proposal_json(client, updated)
+
+        approved_skill_markdown = client.read_text_file(approved_file_id)
+        new_version = patch_bump_version(base_version)
+        work_root, package_path = prepare_drive_release_tree(
+            aiws_root,
+            updated,
+            approved_skill_markdown=approved_skill_markdown,
+            new_version=new_version,
+        )
+        packages_folder = require_drive_file(
+            client.ensure_folder(require_non_blank_string(updated.get("plugin_folder_id"), "plugin_folder_id"), "packages"),
+            label="Google Drive packages folder",
+        )
+        version_folder = require_drive_file(
+            client.ensure_folder(require_non_blank_string(packages_folder.get("id"), "id"), new_version),
+            label="Google Drive release version folder",
+        )
+        package_name = f"{plugin_id}-{new_version}.zip"
+        package_metadata = require_drive_file(
+            client.upsert_bytes_file(
+                require_non_blank_string(version_folder.get("id"), "id"),
+                package_name,
+                package_path.read_bytes(),
+                "application/zip",
+            ),
+            label="Google Drive package file",
+        )
+        released_at = utc_now()
+        release_payload = {
+            "plugin_id": plugin_id,
+            "marketplace_id": marketplace_id,
+            "version": new_version,
+            "proposal_id": proposal_id,
+            "package_file_id": require_non_blank_string(package_metadata.get("id"), "id"),
+            "package_file_url": require_non_blank_string(package_metadata.get("webViewLink"), "webViewLink"),
+            "validation_tree_digest": require_non_blank_string(
+                updated.get("validation_tree_digest"),
+                "validation_tree_digest",
+            ),
+            "published_at": released_at,
+            "published_by": google_drive_account_from_env(),
+        }
+        release_metadata = require_drive_file(
+            client.upsert_text_file(
+                require_non_blank_string(version_folder.get("id"), "id"),
+                "release.json",
+                json.dumps(release_payload, indent=2, sort_keys=True) + "\n",
+                "application/json",
+            ),
+            label="Google Drive release metadata file",
+        )
+        index_payload = {
+            "plugin_id": plugin_id,
+            "marketplace_id": marketplace_id,
+            "backend_kind": "google_drive",
+            "backend_ref": require_non_blank_string(updated.get("backend_ref"), "backend_ref"),
+            "current_version": new_version,
+            "package_file_id": require_non_blank_string(package_metadata.get("id"), "id"),
+            "package_file_url": require_non_blank_string(package_metadata.get("webViewLink"), "webViewLink"),
+            "release_file_id": require_non_blank_string(release_metadata.get("id"), "id"),
+            "release_file_url": require_non_blank_string(release_metadata.get("webViewLink"), "webViewLink"),
+            "proposal_id": proposal_id,
+            "updated_at": released_at,
+        }
+        index_metadata = require_drive_file(
+            client.upsert_text_file(
+                require_non_blank_string(updated.get("plugin_folder_id"), "plugin_folder_id"),
+                "index.json",
+                json.dumps(index_payload, indent=2, sort_keys=True) + "\n",
+                "application/json",
+            ),
+            label="Google Drive plugin index file",
+        )
+        moved_folder = require_drive_file(
+            client.move_file(
+                require_non_blank_string(updated.get("proposal_folder_id"), "proposal_folder_id"),
+                require_non_blank_string(updated.get("released_folder_id"), "released_folder_id"),
+            ),
+            label="Google Drive proposal move",
+        )
+        updated["status"] = "released"
+        updated["backend_review_state"] = "released"
+        updated["released_at"] = released_at
+        updated["updated_at"] = released_at
+        updated["proposal_folder_url"] = drive_folder_url(moved_folder)
+        updated["published_version"] = new_version
+        updated["package_file_id"] = require_non_blank_string(package_metadata.get("id"), "id")
+        updated["package_file_url"] = require_non_blank_string(package_metadata.get("webViewLink"), "webViewLink")
+        updated["release_file_id"] = require_non_blank_string(release_metadata.get("id"), "id")
+        updated["release_file_url"] = require_non_blank_string(release_metadata.get("webViewLink"), "webViewLink")
+        updated["index_file_id"] = require_non_blank_string(index_metadata.get("id"), "id")
+        updated["index_file_url"] = require_non_blank_string(index_metadata.get("webViewLink"), "webViewLink")
+        updated.pop("publish_error", None)
+        write_proposal_record(aiws_root, proposal_id, updated)
+        write_drive_proposal_json(client, updated)
+        return drive_release_response(updated)
+    except Exception as exc:
+        failure = dict(updated)
+        try:
+            proposal_folder_id = require_non_blank_string(failure.get("proposal_folder_id"), "proposal_folder_id")
+            in_review_folder_id = require_non_blank_string(failure.get("in_review_folder_id"), "in_review_folder_id")
+            moved = require_drive_file(client.move_file(proposal_folder_id, in_review_folder_id), label="Google Drive proposal move")
+            failure["proposal_folder_url"] = drive_folder_url(moved)
+        except Exception:
+            pass
+        failure["status"] = "needs_reapproval"
+        failure["backend_review_state"] = "in_review"
+        failure["updated_at"] = utc_now()
+        failure["publish_error"] = str(exc)
+        write_proposal_record(aiws_root, proposal_id, failure)
+        try:
+            write_drive_proposal_json(client, failure)
+        except Exception:
+            pass
+        raise
+    finally:
+        if work_root is not None and work_root.exists():
+            shutil.rmtree(work_root)
+        release_drive_publish_lock(lock_path)
 
 
 def submit_pr(

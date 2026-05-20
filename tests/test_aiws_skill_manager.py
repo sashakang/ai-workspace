@@ -63,6 +63,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     google_drive_auth_session_path,
     google_drive_credentials_path,
     google_drive_oauth_client_path,
+    publish_approved_proposal,
     refresh_proposal_state,
     start_google_drive_oauth,
     write_draft_file,
@@ -228,6 +229,7 @@ class FakeGoogleDriveClient:
     def __init__(self) -> None:
         self.ensure_folder_calls: list[tuple[str, str]] = []
         self.upsert_text_file_calls: list[dict[str, str]] = []
+        self.upsert_bytes_file_calls: list[dict[str, object]] = []
         self._folder_counter = 0
         self._file_counter = 0
         self._time_counter = 0
@@ -268,6 +270,9 @@ class FakeGoogleDriveClient:
         }
 
     def upsert_text_file(self, parent_id: str, name: str, content: str, mime_type: str) -> dict[str, str]:
+        return self.upsert_bytes_file(parent_id, name, content.encode("utf-8"), mime_type)
+
+    def upsert_bytes_file(self, parent_id: str, name: str, content: bytes, mime_type: str) -> dict[str, str]:
         existing_id = self.children.get((parent_id, name))
         if existing_id is None:
             self._file_counter += 1
@@ -275,26 +280,38 @@ class FakeGoogleDriveClient:
         else:
             file_id = existing_id
         modified_time = self._next_timestamp()
+        text_content = content.decode("utf-8", errors="replace") if mime_type != "application/zip" else ""
         metadata: dict[str, str | list[str]] = {
             "id": file_id,
             "name": name,
             "mimeType": mime_type,
             "webViewLink": f"https://drive.google.com/file/d/{file_id}/view",
             "parents": [parent_id],
-            "content": content,
-            "md5Checksum": hashlib.md5(content.encode("utf-8")).hexdigest(),
+            "content": text_content,
+            "bytes": content,
+            "md5Checksum": hashlib.md5(content).hexdigest(),
             "modifiedTime": modified_time,
         }
         self.files_by_id[file_id] = metadata
         self.children[(parent_id, name)] = file_id
-        self.upsert_text_file_calls.append(
-            {
-                "parent_id": parent_id,
-                "name": name,
-                "content": content,
-                "mime_type": mime_type,
-            }
-        )
+        if mime_type == "application/zip":
+            self.upsert_bytes_file_calls.append(
+                {
+                    "parent_id": parent_id,
+                    "name": name,
+                    "content": content,
+                    "mime_type": mime_type,
+                }
+            )
+        else:
+            self.upsert_text_file_calls.append(
+                {
+                    "parent_id": parent_id,
+                    "name": name,
+                    "content": text_content,
+                    "mime_type": mime_type,
+                }
+            )
         return {
             "id": file_id,
             "name": name,
@@ -306,6 +323,10 @@ class FakeGoogleDriveClient:
 
     def get_file(self, file_id: str) -> dict[str, str | list[str]]:
         return dict(self.files_by_id[file_id])
+
+    def read_text_file(self, file_id: str) -> str:
+        metadata = self.files_by_id[file_id]
+        return str(metadata["content"])
 
     def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None) -> dict[str, str | list[str]] | None:
         file_id = self.children.get((parent_id, name))
@@ -2803,6 +2824,100 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(proposal["status"], "needs_reapproval")
             self.assertEqual(proposal["backend_review_state"], "in_review")
             self.assertEqual(drive_client.files_by_id[str(proposal["proposal_folder_id"])]["parents"], [proposal["in_review_folder_id"]])
+
+    def test_publish_approved_proposal_google_drive_builds_package_and_updates_release_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nPublished review change.\n")
+            staged = stage_proposal(
+                aiws_root,
+                record_id,
+                "project:checkout",
+                None,
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+                marketplace_id="checkout-main",
+            )
+            drive_client = FakeGoogleDriveClient()
+            submit_pr(
+                aiws_root,
+                staged["proposal_id"],
+                GoogleDriveProposalSubmitter(aiws_root=aiws_root, drive_client=drive_client),
+            )
+            proposal_before = self.proposal_payload(aiws_root, staged["proposal_id"])
+            drive_client.move_file(
+                str(proposal_before["proposal_folder_id"]),
+                str(proposal_before["approved_folder_id"]),
+            )
+            refresh_proposal_state(aiws_root, staged["proposal_id"], drive_client=drive_client)
+
+            result = publish_approved_proposal(aiws_root, staged["proposal_id"], drive_client=drive_client)
+
+            self.assertEqual(result["status"], "released")
+            self.assertEqual(result["backend_review_state"], "released")
+            self.assertEqual(result["published_version"], "1.0.1")
+            self.assertEqual(len(drive_client.upsert_bytes_file_calls), 1)
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(
+                drive_client.upsert_bytes_file_calls[0]["name"],
+                f"{proposal['plugin_id']}-1.0.1.zip",
+            )
+            self.assertEqual(proposal["status"], "released")
+            self.assertEqual(proposal["backend_review_state"], "released")
+            self.assertEqual(proposal["published_version"], "1.0.1")
+            self.assertIn("package_file_id", proposal)
+            self.assertIn("release_file_id", proposal)
+            self.assertIn("index_file_id", proposal)
+
+            release_file = drive_client.find_child(str(proposal["plugin_folder_id"]), "index.json")
+            self.assertIsNotNone(release_file)
+            index_payload = json.loads(drive_client.read_text_file(str(release_file["id"])))
+            self.assertEqual(index_payload["current_version"], "1.0.1")
+            self.assertEqual(index_payload["proposal_id"], staged["proposal_id"])
+
+    def test_publish_approved_proposal_google_drive_fails_closed_on_stale_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nPublished review change.\n")
+            staged = stage_proposal(
+                aiws_root,
+                record_id,
+                "project:checkout",
+                None,
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+                marketplace_id="checkout-main",
+            )
+            drive_client = FakeGoogleDriveClient()
+            submit_pr(
+                aiws_root,
+                staged["proposal_id"],
+                GoogleDriveProposalSubmitter(aiws_root=aiws_root, drive_client=drive_client),
+            )
+            proposal_before = self.proposal_payload(aiws_root, staged["proposal_id"])
+            drive_client.move_file(
+                str(proposal_before["proposal_folder_id"]),
+                str(proposal_before["approved_folder_id"]),
+            )
+            refresh_proposal_state(aiws_root, staged["proposal_id"], drive_client=drive_client)
+            drive_client.upsert_text_file(
+                str(proposal_before["plugin_folder_id"]),
+                "index.json",
+                json.dumps({"current_version": "0.2.9"}) + "\n",
+                "application/json",
+            )
+
+            with self.assertRaisesRegex(SkillManagerError, "stale"):
+                publish_approved_proposal(aiws_root, staged["proposal_id"], drive_client=drive_client)
+
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["status"], "needs_reapproval")
+            self.assertEqual(proposal["backend_review_state"], "in_review")
+            self.assertIn("publish_error", proposal)
 
     def test_submit_pr_already_submitted_proposal_returns_existing_metadata_without_submitter_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
