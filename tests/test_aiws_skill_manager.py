@@ -55,6 +55,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     validate_mcp_config,
     validate_skill_creator_compat,
     default_command_runner,
+    GoogleDriveProposalSubmitter,
     write_draft_file,
 )
 
@@ -212,6 +213,40 @@ class FakeGitHubApiClient:
         if method == "POST" and path == "/repos/example/review/pulls":
             return {"html_url": "https://github.com/example/review/pull/8"}
         raise AssertionError(f"Unexpected API call: {method} {path} {payload} {query}")
+
+
+class FakeGoogleDriveClient:
+    def __init__(self) -> None:
+        self.ensure_folder_calls: list[tuple[str, str]] = []
+        self.upsert_text_file_calls: list[dict[str, str]] = []
+        self._folder_counter = 0
+
+    def ensure_folder(self, parent_id: str, name: str) -> dict[str, str]:
+        self.ensure_folder_calls.append((parent_id, name))
+        self._folder_counter += 1
+        folder_id = f"folder-{self._folder_counter}"
+        return {
+            "id": folder_id,
+            "name": name,
+            "webViewLink": f"https://drive.google.com/drive/folders/{folder_id}",
+        }
+
+    def upsert_text_file(self, parent_id: str, name: str, content: str, mime_type: str) -> dict[str, str]:
+        file_id = f"file-{len(self.upsert_text_file_calls) + 1}"
+        self.upsert_text_file_calls.append(
+            {
+                "parent_id": parent_id,
+                "name": name,
+                "content": content,
+                "mime_type": mime_type,
+            }
+        )
+        return {
+            "id": file_id,
+            "name": name,
+            "mimeType": mime_type,
+            "webViewLink": f"https://drive.google.com/file/d/{file_id}/view",
+        }
 
 
 class AiwsSkillManagerTests(unittest.TestCase):
@@ -2243,7 +2278,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertIsNone(loaded.branch_name)
             self.assertIsNone(loaded.pr_url)
 
-    def test_submit_pr_rejects_non_github_backend_until_drive_submitter_exists(self) -> None:
+    def test_submit_pr_google_drive_creates_review_packet_and_persists_review_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nLocal proposal edit.\n")
@@ -2258,12 +2293,95 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 backend_ref="drive-folder-123",
                 marketplace_id="checkout-main",
             )
+            drive_client = FakeGoogleDriveClient()
 
-            with self.assertRaisesRegex(SkillManagerError, "google_drive.*not implemented"):
-                submit_pr(aiws_root, staged["proposal_id"], FakeProposalSubmitter())
+            result = submit_pr(
+                aiws_root,
+                staged["proposal_id"],
+                GoogleDriveProposalSubmitter(aiws_root=aiws_root, drive_client=drive_client),
+            )
+
+            self.assertEqual(result["status"], "submitted_for_review")
+            self.assertEqual(result["status_label"], "Submitted for review")
+            self.assertEqual(result["proposal_id"], staged["proposal_id"])
+            self.assertEqual(result["draft_id"], record_id)
+            self.assertEqual(result["plugin_id"], "example-plugin")
+            self.assertEqual(result["skill_id"], "meeting-followup")
+            self.assertEqual(result["target_scope"], "project:checkout")
+            self.assertEqual(result["backend_kind"], "google_drive")
+            self.assertEqual(result["backend_ref"], "drive-folder-123")
+            self.assertEqual(result["marketplace_id"], "checkout-main")
+            self.assertEqual(result["proposal_folder_id"], "folder-5")
+            self.assertEqual(result["proposal_folder_url"], "https://drive.google.com/drive/folders/folder-5")
+            self.assertEqual(result["backend_review_state"], "in_review")
+
+            self.assertEqual(
+                drive_client.ensure_folder_calls,
+                [
+                    ("drive-folder-123", "plugins"),
+                    ("folder-1", "example-plugin"),
+                    ("folder-2", "proposals"),
+                    ("folder-3", "in_review"),
+                    ("folder-4", staged["proposal_id"]),
+                ],
+            )
+            self.assertEqual(
+                [call["name"] for call in drive_client.upsert_text_file_calls],
+                ["base.SKILL.md", "proposed.SKILL.md", "proposal.json"],
+            )
+            self.assertEqual(
+                [call["mime_type"] for call in drive_client.upsert_text_file_calls],
+                ["text/markdown", "text/markdown", "application/json"],
+            )
+            self.assertNotIn("Local proposal edit.", drive_client.upsert_text_file_calls[0]["content"])
+            self.assertIn("Local proposal edit.", drive_client.upsert_text_file_calls[1]["content"])
+            uploaded_proposal = json.loads(drive_client.upsert_text_file_calls[2]["content"])
+            self.assertEqual(uploaded_proposal["proposal_id"], staged["proposal_id"])
+            self.assertEqual(uploaded_proposal["status"], "submitted_for_review")
+            self.assertEqual(uploaded_proposal["backend_kind"], "google_drive")
+            self.assertEqual(uploaded_proposal["backend_review_state"], "in_review")
+            self.assertEqual(uploaded_proposal["proposal_folder_id"], "folder-5")
+            self.assertNotIn("draft_path", uploaded_proposal)
 
             proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
-            self.assertEqual(proposal["status"], "staged")
+            self.assertEqual(proposal["status"], "submitted_for_review")
+            self.assertEqual(proposal["proposal_folder_id"], "folder-5")
+            self.assertEqual(proposal["proposal_folder_url"], "https://drive.google.com/drive/folders/folder-5")
+            self.assertEqual(proposal["backend_review_state"], "in_review")
+            self.assertIn("submitted_at", proposal)
+
+    def test_submit_pr_google_drive_already_submitted_proposal_returns_existing_metadata_without_submitter_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+            staged = stage_proposal(
+                aiws_root,
+                record_id,
+                "project:checkout",
+                None,
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+                marketplace_id="checkout-main",
+            )
+            first_client = FakeGoogleDriveClient()
+            submitter = GoogleDriveProposalSubmitter(aiws_root=aiws_root, drive_client=first_client)
+
+            first = submit_pr(aiws_root, staged["proposal_id"], submitter)
+
+            second_client = FakeGoogleDriveClient()
+            second = submit_pr(
+                aiws_root,
+                staged["proposal_id"],
+                GoogleDriveProposalSubmitter(aiws_root=aiws_root, drive_client=second_client),
+            )
+
+            self.assertEqual(second["status"], "submitted_for_review")
+            self.assertEqual(second["proposal_folder_id"], first["proposal_folder_id"])
+            self.assertEqual(second["proposal_folder_url"], first["proposal_folder_url"])
+            self.assertEqual(second_client.ensure_folder_calls, [])
+            self.assertEqual(second_client.upsert_text_file_calls, [])
 
     def test_submit_pr_already_submitted_proposal_returns_existing_metadata_without_submitter_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

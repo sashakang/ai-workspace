@@ -470,6 +470,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
             patch.dict(os.environ, {"AIWS_GITHUB_TOKEN": "", "GITHUB_TOKEN": "", "GH_TOKEN": ""}),
             patch.object(
                 runtime_module.skill_manager,
+                "load_proposal_record",
+                return_value={"backend_kind": "github"},
+            ),
+            patch.object(
+                runtime_module.skill_manager,
                 "GitHubApiProposalSubmitter",
                 FakeGitHubApiProposalSubmitter,
                 create=True,
@@ -518,6 +523,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
 
         with (
             patch.dict(os.environ, {"AIWS_GITHUB_TOKEN": "token-for-test"}),
+            patch.object(
+                runtime_module.skill_manager,
+                "load_proposal_record",
+                return_value={"backend_kind": "github"},
+            ),
             patch.object(
                 runtime_module.skill_manager,
                 "GitHubApiProposalSubmitter",
@@ -572,6 +582,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
             patch.dict(os.environ, {"AIWS_GITHUB_TOKEN": "", "GITHUB_TOKEN": "", "GH_TOKEN": ""}),
             patch.object(
                 runtime_module.skill_manager,
+                "load_proposal_record",
+                return_value={"backend_kind": "github"},
+            ),
+            patch.object(
+                runtime_module.skill_manager,
                 "GitHubApiProposalSubmitter",
                 FakeGitHubApiProposalSubmitter,
                 create=True,
@@ -597,6 +612,68 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIsInstance(captured["submitter"], FakeGithubHandoffProposalSubmitter)
         self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
         self.assertNotIn("required_review_roles", result)
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_submit_for_review_uses_google_drive_submitter_for_drive_proposal(self) -> None:
+        class FakeGoogleDriveProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        class FakeGitHubApiProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        class FakeGhCliProposalSubmitter:
+            def __init__(self, *, aiws_root: Path) -> None:
+                self.aiws_root = aiws_root
+
+        captured: dict[str, object] = {}
+
+        def fake_submit_pr(aiws_root: Path, proposal_id: str, submitter: object, **kwargs: object) -> dict[str, object]:
+            captured["aiws_root"] = aiws_root
+            captured["proposal_id"] = proposal_id
+            captured["submitter"] = submitter
+            captured["kwargs"] = kwargs
+            return {
+                "status": "submitted_for_review",
+                "proposal_id": proposal_id,
+                "proposal_folder_id": "folder-123",
+                "proposal_folder_url": "https://drive.google.com/drive/folders/folder-123",
+            }
+
+        with (
+            patch.object(
+                runtime_module.skill_manager,
+                "load_proposal_record",
+                return_value={"backend_kind": "google_drive"},
+            ),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveProposalSubmitter",
+                FakeGoogleDriveProposalSubmitter,
+                create=True,
+            ),
+            patch.object(
+                runtime_module.skill_manager,
+                "GitHubApiProposalSubmitter",
+                FakeGitHubApiProposalSubmitter,
+                create=True,
+            ),
+            patch.object(runtime_module.skill_manager, "GhCliProposalSubmitter", FakeGhCliProposalSubmitter, create=True),
+            patch.object(runtime_module.shutil, "which", return_value="/usr/bin/gh"),
+            patch.object(runtime_module.skill_manager, "submit_pr", side_effect=fake_submit_pr),
+            patch.dict(os.environ, {"AIWS_GITHUB_TOKEN": "token-for-test"}),
+        ):
+            result = self.runtime.submit_for_review(
+                "skillprop_123",
+                allowed_target_repos=["example/review"],
+            )
+
+        self.assertEqual(result["status"], "submitted_for_review")
+        self.assertEqual(captured["aiws_root"], self.root.resolve())
+        self.assertEqual(captured["proposal_id"], "skillprop_123")
+        self.assertIsInstance(captured["submitter"], FakeGoogleDriveProposalSubmitter)
+        self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
         self.assert_no_memory_or_claude_writes()
 
     def test_clean_machine_has_sop_and_aiws_improve_without_plugins(self) -> None:

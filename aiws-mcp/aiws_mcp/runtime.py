@@ -1376,20 +1376,25 @@ class AiwsRuntime:
         *,
         allowed_target_repos: list[str] | tuple[str, ...] | set[str] | None = None,
     ) -> dict[str, Any]:
-        submitter_mode = os.environ.get("AIWS_GITHUB_SUBMITTER", "").strip().lower()
-        api_token_available = skill_manager.github_api_token_from_env() is not None
-        if submitter_mode in {"api", "github_api"}:
-            submitter_name = "GitHubApiProposalSubmitter"
-        elif submitter_mode == "gh":
-            submitter_name = "GhCliProposalSubmitter"
-        elif submitter_mode == "handoff":
-            submitter_name = "GithubHandoffProposalSubmitter"
-        elif api_token_available:
-            submitter_name = "GitHubApiProposalSubmitter"
-        elif shutil.which("gh"):
-            submitter_name = "GhCliProposalSubmitter"
+        proposal = skill_manager.load_proposal_record(self.root, proposal_id)
+        backend_kind = skill_manager.require_backend_kind(proposal.get("backend_kind", "github"))
+        if backend_kind == "google_drive":
+            submitter_name = "GoogleDriveProposalSubmitter"
         else:
-            submitter_name = "GithubHandoffProposalSubmitter"
+            submitter_mode = os.environ.get("AIWS_GITHUB_SUBMITTER", "").strip().lower()
+            api_token_available = skill_manager.github_api_token_from_env() is not None
+            if submitter_mode in {"api", "github_api"}:
+                submitter_name = "GitHubApiProposalSubmitter"
+            elif submitter_mode == "gh":
+                submitter_name = "GhCliProposalSubmitter"
+            elif submitter_mode == "handoff":
+                submitter_name = "GithubHandoffProposalSubmitter"
+            elif api_token_available:
+                submitter_name = "GitHubApiProposalSubmitter"
+            elif shutil.which("gh"):
+                submitter_name = "GhCliProposalSubmitter"
+            else:
+                submitter_name = "GithubHandoffProposalSubmitter"
         submitter_cls = getattr(skill_manager, submitter_name, None)
         if submitter_cls is None:
             raise RuntimeError(f"{submitter_name} is not available in aiws_mcp.skill_manager.")

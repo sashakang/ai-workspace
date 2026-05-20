@@ -2474,6 +2474,30 @@ def repository_review_policy_from_codeowners(codeowners_status: Any) -> dict[str
 
 
 def submitted_review_response(proposal: dict[str, Any]) -> dict[str, Any]:
+    backend_kind = require_backend_kind(proposal.get("backend_kind", "github"))
+    if backend_kind == "google_drive":
+        proposal_folder_id = require_non_blank_string(proposal.get("proposal_folder_id"), "proposal_folder_id")
+        proposal_folder_url = require_non_blank_string(proposal.get("proposal_folder_url"), "proposal_folder_url")
+        marketplace_id = require_marketplace_id(proposal.get("marketplace_id"))
+        return {
+            "status": "submitted_for_review",
+            "status_label": "Submitted for review",
+            "proposal_id": proposal["proposal_id"],
+            "draft_id": proposal["draft_id"],
+            "plugin_id": proposal["plugin_id"],
+            "skill_id": proposal["skill_id"],
+            "target_scope": proposal["target_scope"],
+            "backend_kind": "google_drive",
+            "backend_ref": require_non_blank_string(proposal.get("backend_ref"), "backend_ref"),
+            "marketplace_id": marketplace_id,
+            "proposal_folder_id": proposal_folder_id,
+            "proposal_folder_url": proposal_folder_url,
+            "backend_review_state": require_non_blank_string(
+                proposal.get("backend_review_state") or "in_review",
+                "backend_review_state",
+            ),
+        }
+
     branch_name = require_non_blank_string(proposal.get("branch_name"), "branch_name")
     pr_url = require_non_blank_string(proposal.get("pr_url"), "pr_url")
     target_repo = require_non_blank_string(proposal.get("target_repo"), "target_repo")
@@ -3234,6 +3258,332 @@ class GithubHandoffProposalSubmitter:
         return response
 
 
+def google_drive_api_token_from_env(env: dict[str, str] | None = None) -> str | None:
+    values = env or os.environ
+    for name in ("AIWS_GOOGLE_DRIVE_TOKEN", "GOOGLE_DRIVE_TOKEN", "GOOGLE_OAUTH_ACCESS_TOKEN"):
+        token = values.get(name)
+        if token and token.strip():
+            return token.strip()
+    return None
+
+
+def drive_query_literal(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+class GoogleDriveApiClient:
+    def __init__(
+        self,
+        *,
+        token: str,
+        api_url: str | None = None,
+        upload_url: str | None = None,
+    ) -> None:
+        self.token = require_non_blank_string(token, "token")
+        self.api_url = (
+            api_url or os.environ.get("GOOGLE_DRIVE_API_URL") or "https://www.googleapis.com/drive/v3"
+        ).rstrip("/")
+        self.upload_url = (
+            upload_url or os.environ.get("GOOGLE_DRIVE_UPLOAD_URL") or "https://www.googleapis.com/upload/drive/v3"
+        ).rstrip("/")
+
+    def request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        query: dict[str, Any] | None = None,
+        allow_404: bool = False,
+        upload: bool = False,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | list[Any] | None:
+        suffix = path if path.startswith("/") else f"/{path}"
+        if query:
+            suffix = f"{suffix}?{urlencode(query)}"
+        base_url = self.upload_url if upload else self.api_url
+        request_body = body
+        request_headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.token}",
+            "User-Agent": "aiws-mcp",
+        }
+        if payload is not None:
+            request_body = json.dumps(payload).encode("utf-8")
+            request_headers["Content-Type"] = "application/json"
+        if headers:
+            request_headers.update(headers)
+        request = Request(
+            f"{base_url}{suffix}",
+            data=request_body,
+            method=method,
+            headers=request_headers,
+        )
+        try:
+            with urlopen(request, timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS) as response:
+                raw = response.read().decode("utf-8")
+        except HTTPError as exc:
+            if allow_404 and exc.code == 404:
+                return None
+            detail = exc.read().decode("utf-8", errors="replace").strip()
+            raise SkillManagerError(f"Google Drive API request failed ({exc.code}): {detail}") from exc
+        except URLError as exc:
+            raise SkillManagerError(f"Google Drive API request failed: {exc.reason}") from exc
+        if not raw.strip():
+            return {}
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise SkillManagerError("Google Drive API response was not valid JSON.") from exc
+
+    def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None) -> dict[str, Any] | None:
+        query_parts = [
+            f"{drive_query_literal(parent_id)} in parents",
+            f"name = {drive_query_literal(name)}",
+            "trashed = false",
+        ]
+        if mime_type is not None:
+            query_parts.append(f"mimeType = {drive_query_literal(mime_type)}")
+        response = self.request_json(
+            "GET",
+            "/files",
+            query={
+                "q": " and ".join(query_parts),
+                "fields": "files(id,name,mimeType,webViewLink,parents)",
+                "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+            },
+        )
+        if not isinstance(response, dict):
+            raise SkillManagerError("Google Drive file query returned invalid metadata.")
+        files = response.get("files")
+        if not isinstance(files, list):
+            raise SkillManagerError("Google Drive file query returned invalid metadata.")
+        if not files:
+            return None
+        if len(files) > 1:
+            raise SkillManagerError(f"Google Drive contains duplicate children named {name!r} under {parent_id}.")
+        if not isinstance(files[0], dict):
+            raise SkillManagerError("Google Drive file query returned invalid metadata.")
+        return files[0]
+
+    def ensure_folder(self, parent_id: str, name: str) -> dict[str, Any]:
+        existing = self.find_child(parent_id, name, mime_type="application/vnd.google-apps.folder")
+        if existing is not None:
+            return existing
+        created = self.request_json(
+            "POST",
+            "/files",
+            payload={
+                "name": name,
+                "mimeType": "application/vnd.google-apps.folder",
+                "parents": [parent_id],
+            },
+            query={
+                "supportsAllDrives": "true",
+                "fields": "id,name,mimeType,webViewLink,parents",
+            },
+        )
+        if not isinstance(created, dict):
+            raise SkillManagerError("Google Drive folder creation returned invalid metadata.")
+        return created
+
+    def upsert_text_file(self, parent_id: str, name: str, content: str, mime_type: str) -> dict[str, Any]:
+        metadata: dict[str, Any] = {"name": name, "mimeType": mime_type}
+        existing = self.find_child(parent_id, name)
+        if existing is None:
+            metadata["parents"] = [parent_id]
+
+        boundary = f"aiws-{uuid.uuid4().hex}"
+        metadata_bytes = json.dumps(metadata).encode("utf-8")
+        content_bytes = content.encode("utf-8")
+        multipart_body = b"".join(
+            [
+                f"--{boundary}\r\n".encode("ascii"),
+                b"Content-Type: application/json; charset=UTF-8\r\n\r\n",
+                metadata_bytes,
+                b"\r\n",
+                f"--{boundary}\r\n".encode("ascii"),
+                f"Content-Type: {mime_type}; charset=UTF-8\r\n\r\n".encode("ascii"),
+                content_bytes,
+                b"\r\n",
+                f"--{boundary}--\r\n".encode("ascii"),
+            ]
+        )
+        path = "/files" if existing is None else f"/files/{quote(require_non_blank_string(existing.get('id'), 'id'), safe='')}"
+        method = "POST" if existing is None else "PATCH"
+        uploaded = self.request_json(
+            method,
+            path,
+            query={
+                "uploadType": "multipart",
+                "supportsAllDrives": "true",
+                "fields": "id,name,mimeType,webViewLink,parents",
+            },
+            upload=True,
+            body=multipart_body,
+            headers={"Content-Type": f"multipart/related; boundary={boundary}"},
+        )
+        if not isinstance(uploaded, dict):
+            raise SkillManagerError("Google Drive file upload returned invalid metadata.")
+        return uploaded
+
+
+def require_drive_file(value: Any, *, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise SkillManagerError(f"{label} returned invalid Google Drive metadata.")
+    return value
+
+
+def drive_folder_url(metadata: dict[str, Any]) -> str:
+    folder_id = require_non_blank_string(metadata.get("id"), "id")
+    web_view_link = metadata.get("webViewLink")
+    if isinstance(web_view_link, str) and web_view_link.strip():
+        return web_view_link.strip()
+    return f"https://drive.google.com/drive/folders/{folder_id}"
+
+
+def read_snapshot_skill_markdown(snapshot_root: Path, skill_id: str) -> str:
+    skill_path = snapshot_root / "skills" / skill_id / "SKILL.md"
+    if not skill_path.is_file() or skill_path.is_symlink():
+        raise SkillManagerError(f"Draft base snapshot is missing skills/{skill_id}/SKILL.md.")
+    return skill_path.read_text(encoding="utf-8")
+
+
+def read_draft_skill_markdown(draft_path: Path, skill_id: str) -> str:
+    skill_path = draft_path / "skills" / skill_id / "SKILL.md"
+    if not skill_path.is_file() or skill_path.is_symlink():
+        raise SkillManagerError(f"Draft is missing skills/{skill_id}/SKILL.md.")
+    return skill_path.read_text(encoding="utf-8")
+
+
+def drive_review_packet_payload(
+    payload: dict[str, Any],
+    *,
+    proposal_folder_id: str,
+    proposal_folder_url: str,
+    submitted_at: str,
+) -> dict[str, Any]:
+    return {
+        "proposal_id": require_non_blank_string(payload.get("proposal_id"), "proposal_id"),
+        "draft_id": require_non_blank_string(payload.get("draft_id"), "draft_id"),
+        "plugin_id": require_non_blank_string(payload.get("plugin_id"), "plugin_id"),
+        "skill_id": require_non_blank_string(payload.get("skill_id"), "skill_id"),
+        "target_scope": require_non_blank_string(payload.get("target_scope"), "target_scope"),
+        "scope_id": require_non_blank_string(payload.get("scope_id"), "scope_id"),
+        "backend_kind": require_backend_kind(payload.get("backend_kind")),
+        "backend_ref": require_non_blank_string(payload.get("backend_ref"), "backend_ref"),
+        "marketplace_id": require_marketplace_id(payload.get("marketplace_id")),
+        "summary": require_non_blank_string(payload.get("summary"), "summary"),
+        "rationale": require_non_blank_string(payload.get("rationale"), "rationale"),
+        "base_version": require_non_blank_string(payload.get("base_version"), "base_version"),
+        "base_commit": require_non_blank_string(payload.get("base_commit"), "base_commit"),
+        "base_tree_digest": require_non_blank_string(payload.get("base_tree_digest"), "base_tree_digest"),
+        "current_tree_digest": require_non_blank_string(payload.get("current_tree_digest"), "current_tree_digest"),
+        "validation_status": require_non_blank_string(payload.get("validation_status"), "validation_status"),
+        "validation_tree_digest": require_non_blank_string(
+            payload.get("validation_tree_digest"), "validation_tree_digest"
+        ),
+        "status": "submitted_for_review",
+        "backend_review_state": "in_review",
+        "proposal_folder_id": proposal_folder_id,
+        "proposal_folder_url": proposal_folder_url,
+        "submitted_at": submitted_at,
+        "updated_at": submitted_at,
+    }
+
+
+class GoogleDriveProposalSubmitter:
+    def __init__(
+        self,
+        *,
+        aiws_root: Path,
+        token: str | None = None,
+        drive_client: Any | None = None,
+    ) -> None:
+        self.aiws_root = aiws_root
+        resolved_token = token or google_drive_api_token_from_env()
+        if drive_client is None and resolved_token is None:
+            raise SkillManagerError(
+                "Google Drive submit requires AIWS_GOOGLE_DRIVE_TOKEN, GOOGLE_DRIVE_TOKEN, or GOOGLE_OAUTH_ACCESS_TOKEN."
+            )
+        self.drive_client = drive_client or GoogleDriveApiClient(token=resolved_token)
+
+    def submit(self, payload: dict[str, Any]) -> dict[str, Any]:
+        proposal_id = require_non_blank_string(payload.get("proposal_id"), "proposal_id")
+        record_id = require_non_blank_string(payload.get("draft_id"), "draft_id")
+        plugin_id = require_non_blank_string(payload.get("plugin_id"), "plugin_id")
+        skill_id = require_non_blank_string(payload.get("skill_id"), "skill_id")
+        marketplace_root_id = require_non_blank_string(payload.get("backend_ref"), "backend_ref")
+        draft_path = Path(require_non_blank_string(payload.get("draft_path"), "draft_path"))
+        record = require_canonical_draft_record(self.aiws_root, record_id)
+        base_snapshot_root = ensure_base_tree_snapshot(self.aiws_root, record_id, draft_path, record)
+        base_skill_markdown = read_snapshot_skill_markdown(base_snapshot_root, skill_id)
+        proposed_skill_markdown = read_draft_skill_markdown(draft_path, skill_id)
+
+        plugins_folder = require_drive_file(
+            self.drive_client.ensure_folder(marketplace_root_id, "plugins"),
+            label="Google Drive plugins folder",
+        )
+        plugin_folder = require_drive_file(
+            self.drive_client.ensure_folder(
+                require_non_blank_string(plugins_folder.get("id"), "id"),
+                plugin_id,
+            ),
+            label="Google Drive plugin folder",
+        )
+        proposals_folder = require_drive_file(
+            self.drive_client.ensure_folder(
+                require_non_blank_string(plugin_folder.get("id"), "id"),
+                "proposals",
+            ),
+            label="Google Drive proposals folder",
+        )
+        in_review_folder = require_drive_file(
+            self.drive_client.ensure_folder(
+                require_non_blank_string(proposals_folder.get("id"), "id"),
+                "in_review",
+            ),
+            label="Google Drive in_review folder",
+        )
+        proposal_folder = require_drive_file(
+            self.drive_client.ensure_folder(
+                require_non_blank_string(in_review_folder.get("id"), "id"),
+                proposal_id,
+            ),
+            label="Google Drive proposal folder",
+        )
+        proposal_folder_id = require_non_blank_string(proposal_folder.get("id"), "proposal_folder_id")
+        proposal_folder_url = drive_folder_url(proposal_folder)
+        submitted_at = utc_now()
+        proposal_json = drive_review_packet_payload(
+            payload,
+            proposal_folder_id=proposal_folder_id,
+            proposal_folder_url=proposal_folder_url,
+            submitted_at=submitted_at,
+        )
+        self.drive_client.upsert_text_file(proposal_folder_id, "base.SKILL.md", base_skill_markdown, "text/markdown")
+        self.drive_client.upsert_text_file(
+            proposal_folder_id,
+            "proposed.SKILL.md",
+            proposed_skill_markdown,
+            "text/markdown",
+        )
+        self.drive_client.upsert_text_file(
+            proposal_folder_id,
+            "proposal.json",
+            json.dumps(proposal_json, indent=2, sort_keys=True) + "\n",
+            "application/json",
+        )
+        return {
+            "status": "submitted_for_review",
+            "proposal_folder_id": proposal_folder_id,
+            "proposal_folder_url": proposal_folder_url,
+            "backend_review_state": "in_review",
+        }
+
+
 def submit_pr(
     aiws_root: Path,
     proposal_id: str,
@@ -3245,11 +3595,11 @@ def submit_pr(
     proposal_id = require_non_blank_string(proposal_id, "proposal_id")
     proposal = load_proposal_record(aiws_root, proposal_id)
     backend_kind = require_backend_kind(proposal.get("backend_kind", "github"))
-    if backend_kind != "github":
-        raise SkillManagerError(f"{backend_kind} proposal submitter is not implemented yet.")
-    target_repo = require_non_blank_string(proposal.get("target_repo"), "target_repo")
-    if allowed_target_repos is not None and target_repo not in set(allowed_target_repos):
-        raise SkillManagerError(f"target_repo is not allowed: {target_repo}")
+    target_repo = proposal.get("target_repo")
+    if backend_kind == "github":
+        target_repo = require_non_blank_string(target_repo, "target_repo")
+        if allowed_target_repos is not None and target_repo not in set(allowed_target_repos):
+            raise SkillManagerError(f"target_repo is not allowed: {target_repo}")
 
     status = proposal.get("status")
     if status == "submitted_for_review":
@@ -3305,7 +3655,7 @@ def submit_pr(
         submitter_payload["required_review_roles"] = review_roles
     submitter_result = call_proposal_submitter(submitter, submitter_payload)
     if submitter_result.get("status") == "no_changes_to_submit":
-        return {
+        response = {
             "status": "no_changes_to_submit",
             "status_label": "No changes to submit",
             "proposal_id": proposal["proposal_id"],
@@ -3313,10 +3663,18 @@ def submit_pr(
             "plugin_id": proposal["plugin_id"],
             "skill_id": proposal["skill_id"],
             "target_scope": proposal["target_scope"],
-            "target_repo": proposal["target_repo"],
             "branch_name": branch_name,
         }
+        if backend_kind == "github":
+            response["target_repo"] = proposal["target_repo"]
+        else:
+            response["backend_kind"] = backend_kind
+            response["backend_ref"] = proposal.get("backend_ref")
+            response["marketplace_id"] = proposal.get("marketplace_id")
+        return response
     if submitter_result.get("status") == "submit_handoff_required":
+        if backend_kind != "github":
+            raise SkillManagerError("submitter returned unsupported handoff metadata for non-GitHub proposal.")
         try:
             handoff_branch_name = require_non_blank_string(submitter_result.get("branch_name"), "branch_name")
             handoff_target_repo = require_non_blank_string(submitter_result.get("target_repo"), "target_repo")
@@ -3360,30 +3718,51 @@ def submit_pr(
         else:
             handoff_response.pop("required_review_roles", None)
         return handoff_response
-    try:
-        submitted_branch_name = require_non_blank_string(submitter_result.get("branch_name"), "branch_name")
-        pr_url = require_non_blank_string(submitter_result.get("pr_url"), "pr_url")
-    except SkillManagerError as exc:
-        raise SkillManagerError("submitter returned invalid review metadata.") from exc
-    if submitted_branch_name != branch_name:
-        raise SkillManagerError("submitter returned invalid review metadata.")
-    repository_review_policy = submitter_result.get("repository_review_policy")
-    if not isinstance(repository_review_policy, dict):
-        repository_review_policy = repository_review_policy_from_codeowners("unknown")
 
     submitted_at = utc_now()
-    updated_proposal = {
-        **proposal,
-        "status": "submitted_for_review",
-        "branch_name": submitted_branch_name,
-        "pr_url": pr_url,
-        "repository_review_policy": repository_review_policy,
-        "submitted_at": submitted_at,
-        "updated_at": submitted_at,
-    }
+    updated_proposal = {**proposal, "status": "submitted_for_review", "submitted_at": submitted_at, "updated_at": submitted_at}
     updated_proposal.pop("required_review_roles", None)
     if review_roles:
         updated_proposal["required_review_roles"] = review_roles
+    if backend_kind == "github":
+        try:
+            submitted_branch_name = require_non_blank_string(submitter_result.get("branch_name"), "branch_name")
+            pr_url = require_non_blank_string(submitter_result.get("pr_url"), "pr_url")
+        except SkillManagerError as exc:
+            raise SkillManagerError("submitter returned invalid review metadata.") from exc
+        if submitted_branch_name != branch_name:
+            raise SkillManagerError("submitter returned invalid review metadata.")
+        repository_review_policy = submitter_result.get("repository_review_policy")
+        if not isinstance(repository_review_policy, dict):
+            repository_review_policy = repository_review_policy_from_codeowners("unknown")
+        updated_proposal.update(
+            {
+                "branch_name": submitted_branch_name,
+                "pr_url": pr_url,
+                "repository_review_policy": repository_review_policy,
+            }
+        )
+    elif backend_kind == "google_drive":
+        try:
+            proposal_folder_id = require_non_blank_string(submitter_result.get("proposal_folder_id"), "proposal_folder_id")
+            proposal_folder_url = require_non_blank_string(
+                submitter_result.get("proposal_folder_url"),
+                "proposal_folder_url",
+            )
+        except SkillManagerError as exc:
+            raise SkillManagerError("submitter returned invalid review metadata.") from exc
+        updated_proposal.update(
+            {
+                "proposal_folder_id": proposal_folder_id,
+                "proposal_folder_url": proposal_folder_url,
+                "backend_review_state": require_non_blank_string(
+                    submitter_result.get("backend_review_state") or "in_review",
+                    "backend_review_state",
+                ),
+            }
+        )
+    else:
+        raise SkillManagerError(f"{backend_kind} proposal submitter is not implemented yet.")
     write_proposal_record(aiws_root, proposal_id, updated_proposal)
     return submitted_review_response(updated_proposal)
 
