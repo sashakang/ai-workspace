@@ -11,7 +11,7 @@ import subprocess
 import uuid
 import zipfile
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
@@ -1024,6 +1024,10 @@ def proposal_state_root(aiws_root: Path) -> Path:
 
 def marketplace_registry_path(aiws_root: Path) -> Path:
     return aiws_root / "state" / "marketplace-registry.json"
+
+
+def google_drive_credentials_root(aiws_root: Path) -> Path:
+    return aiws_root / "credentials" / "google-drive"
 
 
 def require_proposal_path_under(path: Path, root: Path) -> Path:
@@ -2886,6 +2890,138 @@ def github_api_token_from_env(env: dict[str, str] | None = None) -> str | None:
     return None
 
 
+def parse_utc_timestamp(value: str, *, field_name: str) -> datetime:
+    text = require_non_blank_string(value, field_name)
+    normalized = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise SkillManagerError(f"{field_name} is not a valid ISO timestamp.") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def google_drive_credentials_path(aiws_root: Path, account: str) -> Path:
+    return google_drive_credentials_root(aiws_root) / f"{slug(account)}.json"
+
+
+def google_drive_account_from_env(env: dict[str, str] | None = None) -> str:
+    values = env or os.environ
+    account = values.get("AIWS_GOOGLE_DRIVE_ACCOUNT")
+    if account and account.strip():
+        return account.strip()
+    return "default"
+
+
+def load_google_drive_credentials(aiws_root: Path, env: dict[str, str] | None = None) -> tuple[Path, dict[str, Any]] | None:
+    values = env or os.environ
+    explicit_path = values.get("AIWS_GOOGLE_DRIVE_CREDENTIALS_FILE")
+    if explicit_path and explicit_path.strip():
+        path = Path(explicit_path).expanduser()
+    else:
+        path = google_drive_credentials_path(aiws_root, google_drive_account_from_env(values))
+    if not path.exists():
+        return None
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError("Google Drive credentials file must contain a JSON object.")
+    return path, payload
+
+
+def google_drive_token_refresh_request(
+    *,
+    refresh_token: str,
+    client_id: str,
+    client_secret: str,
+    token_uri: str,
+) -> dict[str, Any]:
+    body = urlencode(
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+    ).encode("utf-8")
+    request = Request(
+        token_uri,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "aiws-mcp",
+        },
+    )
+    try:
+        with urlopen(request, timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS) as response:
+            raw = response.read().decode("utf-8")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        raise SkillManagerError(f"Google OAuth token refresh failed ({exc.code}): {detail}") from exc
+    except URLError as exc:
+        raise SkillManagerError(f"Google OAuth token refresh failed: {exc.reason}") from exc
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SkillManagerError("Google OAuth token refresh response was not valid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise SkillManagerError("Google OAuth token refresh response was not a JSON object.")
+    return payload
+
+
+def google_drive_api_token(
+    aiws_root: Path,
+    *,
+    env: dict[str, str] | None = None,
+    token_refresher: Callable[..., dict[str, Any]] | None = None,
+) -> str | None:
+    env_token = google_drive_api_token_from_env(env)
+    if env_token is not None:
+        return env_token
+
+    loaded = load_google_drive_credentials(aiws_root, env)
+    if loaded is None:
+        return None
+    credentials_path, credentials = loaded
+    access_token = credentials.get("access_token")
+    expiry = credentials.get("expiry")
+    if isinstance(access_token, str) and access_token.strip():
+        if not isinstance(expiry, str) or parse_utc_timestamp(expiry, field_name="expiry") > (
+            datetime.now(timezone.utc) + timedelta(minutes=1)
+        ):
+            return access_token.strip()
+
+    refresh_token = credentials.get("refresh_token")
+    client_id = credentials.get("client_id")
+    client_secret = credentials.get("client_secret")
+    if not all(isinstance(value, str) and value.strip() for value in (refresh_token, client_id, client_secret)):
+        raise SkillManagerError(
+            "Google Drive credentials are expired and missing refresh_token, client_id, or client_secret."
+        )
+    token_uri = str(credentials.get("token_uri") or "https://oauth2.googleapis.com/token").strip()
+    refresher = token_refresher or google_drive_token_refresh_request
+    refreshed = refresher(
+        refresh_token=refresh_token.strip(),
+        client_id=client_id.strip(),
+        client_secret=client_secret.strip(),
+        token_uri=token_uri,
+    )
+    new_access_token = refreshed.get("access_token")
+    if not isinstance(new_access_token, str) or not new_access_token.strip():
+        raise SkillManagerError("Google OAuth token refresh response did not include access_token.")
+    expires_in = refreshed.get("expires_in")
+    expiry_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in) if expires_in is not None else 3600)
+    updated_credentials = dict(credentials)
+    updated_credentials["access_token"] = new_access_token.strip()
+    updated_credentials["expiry"] = expiry_at.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    if isinstance(refreshed.get("refresh_token"), str) and refreshed["refresh_token"].strip():
+        updated_credentials["refresh_token"] = refreshed["refresh_token"].strip()
+    write_json_atomic(credentials_path, updated_credentials)
+    return new_access_token.strip()
+
+
 class GitHubApiClient:
     def __init__(self, *, token: str, api_url: str | None = None) -> None:
         self.token = require_non_blank_string(token, "token")
@@ -3536,10 +3672,10 @@ class GoogleDriveProposalSubmitter:
         drive_client: Any | None = None,
     ) -> None:
         self.aiws_root = aiws_root
-        resolved_token = token or google_drive_api_token_from_env()
+        resolved_token = token or google_drive_api_token(aiws_root)
         if drive_client is None and resolved_token is None:
             raise SkillManagerError(
-                "Google Drive submit requires AIWS_GOOGLE_DRIVE_TOKEN, GOOGLE_DRIVE_TOKEN, or GOOGLE_OAUTH_ACCESS_TOKEN."
+                "Google Drive submit requires host token env or ~/.aiws Google Drive credentials."
             )
         self.drive_client = drive_client or GoogleDriveApiClient(token=resolved_token)
 
@@ -3725,10 +3861,10 @@ def refresh_proposal_state(
         raise SkillManagerError(f"refresh_proposal_state is only implemented for google_drive proposals, got {backend_kind}.")
     client = drive_client
     if client is None:
-        token = google_drive_api_token_from_env()
+        token = google_drive_api_token(aiws_root)
         if token is None:
             raise SkillManagerError(
-                "Google Drive refresh requires AIWS_GOOGLE_DRIVE_TOKEN, GOOGLE_DRIVE_TOKEN, or GOOGLE_OAUTH_ACCESS_TOKEN."
+                "Google Drive refresh requires host token env or ~/.aiws Google Drive credentials."
             )
         client = GoogleDriveApiClient(token=token)
 

@@ -57,6 +57,8 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     validate_skill_creator_compat,
     default_command_runner,
     GoogleDriveProposalSubmitter,
+    google_drive_api_token,
+    google_drive_credentials_path,
     refresh_proposal_state,
     write_draft_file,
 )
@@ -1932,6 +1934,75 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 )
 
             self.assert_no_proposals(aiws_root)
+
+    def test_google_drive_api_token_prefers_env_over_credentials_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            credentials_path = google_drive_credentials_path(aiws_root, "default")
+            credentials_path.parent.mkdir(parents=True, exist_ok=True)
+            credentials_path.write_text(
+                json.dumps({"access_token": "file-token", "expiry": "2099-01-01T00:00:00Z"}) + "\n"
+            )
+
+            token = google_drive_api_token(aiws_root, env={"AIWS_GOOGLE_DRIVE_TOKEN": "env-token"})
+
+            self.assertEqual(token, "env-token")
+
+    def test_google_drive_api_token_reads_default_credentials_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            credentials_path = google_drive_credentials_path(aiws_root, "default")
+            credentials_path.parent.mkdir(parents=True, exist_ok=True)
+            credentials_path.write_text(
+                json.dumps({"access_token": "file-token", "expiry": "2099-01-01T00:00:00Z"}) + "\n"
+            )
+
+            token = google_drive_api_token(aiws_root, env={})
+
+            self.assertEqual(token, "file-token")
+
+    def test_google_drive_api_token_refreshes_expired_credentials_and_persists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            credentials_path = google_drive_credentials_path(aiws_root, "default")
+            credentials_path.parent.mkdir(parents=True, exist_ok=True)
+            credentials_path.write_text(
+                json.dumps(
+                    {
+                        "access_token": "stale-token",
+                        "expiry": "2000-01-01T00:00:00Z",
+                        "refresh_token": "refresh-token",
+                        "client_id": "client-id",
+                        "client_secret": "client-secret",
+                    }
+                )
+                + "\n"
+            )
+            captured: dict[str, str] = {}
+
+            def fake_refresher(**kwargs: str) -> dict[str, object]:
+                captured.update(kwargs)
+                return {"access_token": "fresh-token", "expires_in": 1800}
+
+            token = google_drive_api_token(aiws_root, env={}, token_refresher=fake_refresher)
+
+            self.assertEqual(token, "fresh-token")
+            self.assertEqual(captured["refresh_token"], "refresh-token")
+            persisted = json.loads(credentials_path.read_text())
+            self.assertEqual(persisted["access_token"], "fresh-token")
+            self.assertIn("expiry", persisted)
+
+    def test_google_drive_api_token_rejects_expired_credentials_without_refresh_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            credentials_path = google_drive_credentials_path(aiws_root, "default")
+            credentials_path.parent.mkdir(parents=True, exist_ok=True)
+            credentials_path.write_text(
+                json.dumps({"access_token": "stale-token", "expiry": "2000-01-01T00:00:00Z"}) + "\n"
+            )
+
+            with self.assertRaisesRegex(SkillManagerError, "expired and missing refresh_token"):
+                google_drive_api_token(aiws_root, env={})
 
     def test_stage_proposal_allows_separate_target_repos_without_overwriting(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
