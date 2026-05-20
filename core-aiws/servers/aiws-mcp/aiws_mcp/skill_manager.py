@@ -2918,6 +2918,17 @@ def google_drive_auth_session_path(aiws_root: Path, auth_session_id: str) -> Pat
     return google_drive_auth_session_root(aiws_root) / f"{slug(auth_session_id)}.json"
 
 
+def bundled_google_drive_oauth_client_path(env: dict[str, str] | None = None) -> Path | None:
+    values = env or os.environ
+    explicit = values.get("AIWS_GOOGLE_DRIVE_OAUTH_CLIENT_FILE")
+    if explicit and explicit.strip():
+        return Path(explicit).expanduser()
+    plugin_root = values.get("CLAUDE_PLUGIN_ROOT")
+    if plugin_root and plugin_root.strip():
+        return Path(plugin_root).expanduser() / ".claude-plugin" / "google-drive-oauth-client.json"
+    return None
+
+
 def google_drive_account_from_env(env: dict[str, str] | None = None) -> str:
     values = env or os.environ
     account = values.get("AIWS_GOOGLE_DRIVE_ACCOUNT")
@@ -2933,6 +2944,16 @@ def load_google_drive_oauth_client(aiws_root: Path, account: str) -> dict[str, A
     payload = load_json(path)
     if not isinstance(payload, dict):
         raise SkillManagerError("Google Drive OAuth client file must contain a JSON object.")
+    return payload
+
+
+def load_bundled_google_drive_oauth_client(env: dict[str, str] | None = None) -> dict[str, Any] | None:
+    path = bundled_google_drive_oauth_client_path(env)
+    if path is None or not path.exists():
+        return None
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError("Bundled Google Drive OAuth client file must contain a JSON object.")
     return payload
 
 
@@ -3133,18 +3154,37 @@ def start_google_drive_oauth(
     client_secret: str | None = None,
     redirect_uri: str | None = None,
     scopes: list[str] | tuple[str, ...] | None = None,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     resolved_account = require_non_blank_string(account, "account")
     stored_client = load_google_drive_oauth_client(aiws_root, resolved_account) or {}
-    resolved_client_id = client_id or stored_client.get("client_id")
+    bundled_client = load_bundled_google_drive_oauth_client(env) or {}
+    resolved_client_id = client_id or stored_client.get("client_id") or bundled_client.get("client_id")
     if not isinstance(resolved_client_id, str) or not resolved_client_id.strip():
-        raise SkillManagerError("Google Drive OAuth start requires client_id or a stored OAuth client config.")
+        raise SkillManagerError(
+            "Google Drive OAuth start requires either an explicit client_id, a stored per-user OAuth client config, "
+            "or a bundled default OAuth client config."
+        )
     resolved_client_secret = client_secret
     if resolved_client_secret is None and isinstance(stored_client.get("client_secret"), str):
         resolved_client_secret = stored_client["client_secret"]
-    resolved_redirect_uri = redirect_uri or stored_client.get("redirect_uri") or google_drive_oauth_redirect_uri()
-    resolved_token_uri = str(stored_client.get("token_uri") or "https://oauth2.googleapis.com/token").strip()
-    resolved_scopes = [require_non_blank_string(scope, "scope") for scope in (scopes or stored_client.get("scopes") or google_drive_oauth_scopes())]
+    if resolved_client_secret is None and isinstance(bundled_client.get("client_secret"), str):
+        resolved_client_secret = bundled_client["client_secret"]
+    resolved_redirect_uri = (
+        redirect_uri
+        or stored_client.get("redirect_uri")
+        or bundled_client.get("redirect_uri")
+        or google_drive_oauth_redirect_uri()
+    )
+    resolved_token_uri = str(
+        stored_client.get("token_uri")
+        or bundled_client.get("token_uri")
+        or "https://oauth2.googleapis.com/token"
+    ).strip()
+    resolved_scopes = [
+        require_non_blank_string(scope, "scope")
+        for scope in (scopes or stored_client.get("scopes") or bundled_client.get("scopes") or google_drive_oauth_scopes())
+    ]
     persist_google_drive_oauth_client(
         aiws_root,
         account=resolved_account,

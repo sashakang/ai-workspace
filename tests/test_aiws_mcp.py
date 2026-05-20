@@ -707,6 +707,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
             client_id="client-id",
             client_secret="client-secret",
             redirect_uri=None,
+            env=self.env,
         )
         self.assert_no_memory_or_claude_writes()
 

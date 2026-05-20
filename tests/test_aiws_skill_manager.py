@@ -2036,6 +2036,33 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertIn("code_verifier", session_payload)
             self.assertIn("state", session_payload)
 
+    def test_start_google_drive_oauth_uses_bundled_default_client_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            plugin_root = Path(temp) / "core-aiws"
+            bundled_path = plugin_root / ".claude-plugin" / "google-drive-oauth-client.json"
+            bundled_path.parent.mkdir(parents=True, exist_ok=True)
+            bundled_path.write_text(
+                json.dumps(
+                    {
+                        "client_id": "bundled-client-id.apps.googleusercontent.com",
+                        "client_secret": "bundled-client-secret",
+                    }
+                )
+                + "\n"
+            )
+
+            result = start_google_drive_oauth(
+                aiws_root,
+                env={"CLAUDE_PLUGIN_ROOT": str(plugin_root)},
+            )
+
+            self.assertEqual(result["status"], "authorization_pending")
+            self.assertIn("bundled-client-id.apps.googleusercontent.com", result["auth_url"])
+            client_payload = json.loads(google_drive_oauth_client_path(aiws_root, "default").read_text())
+            self.assertEqual(client_payload["client_id"], "bundled-client-id.apps.googleusercontent.com")
+            self.assertEqual(client_payload["client_secret"], "bundled-client-secret")
+
     def test_finish_google_drive_oauth_exchanges_code_and_writes_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             aiws_root = Path(temp) / ".aiws"

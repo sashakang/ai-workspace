@@ -1423,6 +1423,7 @@ class AiwsRuntime:
             client_id=client_id,
             client_secret=client_secret,
             redirect_uri=redirect_uri,
+            env=self.env,
         )
 
     def finish_google_drive_oauth(
