@@ -20,6 +20,8 @@ LOCAL_PROPOSAL_TOOL_NAMES = (
 LOCAL_TOOL_NAMES = (
     "aiws.health.ping",
     "aiws.runtime.info",
+    "aiws.google_drive.start_oauth",
+    "aiws.google_drive.finish_oauth",
     "aiws.skills.search",
     "aiws.skills.resolve",
     "aiws.skills.materialize",
@@ -144,6 +146,32 @@ def create_server(root: Path | None = None):
     @server.tool(name="aiws.runtime.info")
     def runtime_info() -> dict[str, Any]:
         return runtime_info_payload()
+
+    @server.tool(name="aiws.google_drive.start_oauth")
+    def start_google_drive_oauth(
+        account: str = "default",
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        redirect_uri: str | None = None,
+    ) -> dict[str, Any]:
+        return runtime.start_google_drive_oauth(
+            account=account,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+        )
+
+    @server.tool(name="aiws.google_drive.finish_oauth")
+    def finish_google_drive_oauth(
+        auth_session_id: str,
+        redirected_url: str | None = None,
+        authorization_code: str | None = None,
+    ) -> dict[str, Any]:
+        return runtime.finish_google_drive_oauth(
+            auth_session_id,
+            redirected_url=redirected_url,
+            authorization_code=authorization_code,
+        )
 
     @server.tool(name="aiws.skills.search")
     def search(query: str | None = None, scopes: list[str] | None = None, host_kind: str | None = None, limit: int | None = None) -> dict[str, Any]:

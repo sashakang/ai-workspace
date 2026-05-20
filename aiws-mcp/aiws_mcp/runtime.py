@@ -1409,6 +1409,36 @@ class AiwsRuntime:
     def refresh_proposal_state(self, proposal_id: str) -> dict[str, Any]:
         return skill_manager.refresh_proposal_state(self.root, proposal_id)
 
+    def start_google_drive_oauth(
+        self,
+        *,
+        account: str = "default",
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        redirect_uri: str | None = None,
+    ) -> dict[str, Any]:
+        return skill_manager.start_google_drive_oauth(
+            self.root,
+            account=account,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+        )
+
+    def finish_google_drive_oauth(
+        self,
+        auth_session_id: str,
+        *,
+        redirected_url: str | None = None,
+        authorization_code: str | None = None,
+    ) -> dict[str, Any]:
+        return skill_manager.finish_google_drive_oauth(
+            self.root,
+            auth_session_id,
+            redirected_url=redirected_url,
+            authorization_code=authorization_code,
+        )
+
     def stage_change(
         self,
         *,

@@ -688,6 +688,48 @@ class AiwsMcpSkillTests(unittest.TestCase):
         mocked.assert_called_once_with(self.root.resolve(), "skillprop_123")
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_start_google_drive_oauth_delegates_to_skill_manager(self) -> None:
+        with patch.object(
+            runtime_module.skill_manager,
+            "start_google_drive_oauth",
+            return_value={"status": "authorization_pending", "auth_session_id": "gdauth_123"},
+        ) as mocked:
+            result = self.runtime.start_google_drive_oauth(
+                account="default",
+                client_id="client-id",
+                client_secret="client-secret",
+            )
+
+        self.assertEqual(result["status"], "authorization_pending")
+        mocked.assert_called_once_with(
+            self.root.resolve(),
+            account="default",
+            client_id="client-id",
+            client_secret="client-secret",
+            redirect_uri=None,
+        )
+        self.assert_no_memory_or_claude_writes()
+
+    def test_cowork_runtime_finish_google_drive_oauth_delegates_to_skill_manager(self) -> None:
+        with patch.object(
+            runtime_module.skill_manager,
+            "finish_google_drive_oauth",
+            return_value={"status": "connected", "auth_session_id": "gdauth_123"},
+        ) as mocked:
+            result = self.runtime.finish_google_drive_oauth(
+                "gdauth_123",
+                redirected_url="http://127.0.0.1/callback?code=abc&state=xyz",
+            )
+
+        self.assertEqual(result["status"], "connected")
+        mocked.assert_called_once_with(
+            self.root.resolve(),
+            "gdauth_123",
+            redirected_url="http://127.0.0.1/callback?code=abc&state=xyz",
+            authorization_code=None,
+        )
+        self.assert_no_memory_or_claude_writes()
+
     def test_clean_machine_has_sop_and_aiws_improve_without_plugins(self) -> None:
         local = self.runtime.list_local_skills()
         skill_ids = {item["skill_id"] for item in local["skills"]}

@@ -56,10 +56,14 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     validate_mcp_config,
     validate_skill_creator_compat,
     default_command_runner,
+    finish_google_drive_oauth,
     GoogleDriveProposalSubmitter,
     google_drive_api_token,
+    google_drive_auth_session_path,
     google_drive_credentials_path,
+    google_drive_oauth_client_path,
     refresh_proposal_state,
+    start_google_drive_oauth,
     write_draft_file,
 )
 
@@ -2003,6 +2007,77 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
             with self.assertRaisesRegex(SkillManagerError, "expired and missing refresh_token"):
                 google_drive_api_token(aiws_root, env={})
+
+    def test_start_google_drive_oauth_persists_session_and_client_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+
+            result = start_google_drive_oauth(
+                aiws_root,
+                client_id="client-id.apps.googleusercontent.com",
+                client_secret="client-secret",
+            )
+
+            self.assertEqual(result["status"], "authorization_pending")
+            self.assertEqual(result["account"], "default")
+            self.assertEqual(result["next_action"], "finish_google_drive_oauth")
+            self.assertIn("https://accounts.google.com/o/oauth2/v2/auth?", result["auth_url"])
+            self.assertIn("client_id=client-id.apps.googleusercontent.com", result["auth_url"])
+            self.assertIn("code_challenge=", result["auth_url"])
+
+            client_payload = json.loads(google_drive_oauth_client_path(aiws_root, "default").read_text())
+            self.assertEqual(client_payload["client_id"], "client-id.apps.googleusercontent.com")
+            self.assertEqual(client_payload["client_secret"], "client-secret")
+
+            session_path = google_drive_auth_session_path(aiws_root, result["auth_session_id"])
+            session_payload = json.loads(session_path.read_text())
+            self.assertEqual(session_payload["status"], "pending_browser_consent")
+            self.assertEqual(session_payload["account"], "default")
+            self.assertIn("code_verifier", session_payload)
+            self.assertIn("state", session_payload)
+
+    def test_finish_google_drive_oauth_exchanges_code_and_writes_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            started = start_google_drive_oauth(
+                aiws_root,
+                client_id="client-id.apps.googleusercontent.com",
+                client_secret="client-secret",
+            )
+            session_path = google_drive_auth_session_path(aiws_root, started["auth_session_id"])
+            session_payload = json.loads(session_path.read_text())
+            redirected_url = (
+                f"{started['redirect_uri']}?code=auth-code-123&state={session_payload['state']}"
+            )
+            captured: dict[str, str | None] = {}
+
+            def fake_exchanger(**kwargs: str | None) -> dict[str, object]:
+                captured.update(kwargs)
+                return {
+                    "access_token": "fresh-access-token",
+                    "refresh_token": "fresh-refresh-token",
+                    "expires_in": 3600,
+                }
+
+            result = finish_google_drive_oauth(
+                aiws_root,
+                started["auth_session_id"],
+                redirected_url=redirected_url,
+                code_exchanger=fake_exchanger,
+            )
+
+            self.assertEqual(result["status"], "connected")
+            self.assertEqual(result["account"], "default")
+            self.assertTrue(result["has_refresh_token"])
+            self.assertEqual(captured["code"], "auth-code-123")
+            self.assertEqual(captured["client_id"], "client-id.apps.googleusercontent.com")
+            self.assertEqual(captured["client_secret"], "client-secret")
+            credentials_payload = json.loads(google_drive_credentials_path(aiws_root, "default").read_text())
+            self.assertEqual(credentials_payload["access_token"], "fresh-access-token")
+            self.assertEqual(credentials_payload["refresh_token"], "fresh-refresh-token")
+            completed_session = json.loads(session_path.read_text())
+            self.assertEqual(completed_session["status"], "connected")
+            self.assertIn("completed_at", completed_session)
 
     def test_stage_proposal_allows_separate_target_repos_without_overwriting(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

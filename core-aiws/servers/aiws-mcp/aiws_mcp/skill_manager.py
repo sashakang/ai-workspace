@@ -1030,6 +1030,10 @@ def google_drive_credentials_root(aiws_root: Path) -> Path:
     return aiws_root / "credentials" / "google-drive"
 
 
+def google_drive_auth_session_root(aiws_root: Path) -> Path:
+    return aiws_root / "state" / "google-drive-auth"
+
+
 def require_proposal_path_under(path: Path, root: Path) -> Path:
     reject_symlinked_root(root.parent, label="AIWS proposal state parent")
     reject_symlinked_root(root, label="AIWS proposal state root")
@@ -2906,12 +2910,53 @@ def google_drive_credentials_path(aiws_root: Path, account: str) -> Path:
     return google_drive_credentials_root(aiws_root) / f"{slug(account)}.json"
 
 
+def google_drive_oauth_client_path(aiws_root: Path, account: str) -> Path:
+    return google_drive_credentials_root(aiws_root) / f"{slug(account)}.oauth-client.json"
+
+
+def google_drive_auth_session_path(aiws_root: Path, auth_session_id: str) -> Path:
+    return google_drive_auth_session_root(aiws_root) / f"{slug(auth_session_id)}.json"
+
+
 def google_drive_account_from_env(env: dict[str, str] | None = None) -> str:
     values = env or os.environ
     account = values.get("AIWS_GOOGLE_DRIVE_ACCOUNT")
     if account and account.strip():
         return account.strip()
     return "default"
+
+
+def load_google_drive_oauth_client(aiws_root: Path, account: str) -> dict[str, Any] | None:
+    path = google_drive_oauth_client_path(aiws_root, account)
+    if not path.exists():
+        return None
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError("Google Drive OAuth client file must contain a JSON object.")
+    return payload
+
+
+def persist_google_drive_oauth_client(
+    aiws_root: Path,
+    *,
+    account: str,
+    client_id: str,
+    client_secret: str | None,
+    redirect_uri: str,
+    token_uri: str,
+    scopes: list[str],
+) -> Path:
+    path = google_drive_oauth_client_path(aiws_root, account)
+    payload: dict[str, Any] = {
+        "client_id": require_non_blank_string(client_id, "client_id"),
+        "redirect_uri": require_non_blank_string(redirect_uri, "redirect_uri"),
+        "token_uri": require_non_blank_string(token_uri, "token_uri"),
+        "scopes": [require_non_blank_string(scope, "scope") for scope in scopes],
+    }
+    if isinstance(client_secret, str) and client_secret.strip():
+        payload["client_secret"] = client_secret.strip()
+    write_json_atomic(path, payload)
+    return path
 
 
 def load_google_drive_credentials(aiws_root: Path, env: dict[str, str] | None = None) -> tuple[Path, dict[str, Any]] | None:
@@ -2933,17 +2978,17 @@ def google_drive_token_refresh_request(
     *,
     refresh_token: str,
     client_id: str,
-    client_secret: str,
+    client_secret: str | None,
     token_uri: str,
 ) -> dict[str, Any]:
-    body = urlencode(
-        {
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-            "client_id": client_id,
-            "client_secret": client_secret,
-        }
-    ).encode("utf-8")
+    fields = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+    if isinstance(client_secret, str) and client_secret.strip():
+        fields["client_secret"] = client_secret
+    body = urlencode(fields).encode("utf-8")
     request = Request(
         token_uri,
         data=body,
@@ -2996,16 +3041,14 @@ def google_drive_api_token(
     refresh_token = credentials.get("refresh_token")
     client_id = credentials.get("client_id")
     client_secret = credentials.get("client_secret")
-    if not all(isinstance(value, str) and value.strip() for value in (refresh_token, client_id, client_secret)):
-        raise SkillManagerError(
-            "Google Drive credentials are expired and missing refresh_token, client_id, or client_secret."
-        )
+    if not all(isinstance(value, str) and value.strip() for value in (refresh_token, client_id)):
+        raise SkillManagerError("Google Drive credentials are expired and missing refresh_token or client_id.")
     token_uri = str(credentials.get("token_uri") or "https://oauth2.googleapis.com/token").strip()
     refresher = token_refresher or google_drive_token_refresh_request
     refreshed = refresher(
         refresh_token=refresh_token.strip(),
         client_id=client_id.strip(),
-        client_secret=client_secret.strip(),
+        client_secret=client_secret.strip() if isinstance(client_secret, str) and client_secret.strip() else None,
         token_uri=token_uri,
     )
     new_access_token = refreshed.get("access_token")
@@ -3020,6 +3063,229 @@ def google_drive_api_token(
         updated_credentials["refresh_token"] = refreshed["refresh_token"].strip()
     write_json_atomic(credentials_path, updated_credentials)
     return new_access_token.strip()
+
+
+def google_oauth_authorization_code_exchange(
+    *,
+    code: str,
+    client_id: str,
+    client_secret: str | None,
+    redirect_uri: str,
+    code_verifier: str,
+    token_uri: str,
+) -> dict[str, Any]:
+    fields = {
+        "grant_type": "authorization_code",
+        "code": require_non_blank_string(code, "authorization_code"),
+        "client_id": require_non_blank_string(client_id, "client_id"),
+        "redirect_uri": require_non_blank_string(redirect_uri, "redirect_uri"),
+        "code_verifier": require_non_blank_string(code_verifier, "code_verifier"),
+    }
+    if isinstance(client_secret, str) and client_secret.strip():
+        fields["client_secret"] = client_secret.strip()
+    body = urlencode(fields).encode("utf-8")
+    request = Request(
+        require_non_blank_string(token_uri, "token_uri"),
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "aiws-mcp",
+        },
+    )
+    try:
+        with urlopen(request, timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS) as response:
+            raw = response.read().decode("utf-8")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        raise SkillManagerError(f"Google OAuth code exchange failed ({exc.code}): {detail}") from exc
+    except URLError as exc:
+        raise SkillManagerError(f"Google OAuth code exchange failed: {exc.reason}") from exc
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SkillManagerError("Google OAuth code exchange response was not valid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise SkillManagerError("Google OAuth code exchange response was not a JSON object.")
+    return payload
+
+
+def google_drive_oauth_redirect_uri() -> str:
+    return "http://127.0.0.1:8765/google-drive/oauth/callback"
+
+
+def google_drive_oauth_scopes() -> list[str]:
+    return ["https://www.googleapis.com/auth/drive"]
+
+
+def google_drive_pkce_pair() -> tuple[str, str]:
+    verifier = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii").rstrip("=")
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("utf-8")).digest()).decode("ascii").rstrip("=")
+    return verifier, challenge
+
+
+def start_google_drive_oauth(
+    aiws_root: Path,
+    *,
+    account: str = "default",
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    redirect_uri: str | None = None,
+    scopes: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    resolved_account = require_non_blank_string(account, "account")
+    stored_client = load_google_drive_oauth_client(aiws_root, resolved_account) or {}
+    resolved_client_id = client_id or stored_client.get("client_id")
+    if not isinstance(resolved_client_id, str) or not resolved_client_id.strip():
+        raise SkillManagerError("Google Drive OAuth start requires client_id or a stored OAuth client config.")
+    resolved_client_secret = client_secret
+    if resolved_client_secret is None and isinstance(stored_client.get("client_secret"), str):
+        resolved_client_secret = stored_client["client_secret"]
+    resolved_redirect_uri = redirect_uri or stored_client.get("redirect_uri") or google_drive_oauth_redirect_uri()
+    resolved_token_uri = str(stored_client.get("token_uri") or "https://oauth2.googleapis.com/token").strip()
+    resolved_scopes = [require_non_blank_string(scope, "scope") for scope in (scopes or stored_client.get("scopes") or google_drive_oauth_scopes())]
+    persist_google_drive_oauth_client(
+        aiws_root,
+        account=resolved_account,
+        client_id=resolved_client_id.strip(),
+        client_secret=resolved_client_secret.strip() if isinstance(resolved_client_secret, str) and resolved_client_secret.strip() else None,
+        redirect_uri=require_non_blank_string(resolved_redirect_uri, "redirect_uri"),
+        token_uri=resolved_token_uri,
+        scopes=resolved_scopes,
+    )
+    auth_session_id = f"gdauth_{uuid.uuid4().hex}"
+    state = uuid.uuid4().hex
+    code_verifier, code_challenge = google_drive_pkce_pair()
+    auth_session_path = google_drive_auth_session_path(aiws_root, auth_session_id)
+    auth_session_payload = {
+        "auth_session_id": auth_session_id,
+        "account": resolved_account,
+        "client_id": resolved_client_id.strip(),
+        "client_secret": resolved_client_secret.strip() if isinstance(resolved_client_secret, str) and resolved_client_secret.strip() else None,
+        "redirect_uri": require_non_blank_string(resolved_redirect_uri, "redirect_uri"),
+        "token_uri": resolved_token_uri,
+        "scopes": resolved_scopes,
+        "state": state,
+        "code_verifier": code_verifier,
+        "status": "pending_browser_consent",
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    write_json_atomic(auth_session_path, auth_session_payload)
+    auth_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth?"
+        + urlencode(
+            {
+                "client_id": resolved_client_id.strip(),
+                "redirect_uri": require_non_blank_string(resolved_redirect_uri, "redirect_uri"),
+                "response_type": "code",
+                "scope": " ".join(resolved_scopes),
+                "access_type": "offline",
+                "prompt": "consent",
+                "state": state,
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
+            }
+        )
+    )
+    return {
+        "status": "authorization_pending",
+        "status_label": "Authorization pending",
+        "auth_session_id": auth_session_id,
+        "account": resolved_account,
+        "auth_url": auth_url,
+        "redirect_uri": require_non_blank_string(resolved_redirect_uri, "redirect_uri"),
+        "scopes": resolved_scopes,
+        "credentials_path": str(google_drive_credentials_path(aiws_root, resolved_account)),
+        "next_action": "finish_google_drive_oauth",
+    }
+
+
+def finish_google_drive_oauth(
+    aiws_root: Path,
+    auth_session_id: str,
+    *,
+    redirected_url: str | None = None,
+    authorization_code: str | None = None,
+    code_exchanger: Callable[..., dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    session_id = require_non_blank_string(auth_session_id, "auth_session_id")
+    session_path = google_drive_auth_session_path(aiws_root, session_id)
+    if not session_path.exists():
+        raise SkillManagerError(f"Google Drive auth session not found: {session_id}")
+    session_payload = load_json(session_path)
+    if not isinstance(session_payload, dict):
+        raise SkillManagerError("Google Drive auth session file must contain a JSON object.")
+    state = require_non_blank_string(session_payload.get("state"), "state")
+    resolved_code = authorization_code.strip() if isinstance(authorization_code, str) and authorization_code.strip() else None
+    if redirected_url is not None:
+        parsed = urlsplit(require_non_blank_string(redirected_url, "redirected_url"))
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        if "error" in query and str(query["error"]).strip():
+            raise SkillManagerError(f"Google OAuth authorization failed: {query['error']}")
+        redirected_state = query.get("state")
+        if redirected_state != state:
+            raise SkillManagerError("Google OAuth state did not match the pending auth session.")
+        code_from_url = query.get("code")
+        if isinstance(code_from_url, str) and code_from_url.strip():
+            resolved_code = code_from_url.strip()
+    if not resolved_code:
+        raise SkillManagerError("Google OAuth finish requires redirected_url with code or authorization_code.")
+
+    exchanger = code_exchanger or google_oauth_authorization_code_exchange
+    token_payload = exchanger(
+        code=resolved_code,
+        client_id=require_non_blank_string(session_payload.get("client_id"), "client_id"),
+        client_secret=session_payload.get("client_secret")
+        if isinstance(session_payload.get("client_secret"), str) and session_payload.get("client_secret").strip()
+        else None,
+        redirect_uri=require_non_blank_string(session_payload.get("redirect_uri"), "redirect_uri"),
+        code_verifier=require_non_blank_string(session_payload.get("code_verifier"), "code_verifier"),
+        token_uri=require_non_blank_string(session_payload.get("token_uri"), "token_uri"),
+    )
+    access_token = token_payload.get("access_token")
+    if not isinstance(access_token, str) or not access_token.strip():
+        raise SkillManagerError("Google OAuth code exchange did not return access_token.")
+    expires_in = token_payload.get("expires_in")
+    expiry_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in) if expires_in is not None else 3600)
+    refresh_token = token_payload.get("refresh_token")
+    credentials_payload: dict[str, Any] = {
+        "access_token": access_token.strip(),
+        "expiry": expiry_at.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "client_id": require_non_blank_string(session_payload.get("client_id"), "client_id"),
+        "token_uri": require_non_blank_string(session_payload.get("token_uri"), "token_uri"),
+    }
+    if isinstance(refresh_token, str) and refresh_token.strip():
+        credentials_payload["refresh_token"] = refresh_token.strip()
+    elif isinstance(session_payload.get("refresh_token"), str) and session_payload.get("refresh_token").strip():
+        credentials_payload["refresh_token"] = session_payload["refresh_token"].strip()
+    if isinstance(session_payload.get("client_secret"), str) and session_payload.get("client_secret").strip():
+        credentials_payload["client_secret"] = session_payload["client_secret"].strip()
+    credentials_path = google_drive_credentials_path(
+        aiws_root,
+        require_non_blank_string(session_payload.get("account"), "account"),
+    )
+    write_json_atomic(credentials_path, credentials_payload)
+    completed_at = utc_now()
+    updated_session = {
+        **session_payload,
+        "status": "connected",
+        "updated_at": completed_at,
+        "completed_at": completed_at,
+        "credentials_path": str(credentials_path),
+    }
+    if isinstance(refresh_token, str) and refresh_token.strip():
+        updated_session["refresh_token"] = refresh_token.strip()
+    write_json_atomic(session_path, updated_session)
+    return {
+        "status": "connected",
+        "status_label": "Connected",
+        "auth_session_id": session_id,
+        "account": require_non_blank_string(session_payload.get("account"), "account"),
+        "credentials_path": str(credentials_path),
+        "has_refresh_token": "refresh_token" in credentials_payload,
+    }
 
 
 class GitHubApiClient:
