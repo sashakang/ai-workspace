@@ -957,6 +957,48 @@ def require_non_blank_string(value: Any, field_name: str) -> str:
     return value.strip()
 
 
+def require_marketplace_id(value: Any) -> str:
+    marketplace_id = require_non_blank_string(value, "marketplace_id")
+    if not NAME_RE.fullmatch(marketplace_id):
+        raise SkillManagerError(f"marketplace_id contains unsupported characters: {marketplace_id!r}")
+    return marketplace_id
+
+
+def require_backend_kind(value: Any) -> str:
+    backend_kind = require_non_blank_string(value, "backend_kind").lower()
+    if backend_kind not in {"github", "google_drive"}:
+        raise SkillManagerError(f"backend_kind is not supported: {backend_kind!r}")
+    return backend_kind
+
+
+def ensure_marketplace_registration(
+    aiws_root: Path,
+    *,
+    marketplace_id: str,
+    scope_id: str,
+    backend_kind: str,
+    backend_ref: str,
+) -> dict[str, Any]:
+    registry = load_marketplace_registry(aiws_root)
+    marketplaces = registry.setdefault("marketplaces", {})
+    existing = marketplaces.get(marketplace_id)
+    normalized = {
+        "marketplace_id": marketplace_id,
+        "scope_id": scope_id,
+        "backend_kind": backend_kind,
+        "backend_ref": backend_ref,
+    }
+    if existing is None:
+        marketplaces[marketplace_id] = normalized
+        write_marketplace_registry(aiws_root, registry)
+        return normalized
+    if existing != normalized:
+        raise SkillManagerError(
+            f"marketplace_id {marketplace_id!r} is already registered with different identity metadata."
+        )
+    return existing
+
+
 def require_host_id(value: Any) -> str:
     host_id = require_non_blank_string(value, "host_id")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", host_id):
@@ -978,6 +1020,10 @@ def proposal_record_path(aiws_root: Path, proposal_id: str) -> Path:
 
 def proposal_state_root(aiws_root: Path) -> Path:
     return aiws_root / "state" / "skill-proposals"
+
+
+def marketplace_registry_path(aiws_root: Path) -> Path:
+    return aiws_root / "state" / "marketplace-registry.json"
 
 
 def require_proposal_path_under(path: Path, root: Path) -> Path:
@@ -1050,6 +1096,24 @@ def write_proposal_record(aiws_root: Path, proposal_id: str, payload: dict[str, 
     proposal_path = proposal_record_path(aiws_root, proposal_id)
     require_proposal_path_under(proposal_path, proposal_root)
     write_json_atomic(proposal_path, payload)
+
+
+def load_marketplace_registry(aiws_root: Path) -> dict[str, Any]:
+    path = marketplace_registry_path(aiws_root)
+    if not path.exists():
+        return {"marketplaces": {}}
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError(f"Marketplace registry must be a JSON object: {path}")
+    marketplaces = payload.get("marketplaces")
+    if not isinstance(marketplaces, dict):
+        raise SkillManagerError(f"Marketplace registry is invalid: {path}")
+    return payload
+
+
+def write_marketplace_registry(aiws_root: Path, payload: dict[str, Any]) -> None:
+    path = marketplace_registry_path(aiws_root)
+    write_json_atomic(path, payload)
 
 
 def remove_package_file(path: Path | None) -> None:
@@ -2188,15 +2252,26 @@ def stage_proposal(
     aiws_root: Path,
     record_id: str,
     target_scope: str,
-    target_repo: str,
+    target_repo: str | None,
     summary: str,
     rationale: str,
+    *,
+    backend_kind: str = "github",
+    backend_ref: str | None = None,
+    marketplace_id: str | None = None,
 ) -> dict[str, Any]:
     record_id = require_non_blank_string(record_id, "record_id")
-    target_scope = require_non_blank_string(target_scope, "target_scope")
-    target_repo = require_non_blank_string(target_repo, "target_repo")
     summary = require_non_blank_string(summary, "summary")
     rationale = require_non_blank_string(rationale, "rationale")
+    target = normalize_proposal_target(
+        aiws_root,
+        target_scope=target_scope,
+        target_repo=target_repo,
+        backend_kind=backend_kind,
+        backend_ref=backend_ref,
+        marketplace_id=marketplace_id,
+    )
+    target_scope = target["scope_id"]
 
     record = safely_identify_draft_record(aiws_root, record_id)
     canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
@@ -2296,7 +2371,11 @@ def stage_proposal(
             "validation_status": "passed",
             "validation_tree_digest": current_tree_digest,
             "target_scope": target_scope,
-            "target_repo": target_repo,
+            "scope_id": target["scope_id"],
+            "backend_kind": target["backend_kind"],
+            "backend_ref": target["backend_ref"],
+            "target_repo": target["target_repo"],
+            "marketplace_id": target["marketplace_id"],
             "summary": summary,
             "rationale": rationale,
             "active": record.active,
@@ -2316,7 +2395,10 @@ def stage_proposal(
                 "plugin_id": record.plugin_id,
                 "skill_id": record.skill_id,
                 "target_scope": target_scope,
-                "target_repo": target_repo,
+                "target_repo": target["target_repo"],
+                "backend_kind": target["backend_kind"],
+                "backend_ref": target["backend_ref"],
+                "marketplace_id": target["marketplace_id"],
                 "next_action": "submit_for_review",
             }
 
@@ -2455,6 +2537,45 @@ def require_target_repo(value: Any) -> str:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", target_repo):
         raise SkillManagerError("target_repo must use owner/repo format.")
     return target_repo
+
+
+def normalize_proposal_target(
+    aiws_root: Path,
+    *,
+    target_scope: str,
+    target_repo: Any,
+    backend_kind: Any,
+    backend_ref: Any,
+    marketplace_id: Any,
+) -> dict[str, Any]:
+    scope_id = require_non_blank_string(target_scope, "target_scope")
+    normalized_backend_kind = require_backend_kind(backend_kind)
+    if normalized_backend_kind == "github":
+        resolved_target_repo = require_non_blank_string(target_repo, "target_repo")
+        return {
+            "scope_id": scope_id,
+            "backend_kind": "github",
+            "backend_ref": resolved_target_repo,
+            "target_repo": resolved_target_repo,
+            "marketplace_id": None,
+        }
+
+    resolved_backend_ref = require_non_blank_string(backend_ref, "backend_ref")
+    resolved_marketplace_id = require_marketplace_id(marketplace_id)
+    ensure_marketplace_registration(
+        aiws_root,
+        marketplace_id=resolved_marketplace_id,
+        scope_id=scope_id,
+        backend_kind=normalized_backend_kind,
+        backend_ref=resolved_backend_ref,
+    )
+    return {
+        "scope_id": scope_id,
+        "backend_kind": normalized_backend_kind,
+        "backend_ref": resolved_backend_ref,
+        "target_repo": None,
+        "marketplace_id": resolved_marketplace_id,
+    }
 
 
 def git_worktree_root(aiws_root: Path, target_repo: str, proposal_id: str) -> Path:
@@ -3123,6 +3244,9 @@ def submit_pr(
 ) -> dict[str, Any]:
     proposal_id = require_non_blank_string(proposal_id, "proposal_id")
     proposal = load_proposal_record(aiws_root, proposal_id)
+    backend_kind = require_backend_kind(proposal.get("backend_kind", "github"))
+    if backend_kind != "github":
+        raise SkillManagerError(f"{backend_kind} proposal submitter is not implemented yet.")
     target_repo = require_non_blank_string(proposal.get("target_repo"), "target_repo")
     if allowed_target_repos is not None and target_repo not in set(allowed_target_repos):
         raise SkillManagerError(f"target_repo is not allowed: {target_repo}")

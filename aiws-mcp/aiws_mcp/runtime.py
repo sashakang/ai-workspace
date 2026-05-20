@@ -1351,9 +1351,12 @@ class AiwsRuntime:
         draft_id: str,
         *,
         target_scope: str,
-        target_repo: str,
+        target_repo: str | None,
         summary: str,
         rationale: str,
+        backend_kind: str = "github",
+        backend_ref: str | None = None,
+        marketplace_id: str | None = None,
     ) -> dict[str, Any]:
         return skill_manager.stage_proposal(
             self.root,
@@ -1362,6 +1365,9 @@ class AiwsRuntime:
             target_repo,
             summary,
             rationale,
+            backend_kind=backend_kind,
+            backend_ref=backend_ref,
+            marketplace_id=marketplace_id,
         )
 
     def submit_for_review(

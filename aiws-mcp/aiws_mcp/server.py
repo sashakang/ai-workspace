@@ -153,9 +153,12 @@ def create_server(root: Path | None = None):
     def stage_proposal(
         draft_id: str,
         target_scope: str,
-        target_repo: str,
+        target_repo: str | None = None,
         summary: str,
         rationale: str,
+        backend_kind: str = "github",
+        backend_ref: str | None = None,
+        marketplace_id: str | None = None,
     ) -> dict[str, Any]:
         return runtime.stage_proposal(
             draft_id,
@@ -163,6 +166,9 @@ def create_server(root: Path | None = None):
             target_repo=target_repo,
             summary=summary,
             rationale=rationale,
+            backend_kind=backend_kind,
+            backend_ref=backend_ref,
+            marketplace_id=marketplace_id,
         )
 
     @server.tool(name="aiws.skills.submit_for_review")

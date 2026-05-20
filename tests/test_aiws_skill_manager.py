@@ -1728,6 +1728,100 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(loaded.last_validation_tree_digest, current_digest)
             self.assertEqual(loaded.current_tree_digest, current_digest)
 
+    def test_stage_proposal_github_records_backend_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+
+            result = stage_proposal(
+                aiws_root,
+                record_id,
+                "Cowork shared skill",
+                "ai-workspace-skills-review",
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+            )
+
+            proposal = json.loads(Path(result["proposal_path"]).read_text())
+            self.assertEqual(proposal["scope_id"], "Cowork shared skill")
+            self.assertEqual(proposal["backend_kind"], "github")
+            self.assertEqual(proposal["backend_ref"], "ai-workspace-skills-review")
+            self.assertEqual(proposal["target_repo"], "ai-workspace-skills-review")
+            self.assertIsNone(proposal["marketplace_id"])
+
+    def test_stage_proposal_google_drive_requires_marketplace_and_registers_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+
+            result = stage_proposal(
+                aiws_root,
+                record_id,
+                "project:checkout",
+                None,
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+                marketplace_id="checkout-main",
+            )
+
+            proposal = json.loads(Path(result["proposal_path"]).read_text())
+            self.assertEqual(proposal["scope_id"], "project:checkout")
+            self.assertEqual(proposal["backend_kind"], "google_drive")
+            self.assertEqual(proposal["backend_ref"], "drive-folder-123")
+            self.assertEqual(proposal["marketplace_id"], "checkout-main")
+            self.assertIsNone(proposal["target_repo"])
+
+            registry_path = aiws_root / "state" / "marketplace-registry.json"
+            self.assertTrue(registry_path.is_file())
+            registry = json.loads(registry_path.read_text())
+            self.assertEqual(
+                registry["marketplaces"]["checkout-main"],
+                {
+                    "marketplace_id": "checkout-main",
+                    "scope_id": "project:checkout",
+                    "backend_kind": "google_drive",
+                    "backend_ref": "drive-folder-123",
+                },
+            )
+
+    def test_stage_proposal_google_drive_rejects_marketplace_identity_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+            registry_path = aiws_root / "state" / "marketplace-registry.json"
+            registry_path.parent.mkdir(parents=True, exist_ok=True)
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "marketplaces": {
+                            "checkout-main": {
+                                "marketplace_id": "checkout-main",
+                                "scope_id": "project:checkout",
+                                "backend_kind": "google_drive",
+                                "backend_ref": "drive-folder-123",
+                            }
+                        }
+                    }
+                )
+            )
+
+            with self.assertRaisesRegex(SkillManagerError, "already registered"):
+                stage_proposal(
+                    aiws_root,
+                    record_id,
+                    "unit:risk",
+                    None,
+                    "Improve meeting follow-up",
+                    "The current instructions miss owner handoffs.",
+                    backend_kind="google_drive",
+                    backend_ref="drive-folder-other",
+                    marketplace_id="checkout-main",
+                )
+
+            self.assert_no_proposals(aiws_root)
+
     def test_stage_proposal_allows_separate_target_repos_without_overwriting(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
@@ -2148,6 +2242,28 @@ class AiwsSkillManagerTests(unittest.TestCase):
             loaded = load_draft_record(aiws_root, record_id)
             self.assertIsNone(loaded.branch_name)
             self.assertIsNone(loaded.pr_url)
+
+    def test_submit_pr_rejects_non_github_backend_until_drive_submitter_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+            staged = stage_proposal(
+                aiws_root,
+                record_id,
+                "project:checkout",
+                None,
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+                marketplace_id="checkout-main",
+            )
+
+            with self.assertRaisesRegex(SkillManagerError, "google_drive.*not implemented"):
+                submit_pr(aiws_root, staged["proposal_id"], FakeProposalSubmitter())
+
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["status"], "staged")
 
     def test_submit_pr_already_submitted_proposal_returns_existing_metadata_without_submitter_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
