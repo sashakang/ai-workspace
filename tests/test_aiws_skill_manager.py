@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -56,6 +57,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     validate_skill_creator_compat,
     default_command_runner,
     GoogleDriveProposalSubmitter,
+    refresh_proposal_state,
     write_draft_file,
 )
 
@@ -220,19 +222,64 @@ class FakeGoogleDriveClient:
         self.ensure_folder_calls: list[tuple[str, str]] = []
         self.upsert_text_file_calls: list[dict[str, str]] = []
         self._folder_counter = 0
+        self._file_counter = 0
+        self._time_counter = 0
+        self.files_by_id: dict[str, dict[str, str | list[str]]] = {}
+        self.children: dict[tuple[str, str], str] = {}
+
+    def _next_timestamp(self) -> str:
+        self._time_counter += 1
+        return f"2026-05-20T00:00:{self._time_counter:02d}Z"
 
     def ensure_folder(self, parent_id: str, name: str) -> dict[str, str]:
         self.ensure_folder_calls.append((parent_id, name))
+        existing_id = self.children.get((parent_id, name))
+        if existing_id is not None:
+            existing = self.files_by_id[existing_id]
+            return {
+                "id": str(existing["id"]),
+                "name": str(existing["name"]),
+                "mimeType": str(existing["mimeType"]),
+                "webViewLink": str(existing["webViewLink"]),
+            }
         self._folder_counter += 1
         folder_id = f"folder-{self._folder_counter}"
+        metadata: dict[str, str | list[str]] = {
+            "id": folder_id,
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "webViewLink": f"https://drive.google.com/drive/folders/{folder_id}",
+            "parents": [parent_id],
+        }
+        self.files_by_id[folder_id] = metadata
+        self.children[(parent_id, name)] = folder_id
         return {
             "id": folder_id,
             "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
             "webViewLink": f"https://drive.google.com/drive/folders/{folder_id}",
         }
 
     def upsert_text_file(self, parent_id: str, name: str, content: str, mime_type: str) -> dict[str, str]:
-        file_id = f"file-{len(self.upsert_text_file_calls) + 1}"
+        existing_id = self.children.get((parent_id, name))
+        if existing_id is None:
+            self._file_counter += 1
+            file_id = f"file-{self._file_counter}"
+        else:
+            file_id = existing_id
+        modified_time = self._next_timestamp()
+        metadata: dict[str, str | list[str]] = {
+            "id": file_id,
+            "name": name,
+            "mimeType": mime_type,
+            "webViewLink": f"https://drive.google.com/file/d/{file_id}/view",
+            "parents": [parent_id],
+            "content": content,
+            "md5Checksum": hashlib.md5(content.encode("utf-8")).hexdigest(),
+            "modifiedTime": modified_time,
+        }
+        self.files_by_id[file_id] = metadata
+        self.children[(parent_id, name)] = file_id
         self.upsert_text_file_calls.append(
             {
                 "parent_id": parent_id,
@@ -246,7 +293,36 @@ class FakeGoogleDriveClient:
             "name": name,
             "mimeType": mime_type,
             "webViewLink": f"https://drive.google.com/file/d/{file_id}/view",
+            "md5Checksum": str(metadata["md5Checksum"]),
+            "modifiedTime": modified_time,
         }
+
+    def get_file(self, file_id: str) -> dict[str, str | list[str]]:
+        return dict(self.files_by_id[file_id])
+
+    def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None) -> dict[str, str | list[str]] | None:
+        file_id = self.children.get((parent_id, name))
+        if file_id is None:
+            return None
+        metadata = self.files_by_id[file_id]
+        if mime_type is not None and metadata.get("mimeType") != mime_type:
+            return None
+        return dict(metadata)
+
+    def move_file(self, file_id: str, new_parent_id: str) -> None:
+        metadata = self.files_by_id[file_id]
+        old_parents = metadata.get("parents")
+        if isinstance(old_parents, list) and old_parents:
+            self.children.pop((str(old_parents[0]), str(metadata["name"])), None)
+        metadata["parents"] = [new_parent_id]
+        self.children[(new_parent_id, str(metadata["name"]))] = file_id
+        return dict(metadata)
+
+    def overwrite_text_file(self, file_id: str, content: str) -> None:
+        metadata = self.files_by_id[file_id]
+        metadata["content"] = content
+        metadata["md5Checksum"] = hashlib.md5(content.encode("utf-8")).hexdigest()
+        metadata["modifiedTime"] = self._next_timestamp()
 
 
 class AiwsSkillManagerTests(unittest.TestCase):
@@ -2323,6 +2399,9 @@ class AiwsSkillManagerTests(unittest.TestCase):
                     ("folder-2", "proposals"),
                     ("folder-3", "in_review"),
                     ("folder-4", staged["proposal_id"]),
+                    ("folder-3", "approved"),
+                    ("folder-3", "rejected"),
+                    ("folder-3", "released"),
                 ],
             )
             self.assertEqual(
@@ -2382,6 +2461,139 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(second["proposal_folder_url"], first["proposal_folder_url"])
             self.assertEqual(second_client.ensure_folder_calls, [])
             self.assertEqual(second_client.upsert_text_file_calls, [])
+
+    def test_refresh_proposal_state_google_drive_marks_approved_pending_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+            staged = stage_proposal(
+                aiws_root,
+                record_id,
+                "project:checkout",
+                None,
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+                marketplace_id="checkout-main",
+            )
+            drive_client = FakeGoogleDriveClient()
+            submit_pr(
+                aiws_root,
+                staged["proposal_id"],
+                GoogleDriveProposalSubmitter(aiws_root=aiws_root, drive_client=drive_client),
+            )
+            proposal_before = self.proposal_payload(aiws_root, staged["proposal_id"])
+            drive_client.move_file(
+                str(proposal_before["proposal_folder_id"]),
+                str(proposal_before["approved_folder_id"]),
+            )
+
+            result = refresh_proposal_state(
+                aiws_root,
+                staged["proposal_id"],
+                drive_client=drive_client,
+            )
+
+            self.assertEqual(result["status"], "approved_pending_publish")
+            self.assertEqual(result["backend_review_state"], "approved")
+            self.assertEqual(result["proposal_id"], staged["proposal_id"])
+            self.assertEqual(result["marketplace_id"], "checkout-main")
+            self.assertIn("approved_at", result)
+            self.assertEqual(result["approved_proposed_skill_file_id"], "file-2")
+            self.assertEqual(
+                result["approved_proposed_skill_md5"],
+                hashlib.md5(drive_client.files_by_id["file-2"]["content"].encode("utf-8")).hexdigest(),
+            )
+
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["status"], "approved_pending_publish")
+            self.assertEqual(proposal["backend_review_state"], "approved")
+            self.assertEqual(proposal["approved_proposed_skill_file_id"], "file-2")
+            self.assertIn("approved_at", proposal)
+
+    def test_refresh_proposal_state_google_drive_marks_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+            staged = stage_proposal(
+                aiws_root,
+                record_id,
+                "project:checkout",
+                None,
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+                marketplace_id="checkout-main",
+            )
+            drive_client = FakeGoogleDriveClient()
+            submit_pr(
+                aiws_root,
+                staged["proposal_id"],
+                GoogleDriveProposalSubmitter(aiws_root=aiws_root, drive_client=drive_client),
+            )
+            proposal_before = self.proposal_payload(aiws_root, staged["proposal_id"])
+            drive_client.move_file(
+                str(proposal_before["proposal_folder_id"]),
+                str(proposal_before["rejected_folder_id"]),
+            )
+
+            result = refresh_proposal_state(
+                aiws_root,
+                staged["proposal_id"],
+                drive_client=drive_client,
+            )
+
+            self.assertEqual(result["status"], "rejected")
+            self.assertEqual(result["backend_review_state"], "rejected")
+            self.assertIn("rejected_at", result)
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["status"], "rejected")
+            self.assertEqual(proposal["backend_review_state"], "rejected")
+
+    def test_refresh_proposal_state_google_drive_marks_needs_reapproval_when_approved_file_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+            staged = stage_proposal(
+                aiws_root,
+                record_id,
+                "project:checkout",
+                None,
+                "Improve meeting follow-up",
+                "The current instructions miss owner handoffs.",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+                marketplace_id="checkout-main",
+            )
+            drive_client = FakeGoogleDriveClient()
+            submit_pr(
+                aiws_root,
+                staged["proposal_id"],
+                GoogleDriveProposalSubmitter(aiws_root=aiws_root, drive_client=drive_client),
+            )
+            proposal_before = self.proposal_payload(aiws_root, staged["proposal_id"])
+            drive_client.move_file(
+                str(proposal_before["proposal_folder_id"]),
+                str(proposal_before["approved_folder_id"]),
+            )
+            refresh_proposal_state(aiws_root, staged["proposal_id"], drive_client=drive_client)
+
+            drive_client.overwrite_text_file("file-2", "changed after approval")
+
+            result = refresh_proposal_state(
+                aiws_root,
+                staged["proposal_id"],
+                drive_client=drive_client,
+            )
+
+            self.assertEqual(result["status"], "needs_reapproval")
+            self.assertEqual(result["backend_review_state"], "in_review")
+            proposal = self.proposal_payload(aiws_root, staged["proposal_id"])
+            self.assertEqual(proposal["status"], "needs_reapproval")
+            self.assertEqual(proposal["backend_review_state"], "in_review")
+            self.assertEqual(drive_client.files_by_id[str(proposal["proposal_folder_id"])]["parents"], [proposal["in_review_folder_id"]])
 
     def test_submit_pr_already_submitted_proposal_returns_existing_metadata_without_submitter_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

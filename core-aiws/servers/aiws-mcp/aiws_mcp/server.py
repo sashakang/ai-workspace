@@ -175,6 +175,10 @@ def create_server(root: Path | None = None):
     def submit_for_review(proposal_id: str, allowed_target_repos: list[str] | None = None) -> dict[str, Any]:
         return runtime.submit_for_review(proposal_id, allowed_target_repos=allowed_target_repos)
 
+    @server.tool(name="aiws.skills.refresh_proposal_state")
+    def refresh_proposal_state(proposal_id: str) -> dict[str, Any]:
+        return runtime.refresh_proposal_state(proposal_id)
+
     @server.tool(name="aiws.skills.stage_change")
     def stage_change(
         skill_id: str,

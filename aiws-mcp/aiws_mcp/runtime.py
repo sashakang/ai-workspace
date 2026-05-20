@@ -1406,6 +1406,9 @@ class AiwsRuntime:
             allowed_target_repos=allowed_target_repos,
         )
 
+    def refresh_proposal_state(self, proposal_id: str) -> dict[str, Any]:
+        return skill_manager.refresh_proposal_state(self.root, proposal_id)
+
     def stage_change(
         self,
         *,

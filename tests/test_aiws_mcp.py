@@ -676,6 +676,18 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_refresh_proposal_state_delegates_to_skill_manager(self) -> None:
+        with patch.object(
+            runtime_module.skill_manager,
+            "refresh_proposal_state",
+            return_value={"status": "approved_pending_publish", "proposal_id": "skillprop_123"},
+        ) as mocked:
+            result = self.runtime.refresh_proposal_state("skillprop_123")
+
+        self.assertEqual(result["status"], "approved_pending_publish")
+        mocked.assert_called_once_with(self.root.resolve(), "skillprop_123")
+        self.assert_no_memory_or_claude_writes()
+
     def test_clean_machine_has_sop_and_aiws_improve_without_plugins(self) -> None:
         local = self.runtime.list_local_skills()
         skill_ids = {item["skill_id"] for item in local["skills"]}

@@ -3368,6 +3368,39 @@ class GoogleDriveApiClient:
             raise SkillManagerError("Google Drive file query returned invalid metadata.")
         return files[0]
 
+    def get_file(self, file_id: str) -> dict[str, Any]:
+        metadata = self.request_json(
+            "GET",
+            f"/files/{quote(require_non_blank_string(file_id, 'file_id'), safe='')}",
+            query={
+                "fields": "id,name,mimeType,webViewLink,parents,md5Checksum,modifiedTime",
+                "supportsAllDrives": "true",
+            },
+        )
+        if not isinstance(metadata, dict):
+            raise SkillManagerError("Google Drive file lookup returned invalid metadata.")
+        return metadata
+
+    def move_file(self, file_id: str, new_parent_id: str) -> dict[str, Any]:
+        metadata = self.get_file(file_id)
+        parents = metadata.get("parents")
+        remove_parents = ""
+        if isinstance(parents, list):
+            remove_parents = ",".join(str(parent) for parent in parents if str(parent).strip())
+        moved = self.request_json(
+            "PATCH",
+            f"/files/{quote(require_non_blank_string(file_id, 'file_id'), safe='')}",
+            query={
+                "addParents": require_non_blank_string(new_parent_id, "new_parent_id"),
+                "removeParents": remove_parents,
+                "supportsAllDrives": "true",
+                "fields": "id,name,mimeType,webViewLink,parents,md5Checksum,modifiedTime",
+            },
+        )
+        if not isinstance(moved, dict):
+            raise SkillManagerError("Google Drive file move returned invalid metadata.")
+        return moved
+
     def ensure_folder(self, parent_id: str, name: str) -> dict[str, Any]:
         existing = self.find_child(parent_id, name, mime_type="application/vnd.google-apps.folder")
         if existing is not None:
@@ -3557,31 +3590,221 @@ class GoogleDriveProposalSubmitter:
         proposal_folder_id = require_non_blank_string(proposal_folder.get("id"), "proposal_folder_id")
         proposal_folder_url = drive_folder_url(proposal_folder)
         submitted_at = utc_now()
+        approved_folder = require_drive_file(
+            self.drive_client.ensure_folder(
+                require_non_blank_string(proposals_folder.get("id"), "id"),
+                "approved",
+            ),
+            label="Google Drive approved folder",
+        )
+        rejected_folder = require_drive_file(
+            self.drive_client.ensure_folder(
+                require_non_blank_string(proposals_folder.get("id"), "id"),
+                "rejected",
+            ),
+            label="Google Drive rejected folder",
+        )
+        released_folder = require_drive_file(
+            self.drive_client.ensure_folder(
+                require_non_blank_string(proposals_folder.get("id"), "id"),
+                "released",
+            ),
+            label="Google Drive released folder",
+        )
         proposal_json = drive_review_packet_payload(
             payload,
             proposal_folder_id=proposal_folder_id,
             proposal_folder_url=proposal_folder_url,
             submitted_at=submitted_at,
         )
-        self.drive_client.upsert_text_file(proposal_folder_id, "base.SKILL.md", base_skill_markdown, "text/markdown")
-        self.drive_client.upsert_text_file(
-            proposal_folder_id,
-            "proposed.SKILL.md",
-            proposed_skill_markdown,
-            "text/markdown",
+        base_skill_file = require_drive_file(
+            self.drive_client.upsert_text_file(
+                proposal_folder_id,
+                "base.SKILL.md",
+                base_skill_markdown,
+                "text/markdown",
+            ),
+            label="Google Drive base skill file",
         )
-        self.drive_client.upsert_text_file(
-            proposal_folder_id,
-            "proposal.json",
-            json.dumps(proposal_json, indent=2, sort_keys=True) + "\n",
-            "application/json",
+        proposed_skill_file = require_drive_file(
+            self.drive_client.upsert_text_file(
+                proposal_folder_id,
+                "proposed.SKILL.md",
+                proposed_skill_markdown,
+                "text/markdown",
+            ),
+            label="Google Drive proposed skill file",
+        )
+        proposal_json_file = require_drive_file(
+            self.drive_client.upsert_text_file(
+                proposal_folder_id,
+                "proposal.json",
+                json.dumps(proposal_json, indent=2, sort_keys=True) + "\n",
+                "application/json",
+            ),
+            label="Google Drive proposal json file",
         )
         return {
             "status": "submitted_for_review",
             "proposal_folder_id": proposal_folder_id,
             "proposal_folder_url": proposal_folder_url,
             "backend_review_state": "in_review",
+            "plugins_folder_id": require_non_blank_string(plugins_folder.get("id"), "plugins_folder_id"),
+            "plugin_folder_id": require_non_blank_string(plugin_folder.get("id"), "plugin_folder_id"),
+            "proposals_folder_id": require_non_blank_string(proposals_folder.get("id"), "proposals_folder_id"),
+            "in_review_folder_id": require_non_blank_string(in_review_folder.get("id"), "in_review_folder_id"),
+            "approved_folder_id": require_non_blank_string(approved_folder.get("id"), "approved_folder_id"),
+            "rejected_folder_id": require_non_blank_string(rejected_folder.get("id"), "rejected_folder_id"),
+            "released_folder_id": require_non_blank_string(released_folder.get("id"), "released_folder_id"),
+            "base_skill_file_id": require_non_blank_string(base_skill_file.get("id"), "base_skill_file_id"),
+            "proposed_skill_file_id": require_non_blank_string(
+                proposed_skill_file.get("id"),
+                "proposed_skill_file_id",
+            ),
+            "proposal_json_file_id": require_non_blank_string(
+                proposal_json_file.get("id"),
+                "proposal_json_file_id",
+            ),
         }
+
+
+def proposal_state_status_label(status: str) -> str:
+    return {
+        "staged": "Staged",
+        "submitted_for_review": "Submitted for review",
+        "approved_pending_publish": "Approved pending publish",
+        "needs_reapproval": "Needs reapproval",
+        "publishing": "Publishing",
+        "released": "Released",
+        "rejected": "Rejected",
+    }.get(status, status.replace("_", " ").capitalize())
+
+
+def drive_review_state_response(proposal: dict[str, Any]) -> dict[str, Any]:
+    response = {
+        "status": require_non_blank_string(proposal.get("status"), "status"),
+        "status_label": proposal_state_status_label(require_non_blank_string(proposal.get("status"), "status")),
+        "proposal_id": proposal["proposal_id"],
+        "draft_id": proposal["draft_id"],
+        "plugin_id": proposal["plugin_id"],
+        "skill_id": proposal["skill_id"],
+        "target_scope": proposal["target_scope"],
+        "backend_kind": "google_drive",
+        "backend_ref": require_non_blank_string(proposal.get("backend_ref"), "backend_ref"),
+        "marketplace_id": require_marketplace_id(proposal.get("marketplace_id")),
+        "proposal_folder_id": require_non_blank_string(proposal.get("proposal_folder_id"), "proposal_folder_id"),
+        "proposal_folder_url": require_non_blank_string(proposal.get("proposal_folder_url"), "proposal_folder_url"),
+        "backend_review_state": require_non_blank_string(
+            proposal.get("backend_review_state") or "in_review",
+            "backend_review_state",
+        ),
+    }
+    for key in (
+        "approved_at",
+        "approved_proposed_skill_file_id",
+        "approved_proposed_skill_md5",
+        "approved_proposed_skill_modified_time",
+        "rejected_at",
+        "released_at",
+    ):
+        value = proposal.get(key)
+        if isinstance(value, str) and value.strip():
+            response[key] = value
+    return response
+
+
+def refresh_proposal_state(
+    aiws_root: Path,
+    proposal_id: str,
+    *,
+    drive_client: Any | None = None,
+) -> dict[str, Any]:
+    proposal = load_proposal_record(aiws_root, proposal_id)
+    backend_kind = require_backend_kind(proposal.get("backend_kind", "github"))
+    if backend_kind != "google_drive":
+        raise SkillManagerError(f"refresh_proposal_state is only implemented for google_drive proposals, got {backend_kind}.")
+    client = drive_client
+    if client is None:
+        token = google_drive_api_token_from_env()
+        if token is None:
+            raise SkillManagerError(
+                "Google Drive refresh requires AIWS_GOOGLE_DRIVE_TOKEN, GOOGLE_DRIVE_TOKEN, or GOOGLE_OAUTH_ACCESS_TOKEN."
+            )
+        client = GoogleDriveApiClient(token=token)
+
+    proposal_folder_id = require_non_blank_string(proposal.get("proposal_folder_id"), "proposal_folder_id")
+    proposal_folder = require_drive_file(client.get_file(proposal_folder_id), label="Google Drive proposal folder")
+    parents = proposal_folder.get("parents")
+    if not isinstance(parents, list) or not parents:
+        raise SkillManagerError("Google Drive proposal folder has no parent metadata.")
+    current_parent_id = require_non_blank_string(parents[0], "proposal_folder_parent")
+    in_review_folder_id = require_non_blank_string(proposal.get("in_review_folder_id"), "in_review_folder_id")
+    approved_folder_id = require_non_blank_string(proposal.get("approved_folder_id"), "approved_folder_id")
+    rejected_folder_id = require_non_blank_string(proposal.get("rejected_folder_id"), "rejected_folder_id")
+    released_folder_id = require_non_blank_string(proposal.get("released_folder_id"), "released_folder_id")
+
+    updated = dict(proposal)
+    updated["proposal_folder_url"] = drive_folder_url(proposal_folder)
+    now = utc_now()
+
+    if current_parent_id == approved_folder_id:
+        proposed_skill_file_id = require_non_blank_string(
+            updated.get("proposed_skill_file_id"),
+            "proposed_skill_file_id",
+        )
+        proposed_skill_file = require_drive_file(
+            client.get_file(proposed_skill_file_id),
+            label="Google Drive proposed skill file",
+        )
+        approved_md5 = require_non_blank_string(proposed_skill_file.get("md5Checksum"), "md5Checksum")
+        approved_modified_time = require_non_blank_string(
+            proposed_skill_file.get("modifiedTime"),
+            "modifiedTime",
+        )
+        previous_md5 = updated.get("approved_proposed_skill_md5")
+        if isinstance(previous_md5, str) and previous_md5 and previous_md5 != approved_md5:
+            moved_folder = require_drive_file(
+                client.move_file(proposal_folder_id, in_review_folder_id),
+                label="Google Drive proposal move",
+            )
+            updated["proposal_folder_url"] = drive_folder_url(moved_folder)
+            updated["status"] = "needs_reapproval"
+            updated["backend_review_state"] = "in_review"
+        else:
+            updated["status"] = "approved_pending_publish"
+            updated["backend_review_state"] = "approved"
+            updated["approved_at"] = str(updated.get("approved_at") or now)
+            updated["approved_proposed_skill_file_id"] = proposed_skill_file_id
+            updated["approved_proposed_skill_md5"] = approved_md5
+            updated["approved_proposed_skill_modified_time"] = approved_modified_time
+    elif current_parent_id == rejected_folder_id:
+        updated["status"] = "rejected"
+        updated["backend_review_state"] = "rejected"
+        updated["rejected_at"] = str(updated.get("rejected_at") or now)
+    elif current_parent_id == released_folder_id:
+        updated["status"] = "released"
+        updated["backend_review_state"] = "released"
+        updated["released_at"] = str(updated.get("released_at") or now)
+    elif current_parent_id == in_review_folder_id:
+        if updated.get("status") == "needs_reapproval":
+            updated["backend_review_state"] = "in_review"
+        else:
+            updated["status"] = "submitted_for_review"
+            updated["backend_review_state"] = "in_review"
+    else:
+        raise SkillManagerError("Google Drive proposal folder is not under a recognized review state folder.")
+
+    updated["updated_at"] = now
+    write_proposal_record(aiws_root, proposal_id, updated)
+    proposal_json = dict(updated)
+    proposal_json.pop("draft_path", None)
+    client.upsert_text_file(
+        proposal_folder_id,
+        "proposal.json",
+        json.dumps(proposal_json, indent=2, sort_keys=True) + "\n",
+        "application/json",
+    )
+    return drive_review_state_response(updated)
 
 
 def submit_pr(
@@ -3761,6 +3984,21 @@ def submit_pr(
                 ),
             }
         )
+        for key in (
+            "plugins_folder_id",
+            "plugin_folder_id",
+            "proposals_folder_id",
+            "in_review_folder_id",
+            "approved_folder_id",
+            "rejected_folder_id",
+            "released_folder_id",
+            "base_skill_file_id",
+            "proposed_skill_file_id",
+            "proposal_json_file_id",
+        ):
+            value = submitter_result.get(key)
+            if value is not None:
+                updated_proposal[key] = require_non_blank_string(value, key)
     else:
         raise SkillManagerError(f"{backend_kind} proposal submitter is not implemented yet.")
     write_proposal_record(aiws_root, proposal_id, updated_proposal)
