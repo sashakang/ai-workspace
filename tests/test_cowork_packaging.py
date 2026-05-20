@@ -134,7 +134,7 @@ class CoworkPackagingTests(unittest.TestCase):
                 **os.environ,
                 "CLAUDE_PLUGIN_ROOT": str(extracted_root),
                 "AIWS_UVX_ARGS_PATH": str(args_path),
-                "PATH": str(fake_bin),
+                "PATH": os.pathsep.join((str(fake_bin), os.environ.get("PATH", ""))),
             }
 
             result = subprocess.run(
@@ -152,6 +152,119 @@ class CoworkPackagingTests(unittest.TestCase):
             actual_args,
             ["--from", str(extracted_root / "servers" / "aiws-mcp"), "aiws-mcp", "serve"],
         )
+
+    def test_packaged_launcher_enables_diagnostics_without_requiring_plugin_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            package_path = build_core_aiws_package(REPO_ROOT, temp_path / "dist")
+            extracted_root = temp_path / "package"
+            fake_bin = temp_path / "bin"
+            args_path = temp_path / "uvx-args.json"
+            env_path = temp_path / "uvx-env.json"
+            plugin_data = temp_path / "plugin-data"
+            fake_bin.mkdir()
+
+            _extract_package_preserving_modes(package_path, extracted_root)
+
+            fake_uvx = fake_bin / "uvx"
+            fake_uvx.write_text(
+                f"#!{sys.executable}\n"
+                "import json\n"
+                "import os\n"
+                "import sys\n"
+                "with open(os.environ['AIWS_UVX_ARGS_PATH'], 'w', encoding='utf-8') as handle:\n"
+                "    json.dump(sys.argv[1:], handle)\n"
+                "with open(os.environ['AIWS_UVX_ENV_PATH'], 'w', encoding='utf-8') as handle:\n"
+                "    json.dump({key: os.environ.get(key) for key in ('AIWS_MCP_STATUS_PATH', 'AIWS_MCP_LOG_PATH', 'AIWS_MCP_LAUNCH_ID', 'AIWS_MCP_LAUNCH_MODE', 'AIWS_MCP_PLUGIN_VERSION')}, handle)\n"
+                "sys.stderr.write('fake uvx stderr\\n')\n",
+                encoding="utf-8",
+            )
+            fake_uvx.chmod(0o755)
+
+            launcher = extracted_root / "bin" / "aiws-mcp-launcher"
+            env = {
+                **os.environ,
+                "CLAUDE_PLUGIN_ROOT": str(extracted_root),
+                "CLAUDE_PLUGIN_DATA": str(plugin_data),
+                "AIWS_UVX_ARGS_PATH": str(args_path),
+                "AIWS_UVX_ENV_PATH": str(env_path),
+                "PATH": os.pathsep.join((str(fake_bin), os.environ.get("PATH", ""))),
+            }
+
+            result = subprocess.run(
+                [str(launcher)],
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            actual_args = json.loads(args_path.read_text(encoding="utf-8"))
+            actual_env = json.loads(env_path.read_text(encoding="utf-8"))
+            status = json.loads((plugin_data / "runtime" / "aiws-mcp-status.json").read_text(encoding="utf-8"))
+            log_text = (plugin_data / "logs" / "aiws-mcp-launcher.log").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            actual_args,
+            ["--from", str(extracted_root / "servers" / "aiws-mcp"), "aiws-mcp", "serve"],
+        )
+        self.assertEqual(actual_env["AIWS_MCP_LAUNCH_MODE"], "uvx-bundled-source")
+        self.assertTrue(actual_env["AIWS_MCP_LAUNCH_ID"])
+        self.assertEqual(actual_env["AIWS_MCP_PLUGIN_VERSION"], _plugin_manifest("core-aiws")["version"])
+        self.assertEqual(actual_env["AIWS_MCP_STATUS_PATH"], str(plugin_data / "runtime" / "aiws-mcp-status.json"))
+        self.assertEqual(actual_env["AIWS_MCP_LOG_PATH"], str(plugin_data / "logs" / "aiws-mcp-launcher.log"))
+        self.assertEqual(status["status"], "server_exited")
+        self.assertEqual(status["launch_mode"], "uvx-bundled-source")
+        self.assertEqual(status["plugin_version"], _plugin_manifest("core-aiws")["version"])
+        self.assertIn("fake uvx stderr", log_text)
+        self.assertIn("Launching uvx", log_text)
+
+    def test_packaged_launcher_logs_child_failure_without_requiring_plugin_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            package_path = build_core_aiws_package(REPO_ROOT, temp_path / "dist")
+            extracted_root = temp_path / "package"
+            fake_bin = temp_path / "bin"
+            plugin_data = temp_path / "plugin-data"
+            fake_bin.mkdir()
+
+            _extract_package_preserving_modes(package_path, extracted_root)
+
+            fake_uvx = fake_bin / "uvx"
+            fake_uvx.write_text(
+                f"#!{sys.executable}\n"
+                "import sys\n"
+                "sys.stderr.write('ImportError: boom\\n')\n"
+                "raise SystemExit(42)\n",
+                encoding="utf-8",
+            )
+            fake_uvx.chmod(0o755)
+
+            launcher = extracted_root / "bin" / "aiws-mcp-launcher"
+            env = {
+                **os.environ,
+                "CLAUDE_PLUGIN_ROOT": str(extracted_root),
+                "CLAUDE_PLUGIN_DATA": str(plugin_data),
+                "PATH": os.pathsep.join((str(fake_bin), os.environ.get("PATH", ""))),
+            }
+
+            result = subprocess.run(
+                [str(launcher)],
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            status = json.loads((plugin_data / "runtime" / "aiws-mcp-status.json").read_text(encoding="utf-8"))
+            log_text = (plugin_data / "logs" / "aiws-mcp-launcher.log").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 42)
+        self.assertEqual(status["status"], "server_exited_nonzero")
+        self.assertEqual(status["exit_code"], 42)
+        self.assertIn("ImportError: boom", log_text)
+        self.assertIn("server exited with code 42", log_text)
 
 
 def _extract_package_preserving_modes(package_path: Path, output_dir: Path) -> None:

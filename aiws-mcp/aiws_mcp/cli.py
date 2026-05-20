@@ -50,9 +50,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "serve":
-        from .server import create_server
+        from .server import create_server, record_server_started
 
         server = create_server(root=args.root)
+        record_server_started()
         server.run()
         return 0
 

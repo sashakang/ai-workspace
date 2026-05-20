@@ -1,9 +1,131 @@
 from __future__ import annotations
 
+import json
+import os
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .runtime import AiwsRuntime
+
+
+LOCAL_RUNTIME_KIND = "local-bundled-stdio"
+LOCAL_RUNTIME_TRANSPORT = "stdio"
+LOCAL_PROPOSAL_TOOL_NAMES = (
+    "aiws.skills.stage_proposal",
+    "aiws.skills.submit_for_review",
+    "aiws.skills.refresh_proposal_state",
+)
+LOCAL_TOOL_NAMES = (
+    "aiws.health.ping",
+    "aiws.runtime.info",
+    "aiws.skills.search",
+    "aiws.skills.resolve",
+    "aiws.skills.materialize",
+    "aiws.skills.list_local",
+    "aiws.skills.get",
+    "aiws.skills.discover_installed_plugins",
+    "aiws.skills.inspect_installed_skill",
+    "aiws.skills.create_or_open_draft",
+    "aiws.skills.list_draft_files",
+    "aiws.skills.read_draft_file",
+    "aiws.skills.write_draft_file",
+    "aiws.skills.delete_draft_file",
+    "aiws.skills.refresh_draft",
+    "aiws.skills.revert_draft",
+    "aiws.skills.validate_draft",
+    "aiws.skills.activate_draft",
+    "aiws.skills.deactivate_draft",
+    "aiws.skills.prepare_update_candidate",
+    "aiws.skills.review_update_conflict",
+    "aiws.skills.resolve_update_conflict",
+    "aiws.skills.stage_proposal",
+    "aiws.skills.submit_for_review",
+    "aiws.skills.refresh_proposal_state",
+    "aiws.skills.stage_change",
+    "aiws.skills.list_staged_changes",
+    "aiws.host.surfaces",
+)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _plugin_version(env: dict[str, str]) -> str | None:
+    version = env.get("AIWS_MCP_PLUGIN_VERSION")
+    if version:
+        return version
+    plugin_root = env.get("CLAUDE_PLUGIN_ROOT")
+    if not plugin_root:
+        return None
+    manifest_path = Path(plugin_root).expanduser() / ".claude-plugin" / "plugin.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    raw_version = manifest.get("version")
+    return raw_version if isinstance(raw_version, str) and raw_version else None
+
+
+def runtime_info_payload(env: dict[str, str] | None = None) -> dict[str, Any]:
+    resolved_env = dict(os.environ if env is None else env)
+    plugin_root = resolved_env.get("CLAUDE_PLUGIN_ROOT")
+    plugin_data = resolved_env.get("CLAUDE_PLUGIN_DATA")
+    declared_tools = list(LOCAL_TOOL_NAMES)
+    return {
+        "status": "ok",
+        "service": "aiws",
+        "runtime_kind": LOCAL_RUNTIME_KIND,
+        "transport": LOCAL_RUNTIME_TRANSPORT,
+        "launch_mode": resolved_env.get("AIWS_MCP_LAUNCH_MODE", "unknown"),
+        "plugin_version": _plugin_version(resolved_env),
+        "declared_tools": declared_tools,
+        "proposal_tools_declared": all(name in LOCAL_TOOL_NAMES for name in LOCAL_PROPOSAL_TOOL_NAMES),
+        "diagnostics_enabled": bool(resolved_env.get("AIWS_MCP_STATUS_PATH") or resolved_env.get("AIWS_MCP_LOG_PATH")),
+        "plugin_root_present": bool(plugin_root),
+        "plugin_data_present": bool(plugin_data),
+    }
+
+
+def health_ping_payload(env: dict[str, str] | None = None) -> dict[str, Any]:
+    payload = runtime_info_payload(env)
+    return {
+        "status": "ok",
+        "service": "aiws",
+        "runtime_kind": payload["runtime_kind"],
+        "launch_mode": payload["launch_mode"],
+    }
+
+
+def record_server_started(env: dict[str, str] | None = None) -> bool:
+    resolved_env = dict(os.environ if env is None else env)
+    status_path = resolved_env.get("AIWS_MCP_STATUS_PATH")
+    if not status_path:
+        return False
+    path = Path(status_path).expanduser()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "status": "server_started",
+            "launch_id": resolved_env.get("AIWS_MCP_LAUNCH_ID"),
+            "pid": os.getpid(),
+            "timestamp": _utc_now_iso(),
+            "launch_mode": resolved_env.get("AIWS_MCP_LAUNCH_MODE", "unknown"),
+            "plugin_version": _plugin_version(resolved_env),
+            "declared_tools": list(LOCAL_TOOL_NAMES),
+        }
+        with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            temp_name = handle.name
+        os.replace(temp_name, path)
+    except OSError:
+        return False
+    return True
 
 
 def create_server(root: Path | None = None):
@@ -14,6 +136,14 @@ def create_server(root: Path | None = None):
 
     runtime = AiwsRuntime(root=root)
     server = FastMCP("aiws")
+
+    @server.tool(name="aiws.health.ping")
+    def health_ping() -> dict[str, Any]:
+        return health_ping_payload()
+
+    @server.tool(name="aiws.runtime.info")
+    def runtime_info() -> dict[str, Any]:
+        return runtime_info_payload()
 
     @server.tool(name="aiws.skills.search")
     def search(query: str | None = None, scopes: list[str] | None = None, host_kind: str | None = None, limit: int | None = None) -> dict[str, Any]:
@@ -153,9 +283,9 @@ def create_server(root: Path | None = None):
     def stage_proposal(
         draft_id: str,
         target_scope: str,
-        target_repo: str | None = None,
         summary: str,
         rationale: str,
+        target_repo: str | None = None,
         backend_kind: str = "github",
         backend_ref: str | None = None,
         marketplace_id: str | None = None,

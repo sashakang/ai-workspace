@@ -1,14 +1,103 @@
 #!/bin/sh
 set -eu
 
-if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-  echo "AIWS MCP launcher error: CLAUDE_PLUGIN_ROOT is not set, so the bundled aiws-mcp server cannot be found." >&2
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+now_iso() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+diagnostics_enabled=0
+launch_id="$(date -u '+%Y%m%dT%H%M%SZ')-$$"
+launch_mode="uvx-bundled-source"
+plugin_version=""
+
+if [ -n "${CLAUDE_PLUGIN_DATA:-}" ]; then
+  aiws_mcp_log_path="${CLAUDE_PLUGIN_DATA}/logs/aiws-mcp-launcher.log"
+  aiws_mcp_status_path="${CLAUDE_PLUGIN_DATA}/runtime/aiws-mcp-status.json"
+  if mkdir -p "$(dirname "$aiws_mcp_log_path")" "$(dirname "$aiws_mcp_status_path")" 2>/dev/null; then
+    diagnostics_enabled=1
+    export AIWS_MCP_LOG_PATH="$aiws_mcp_log_path"
+    export AIWS_MCP_STATUS_PATH="$aiws_mcp_status_path"
+    export AIWS_MCP_LAUNCH_ID="$launch_id"
+    export AIWS_MCP_LAUNCH_MODE="$launch_mode"
+  fi
+fi
+
+log_line() {
+  if [ "$diagnostics_enabled" -ne 1 ]; then
+    return 0
+  fi
+  printf '%s %s\n' "$(now_iso)" "$*" >>"$AIWS_MCP_LOG_PATH" 2>/dev/null || true
+}
+
+write_status() {
+  if [ "$diagnostics_enabled" -ne 1 ]; then
+    return 0
+  fi
+  status_value="$1"
+  status_exit_code="${2:-}"
+  tmp_path="${AIWS_MCP_STATUS_PATH}.tmp.$$"
+  {
+    printf '{\n'
+    printf '  "diagnostics_enabled": true,\n'
+    printf '  "launch_id": "%s",\n' "$(json_escape "$launch_id")"
+    printf '  "launch_mode": "%s",\n' "$(json_escape "$launch_mode")"
+    printf '  "pid": %s,\n' "$$"
+    printf '  "plugin_root": "%s",\n' "$(json_escape "${CLAUDE_PLUGIN_ROOT:-}")"
+    printf '  "plugin_version": "%s",\n' "$(json_escape "$plugin_version")"
+    printf '  "status": "%s",\n' "$(json_escape "$status_value")"
+    printf '  "timestamp": "%s"' "$(json_escape "$(now_iso)")"
+    if [ -n "$status_exit_code" ]; then
+      printf ',\n  "exit_code": %s' "$status_exit_code"
+    fi
+    printf '\n}\n'
+  } >"$tmp_path" 2>/dev/null && mv "$tmp_path" "$AIWS_MCP_STATUS_PATH" 2>/dev/null || true
+}
+
+launcher_error() {
+  message="$1"
+  status="$2"
+  echo "$message" >&2
+  log_line "$message"
+  write_status "$status"
   exit 127
+}
+
+if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  launcher_error "AIWS MCP launcher error: CLAUDE_PLUGIN_ROOT is not set, so the bundled aiws-mcp server cannot be found." "missing_claude_plugin_root"
+fi
+
+manifest_path="${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json"
+if [ -f "$manifest_path" ]; then
+  plugin_version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest_path" | head -n 1)"
+  export AIWS_MCP_PLUGIN_VERSION="$plugin_version"
 fi
 
 if ! command -v uvx >/dev/null 2>&1; then
-  echo "AIWS MCP launcher error: uvx is required to start the bundled aiws-mcp server. Install uv from https://docs.astral.sh/uv/ and reopen Cowork." >&2
-  exit 127
+  launcher_error "AIWS MCP launcher error: uvx is required to start the bundled aiws-mcp server. Install uv from https://docs.astral.sh/uv/ and reopen Cowork." "missing_uvx"
 fi
 
-exec uvx --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve
+write_status "execing_server"
+log_line "Launching uvx --from ${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp aiws-mcp serve"
+
+set +e
+if [ "$diagnostics_enabled" -eq 1 ]; then
+  uvx --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve 2>>"$AIWS_MCP_LOG_PATH"
+else
+  uvx --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve
+fi
+exit_code=$?
+set -e
+
+if [ "$exit_code" -eq 0 ]; then
+  write_status "server_exited"
+  log_line "aiws-mcp server exited cleanly"
+else
+  write_status "server_exited_nonzero" "$exit_code"
+  log_line "aiws-mcp server exited with code $exit_code"
+fi
+
+exit "$exit_code"
