@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
 import shutil
 import tempfile
 import uuid
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -146,9 +148,11 @@ class SkillRecord:
     supported_hosts: tuple[str, ...]
     materialized: bool = False
     downloadable: bool = True
+    marketplace_id: str | None = None
+    plugin_id: str | None = None
 
     def manifest(self) -> dict[str, Any]:
-        return {
+        payload = {
             "skill_id": self.skill_id,
             "name": self.name,
             "description": self.description,
@@ -162,9 +166,14 @@ class SkillRecord:
             "integrity_hash": None,
             "scripts_supported": False,
         }
+        if self.marketplace_id is not None:
+            payload["marketplace_id"] = self.marketplace_id
+        if self.plugin_id is not None:
+            payload["plugin_id"] = self.plugin_id
+        return payload
 
     def summary(self) -> dict[str, Any]:
-        return {
+        payload = {
             "skill_id": self.skill_id,
             "name": self.name,
             "description": self.description,
@@ -175,6 +184,11 @@ class SkillRecord:
             "scripts_supported": False,
             "materialized": self.materialized,
         }
+        if self.marketplace_id is not None:
+            payload["marketplace_id"] = self.marketplace_id
+        if self.plugin_id is not None:
+            payload["plugin_id"] = self.plugin_id
+        return payload
 
 
 def utc_now_iso() -> str:
@@ -499,6 +513,80 @@ class AiwsRuntime:
             )
         return records
 
+    def drive_published_records(self) -> list[SkillRecord]:
+        registry = skill_manager.load_marketplace_registry(self.root)
+        marketplaces = registry.get("marketplaces", {})
+        if not isinstance(marketplaces, dict) or not marketplaces:
+            return []
+        token = skill_manager.google_drive_api_token(self.root, env=self.env)
+        if token is None:
+            return []
+        client = skill_manager.GoogleDriveApiClient(token=token)
+        records: list[SkillRecord] = []
+        for marketplace_id in sorted(marketplaces):
+            marketplace = marketplaces[marketplace_id]
+            if not isinstance(marketplace, dict):
+                continue
+            if marketplace.get("backend_kind") != "google_drive":
+                continue
+            backend_ref = marketplace.get("backend_ref")
+            scope_id = marketplace.get("scope_id")
+            if not isinstance(backend_ref, str) or not backend_ref.strip():
+                continue
+            if not isinstance(scope_id, str) or not scope_id.strip():
+                continue
+            plugins_folder = client.find_child(
+                backend_ref.strip(),
+                "plugins",
+                mime_type="application/vnd.google-apps.folder",
+            )
+            if plugins_folder is None:
+                continue
+            plugin_folders = client.list_children(
+                str(plugins_folder["id"]),
+                mime_type="application/vnd.google-apps.folder",
+            )
+            for plugin_folder in plugin_folders:
+                plugin_id = plugin_folder.get("name")
+                if not isinstance(plugin_id, str) or not plugin_id:
+                    continue
+                index_payload = skill_manager.read_drive_json_file(client, str(plugin_folder["id"]), "index.json")
+                if index_payload is None:
+                    continue
+                current_version = index_payload.get("current_version")
+                package_file_id = index_payload.get("package_file_id")
+                if not isinstance(current_version, str) or not current_version.strip():
+                    continue
+                if not isinstance(package_file_id, str) or not package_file_id.strip():
+                    continue
+                package_bytes = client.download_file_bytes(package_file_id.strip())
+                with zipfile.ZipFile(io.BytesIO(package_bytes)) as package:
+                    for name in sorted(package.namelist()):
+                        if not name.startswith("skills/") or not name.endswith("/SKILL.md"):
+                            continue
+                        parts = Path(name).parts
+                        if len(parts) != 3:
+                            continue
+                        skill_id = parts[1]
+                        content = package.read(name).decode("utf-8")
+                        metadata = validate_skill_content(content, skill_id)
+                        records.append(
+                            SkillRecord(
+                                skill_id=skill_id,
+                                name=metadata["name"],
+                                description=metadata["description"],
+                                scope=scope_id.strip(),
+                                version=current_version.strip(),
+                                source=f"google-drive:{marketplace_id}:{plugin_id}:{package_file_id.strip()}",
+                                root=None,
+                                entrypoint_content=content,
+                                supported_hosts=tuple(sorted(HOST_KINDS)),
+                                marketplace_id=marketplace_id,
+                                plugin_id=plugin_id,
+                            )
+                        )
+        return records
+
     def materialized_records(self) -> list[SkillRecord]:
         records: list[SkillRecord] = []
         for skill_root in sorted((self.root / "hosts").glob("*/shared-cache/skills/*/*/*")):
@@ -545,6 +633,7 @@ class AiwsRuntime:
             *self.personal_records(),
             *materialized,
             *self.remote_fixture_records(),
+            *self.drive_published_records(),
         ]
 
     def search_skills(
@@ -603,7 +692,7 @@ class AiwsRuntime:
         for record in records:
             key = (record.scope, record.version)
             existing = unique.get(key)
-            if existing is None or existing.materialized:
+            if existing is None or (record.materialized and not existing.materialized):
                 unique[key] = record
         records = list(unique.values())
         if len(records) > 1 and not (scope or version):
@@ -657,6 +746,41 @@ class AiwsRuntime:
             if path.is_file()
         ]
 
+    def _materialize_google_drive_skill(self, record: SkillRecord, target_root: Path) -> None:
+        parts = record.source.split(":")
+        if len(parts) != 4 or parts[0] != "google-drive":
+            raise ValueError(f"Unsupported Google Drive artifact ref: {record.source}")
+        _prefix, _marketplace_id, _plugin_id, package_file_id = parts
+        token = skill_manager.google_drive_api_token(self.root, env=self.env)
+        if token is None:
+            raise ValueError("Google Drive credentials are not configured for package download.")
+        client = skill_manager.GoogleDriveApiClient(token=token)
+        package_bytes = client.download_file_bytes(package_file_id)
+        skill_prefix = f"skills/{record.skill_id}/"
+        if target_root.exists():
+            shutil.rmtree(target_root)
+        ensure_dir(target_root)
+        extracted = False
+        with zipfile.ZipFile(io.BytesIO(package_bytes)) as package:
+            for info in package.infolist():
+                name = info.filename
+                if not name.startswith(skill_prefix) or name.endswith("/"):
+                    continue
+                relative = name.removeprefix(skill_prefix)
+                if not relative or relative.startswith("/") or ".." in Path(relative).parts:
+                    raise ValueError(f"Unsafe Google Drive package entry: {name}")
+                destination = target_root / relative
+                ensure_dir(destination.parent)
+                with package.open(info) as source, destination.open("wb") as handle:
+                    shutil.copyfileobj(source, handle)
+                extracted = True
+        if not extracted:
+            raise ValueError(f"Google Drive package does not contain skills/{record.skill_id}/")
+        entrypoint = target_root / "SKILL.md"
+        if not entrypoint.is_file():
+            raise ValueError(f"Google Drive package does not contain skills/{record.skill_id}/SKILL.md")
+        validate_skill_content(entrypoint.read_text(), record.skill_id)
+
     def materialize_skill(
         self,
         *,
@@ -680,6 +804,8 @@ class AiwsRuntime:
 
         if record.root is not None:
             safe_copytree(record.root, target_root)
+        elif record.source.startswith("google-drive:"):
+            self._materialize_google_drive_skill(record, target_root)
         else:
             if target_root.exists():
                 shutil.rmtree(target_root)

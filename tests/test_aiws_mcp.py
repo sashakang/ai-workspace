@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+import io
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,6 +20,40 @@ if AIWS_MCP_PYTHONPATH not in sys.path:
 
 from aiws_mcp.runtime import AiwsRuntime, SkillValidationError  # noqa: E402
 import aiws_mcp.runtime as runtime_module  # noqa: E402
+
+
+class FakeRuntimeGoogleDriveClient:
+    def __init__(self, package_bytes: bytes) -> None:
+        self.package_bytes = package_bytes
+
+    def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None):
+        if parent_id == "drive-root-1" and name == "plugins":
+            return {"id": "plugins-folder", "name": "plugins", "mimeType": "application/vnd.google-apps.folder"}
+        if parent_id == "plugin-folder-1" and name == "index.json":
+            return {"id": "index-file-1", "name": "index.json", "mimeType": "application/json"}
+        return None
+
+    def list_children(self, parent_id: str, *, mime_type: str | None = None):
+        if parent_id == "plugins-folder":
+            return [{"id": "plugin-folder-1", "name": "example-plugin", "mimeType": "application/vnd.google-apps.folder"}]
+        return []
+
+    def read_text_file(self, file_id: str) -> str:
+        if file_id == "index-file-1":
+            return json.dumps(
+                {
+                    "plugin_id": "example-plugin",
+                    "marketplace_id": "checkout-main-real",
+                    "current_version": "1.0.1",
+                    "package_file_id": "package-file-1",
+                }
+            )
+        raise AssertionError(f"Unexpected read_text_file: {file_id}")
+
+    def download_file_bytes(self, file_id: str) -> bytes:
+        if file_id != "package-file-1":
+            raise AssertionError(f"Unexpected download_file_bytes: {file_id}")
+        return self.package_bytes
 
 
 class AiwsMcpSkillTests(unittest.TestCase):
@@ -699,6 +734,60 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(result["status"], "released")
         mocked.assert_called_once_with(self.root.resolve(), "skillprop_123")
         self.assert_no_memory_or_claude_writes()
+
+    def test_materialize_skill_from_google_drive_published_package(self) -> None:
+        package_buffer = io.BytesIO()
+        with zipfile.ZipFile(package_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.writestr(
+                "skills/meeting-followup/SKILL.md",
+                "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n",
+            )
+            package.writestr("skills/meeting-followup/references/notes.md", "Reference content.\n")
+        registry_path = self.root / "state" / "marketplace-registry.json"
+        registry_path.parent.mkdir(parents=True, exist_ok=True)
+        registry_path.write_text(
+            json.dumps(
+                {
+                    "marketplaces": {
+                        "checkout-main-real": {
+                            "marketplace_id": "checkout-main-real",
+                            "scope_id": "project:checkout",
+                            "backend_kind": "google_drive",
+                            "backend_ref": "drive-root-1",
+                        }
+                    }
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=FakeRuntimeGoogleDriveClient(package_buffer.getvalue()),
+            ),
+        ):
+            resolved = self.runtime.resolve_skill("meeting-followup", scope="project:checkout", host_kind="codex")
+            self.assertEqual(resolved["status"], "ok")
+            self.assertEqual(resolved["manifest"]["marketplace_id"], "checkout-main-real")
+            self.assertEqual(resolved["manifest"]["plugin_id"], "example-plugin")
+
+            result = self.runtime.materialize_skill(
+                skill_id="meeting-followup",
+                host_kind="codex",
+                scope="project:checkout",
+            )
+
+        self.assertEqual(result["status"], "materialized")
+        cache_path = Path(result["cache_path"])
+        self.assertTrue((cache_path / "SKILL.md").is_file())
+        self.assertTrue((cache_path / "references" / "notes.md").is_file())
+        self.assertEqual(result["manifest"]["marketplace_id"], "checkout-main-real")
+        self.assertEqual(result["manifest"]["plugin_id"], "example-plugin")
 
     def test_cowork_runtime_start_google_drive_oauth_delegates_to_skill_manager(self) -> None:
         with patch.object(

@@ -3920,6 +3920,36 @@ class GoogleDriveApiClient:
             raise SkillManagerError("Google Drive file query returned invalid metadata.")
         return files[0]
 
+    def list_children(self, parent_id: str, *, mime_type: str | None = None) -> list[dict[str, Any]]:
+        query_parts = [
+            f"{drive_query_literal(parent_id)} in parents",
+            "trashed = false",
+        ]
+        if mime_type is not None:
+            query_parts.append(f"mimeType = {drive_query_literal(mime_type)}")
+        response = self.request_json(
+            "GET",
+            "/files",
+            query={
+                "q": " and ".join(query_parts),
+                "fields": "files(id,name,mimeType,webViewLink,parents)",
+                "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+                "pageSize": "1000",
+            },
+        )
+        if not isinstance(response, dict):
+            raise SkillManagerError("Google Drive file query returned invalid metadata.")
+        files = response.get("files")
+        if not isinstance(files, list):
+            raise SkillManagerError("Google Drive file query returned invalid metadata.")
+        normalized: list[dict[str, Any]] = []
+        for item in files:
+            if not isinstance(item, dict):
+                raise SkillManagerError("Google Drive file query returned invalid metadata.")
+            normalized.append(item)
+        return normalized
+
     def get_file(self, file_id: str) -> dict[str, Any]:
         metadata = self.request_json(
             "GET",
@@ -4028,6 +4058,16 @@ class GoogleDriveApiClient:
             return raw.decode("utf-8")
         except UnicodeDecodeError as exc:
             raise SkillManagerError(f"Google Drive file is not valid UTF-8 text: {file_id}") from exc
+
+    def download_file_bytes(self, file_id: str) -> bytes:
+        raw = self.request_bytes(
+            "GET",
+            f"/files/{quote(require_non_blank_string(file_id, 'file_id'), safe='')}",
+            query={"alt": "media", "supportsAllDrives": "true"},
+        )
+        if raw is None:
+            raise SkillManagerError(f"Google Drive file is missing: {file_id}")
+        return raw
 
 
 def require_drive_file(value: Any, *, label: str) -> dict[str, Any]:
