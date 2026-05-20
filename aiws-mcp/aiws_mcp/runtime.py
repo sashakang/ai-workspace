@@ -1426,6 +1426,26 @@ class AiwsRuntime:
             env=self.env,
         )
 
+    def configure_google_drive_oauth_client(
+        self,
+        *,
+        account: str = "default",
+        client_id: str,
+        client_secret: str | None = None,
+        redirect_uri: str | None = None,
+        token_uri: str | None = None,
+        scopes: list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        return skill_manager.configure_google_drive_oauth_client(
+            self.root,
+            account=account,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            token_uri=token_uri,
+            scopes=scopes,
+        )
+
     def finish_google_drive_oauth(
         self,
         auth_session_id: str,

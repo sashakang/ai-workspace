@@ -711,6 +711,30 @@ class AiwsMcpSkillTests(unittest.TestCase):
         )
         self.assert_no_memory_or_claude_writes()
 
+    def test_cowork_runtime_configure_google_drive_oauth_client_delegates_to_skill_manager(self) -> None:
+        with patch.object(
+            runtime_module.skill_manager,
+            "configure_google_drive_oauth_client",
+            return_value={"status": "oauth_client_configured", "oauth_client_path": "/tmp/default.oauth-client.json"},
+        ) as mocked:
+            result = self.runtime.configure_google_drive_oauth_client(
+                account="default",
+                client_id="client-id",
+                client_secret="client-secret",
+            )
+
+        self.assertEqual(result["status"], "oauth_client_configured")
+        mocked.assert_called_once_with(
+            self.root.resolve(),
+            account="default",
+            client_id="client-id",
+            client_secret="client-secret",
+            redirect_uri=None,
+            token_uri=None,
+            scopes=None,
+        )
+        self.assert_no_memory_or_claude_writes()
+
     def test_cowork_runtime_finish_google_drive_oauth_delegates_to_skill_manager(self) -> None:
         with patch.object(
             runtime_module.skill_manager,

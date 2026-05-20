@@ -2980,6 +2980,41 @@ def persist_google_drive_oauth_client(
     return path
 
 
+def configure_google_drive_oauth_client(
+    aiws_root: Path,
+    *,
+    account: str = "default",
+    client_id: str,
+    client_secret: str | None = None,
+    redirect_uri: str | None = None,
+    token_uri: str | None = None,
+    scopes: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    resolved_account = require_non_blank_string(account, "account")
+    resolved_redirect_uri = redirect_uri or google_drive_oauth_redirect_uri()
+    resolved_token_uri = (token_uri or "https://oauth2.googleapis.com/token").strip()
+    resolved_scopes = [require_non_blank_string(scope, "scope") for scope in (scopes or google_drive_oauth_scopes())]
+    client_path = persist_google_drive_oauth_client(
+        aiws_root,
+        account=resolved_account,
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=resolved_redirect_uri,
+        token_uri=resolved_token_uri,
+        scopes=resolved_scopes,
+    )
+    return {
+        "status": "oauth_client_configured",
+        "account": resolved_account,
+        "oauth_client_path": str(client_path),
+        "client_id": require_non_blank_string(client_id, "client_id"),
+        "redirect_uri": require_non_blank_string(resolved_redirect_uri, "redirect_uri"),
+        "token_uri": require_non_blank_string(resolved_token_uri, "token_uri"),
+        "scopes": resolved_scopes,
+        "config_source": "per_user",
+    }
+
+
 def load_google_drive_credentials(aiws_root: Path, env: dict[str, str] | None = None) -> tuple[Path, dict[str, Any]] | None:
     values = env or os.environ
     explicit_path = values.get("AIWS_GOOGLE_DRIVE_CREDENTIALS_FILE")
@@ -3163,7 +3198,8 @@ def start_google_drive_oauth(
     if not isinstance(resolved_client_id, str) or not resolved_client_id.strip():
         raise SkillManagerError(
             "Google Drive OAuth start requires either an explicit client_id, a stored per-user OAuth client config, "
-            "or a bundled default OAuth client config."
+            "or a bundled default OAuth client config. Configure one with "
+            "aiws.google_drive.configure_oauth_client if needed."
         )
     resolved_client_secret = client_secret
     if resolved_client_secret is None and isinstance(stored_client.get("client_secret"), str):

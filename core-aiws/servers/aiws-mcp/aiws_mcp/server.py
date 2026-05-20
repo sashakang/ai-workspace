@@ -161,6 +161,24 @@ def create_server(root: Path | None = None):
             redirect_uri=redirect_uri,
         )
 
+    @server.tool(name="aiws.google_drive.configure_oauth_client")
+    def configure_google_drive_oauth_client(
+        account: str = "default",
+        client_id: str = "",
+        client_secret: str | None = None,
+        redirect_uri: str | None = None,
+        token_uri: str | None = None,
+        scopes: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return runtime.configure_google_drive_oauth_client(
+            account=account,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            token_uri=token_uri,
+            scopes=scopes,
+        )
+
     @server.tool(name="aiws.google_drive.finish_oauth")
     def finish_google_drive_oauth(
         auth_session_id: str,

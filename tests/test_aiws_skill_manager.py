@@ -56,6 +56,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     validate_mcp_config,
     validate_skill_creator_compat,
     default_command_runner,
+    configure_google_drive_oauth_client,
     finish_google_drive_oauth,
     GoogleDriveProposalSubmitter,
     google_drive_api_token,
@@ -2062,6 +2063,41 @@ class AiwsSkillManagerTests(unittest.TestCase):
             client_payload = json.loads(google_drive_oauth_client_path(aiws_root, "default").read_text())
             self.assertEqual(client_payload["client_id"], "bundled-client-id.apps.googleusercontent.com")
             self.assertEqual(client_payload["client_secret"], "bundled-client-secret")
+
+    def test_configure_google_drive_oauth_client_persists_client_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+
+            result = configure_google_drive_oauth_client(
+                aiws_root,
+                account="default",
+                client_id="configured-client-id.apps.googleusercontent.com",
+                client_secret="configured-client-secret",
+            )
+
+            self.assertEqual(result["status"], "oauth_client_configured")
+            self.assertEqual(result["account"], "default")
+            self.assertEqual(result["config_source"], "per_user")
+            stored_path = google_drive_oauth_client_path(aiws_root, "default")
+            self.assertEqual(result["oauth_client_path"], str(stored_path))
+            stored = json.loads(stored_path.read_text())
+            self.assertEqual(stored["client_id"], "configured-client-id.apps.googleusercontent.com")
+            self.assertEqual(stored["client_secret"], "configured-client-secret")
+
+    def test_start_google_drive_oauth_uses_preconfigured_per_user_client_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            configure_google_drive_oauth_client(
+                aiws_root,
+                account="default",
+                client_id="configured-client-id.apps.googleusercontent.com",
+                client_secret="configured-client-secret",
+            )
+
+            result = start_google_drive_oauth(aiws_root)
+
+            self.assertEqual(result["status"], "authorization_pending")
+            self.assertIn("configured-client-id.apps.googleusercontent.com", result["auth_url"])
 
     def test_finish_google_drive_oauth_exchanges_code_and_writes_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
