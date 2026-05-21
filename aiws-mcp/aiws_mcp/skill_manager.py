@@ -1202,6 +1202,25 @@ def create_or_open_draft(
             or existing.origin_repo != origin_repo
         ):
             raise SkillManagerError(f"Draft record {record_id} does not match requested draft identity.")
+        source_mismatches = {
+            field: {"existing": existing_value, "requested": requested_value}
+            for field, existing_value, requested_value in (
+                ("origin_marketplace", existing.origin_marketplace, origin_marketplace),
+                ("origin_ref", existing.origin_ref, origin_ref),
+                ("base_version", existing.base_version, base_version),
+                ("base_commit", existing.base_commit, base_commit),
+            )
+            if existing_value != requested_value
+        }
+        if source_mismatches:
+            mismatch_summary = ", ".join(
+                f"{field} existing={values['existing']!r} requested={values['requested']!r}"
+                for field, values in source_mismatches.items()
+            )
+            raise SkillManagerError(
+                f"Existing draft {record_id} has a different source identity ({mismatch_summary}). "
+                "Revert the existing draft or use a distinct target_repo before opening a new draft."
+            )
         existing_draft_path = require_path_under(Path(existing.draft_path), plugins_root, label="Draft path")
         recorded_draft_path = require_path_under(
             draft_worktree_path(aiws_root, existing.origin_marketplace, existing.plugin_id, existing.origin_repo),

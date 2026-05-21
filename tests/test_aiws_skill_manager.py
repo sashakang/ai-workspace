@@ -1672,9 +1672,9 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertEqual(reopened.last_validation_status, "failed")
             self.assertIsNone(reopened.last_validation_tree_digest)
             self.assertTrue(reopened.modified)
-            self.assertTrue((Path(reopened.draft_path) / "plugin.yaml").is_file())
+            self.assertTrue((Path(record.draft_path) / "plugin.yaml").is_file())
 
-    def test_create_or_open_draft_reopens_dirty_draft_when_source_marketplace_slug_changes(self) -> None:
+    def test_create_or_open_draft_rejects_existing_draft_when_source_identity_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)
             aiws_root = temp_root / ".aiws"
@@ -1698,24 +1698,55 @@ class AiwsSkillManagerTests(unittest.TestCase):
             with self.assertRaisesRegex(SkillManagerError, "outside the managed skill folder"):
                 validate_draft(aiws_root, record_id)
 
-            reopened = create_or_open_draft(
+            with self.assertRaisesRegex(SkillManagerError, "different source identity"):
+                create_or_open_draft(
+                    aiws_root,
+                    source_plugin_root=plugin_root,
+                    plugin_id="example-plugin",
+                    skill_id="meeting-followup",
+                    origin_marketplace="cowork-upload",
+                    origin_repo=origin_repo,
+                    origin_ref="master",
+                    base_version="1.0.0",
+                    base_commit="abc123",
+                )
+
+            self.assertTrue((Path(record.draft_path) / "plugin.yaml").is_file())
+
+    def test_create_or_open_draft_rejects_stale_google_drive_draft_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            aiws_root = temp_root / ".aiws"
+            plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+            self.write_skill(plugin_root, "meeting-followup")
+            record = create_or_open_draft(
                 aiws_root,
                 source_plugin_root=plugin_root,
                 plugin_id="example-plugin",
                 skill_id="meeting-followup",
-                origin_marketplace="cowork-upload",
-                origin_repo=origin_repo,
-                origin_ref="master",
+                origin_marketplace="checkout-main",
+                origin_repo="checkout-main",
+                origin_ref="cowork-upload",
                 base_version="1.0.0",
-                base_commit="abc123",
+                base_commit="uploaded",
             )
+            (Path(record.draft_path) / "plugin.yaml").write_text("name: test-only\n")
 
-            self.assertEqual(Path(reopened.draft_path), Path(record.draft_path))
-            self.assertEqual(reopened.origin_marketplace, "rpm")
-            self.assertEqual(reopened.last_validation_status, "failed")
-            self.assertIsNone(reopened.last_validation_tree_digest)
-            self.assertTrue(reopened.modified)
-            self.assertTrue((Path(reopened.draft_path) / "plugin.yaml").is_file())
+            with self.assertRaisesRegex(
+                SkillManagerError,
+                "origin_ref existing='cowork-upload' requested='google-drive'",
+            ):
+                create_or_open_draft(
+                    aiws_root,
+                    source_plugin_root=plugin_root,
+                    plugin_id="example-plugin",
+                    skill_id="meeting-followup",
+                    origin_marketplace="checkout-main",
+                    origin_repo="checkout-main",
+                    origin_ref="google-drive",
+                    base_version="1.0.0",
+                    base_commit="google-drive",
+                )
 
     def test_create_or_open_draft_rejects_tampered_existing_record_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
