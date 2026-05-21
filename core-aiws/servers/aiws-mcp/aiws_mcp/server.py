@@ -24,6 +24,9 @@ LOCAL_TOOL_NAMES = (
     "aiws.google_drive.start_oauth",
     "aiws.google_drive.configure_oauth_client",
     "aiws.google_drive.finish_oauth",
+    "aiws.marketplaces.list",
+    "aiws.marketplaces.register",
+    "aiws.marketplaces.remove",
     "aiws.skills.search",
     "aiws.skills.resolve",
     "aiws.skills.materialize",
@@ -51,6 +54,7 @@ LOCAL_TOOL_NAMES = (
     "aiws.skills.stage_change",
     "aiws.skills.list_staged_changes",
     "aiws.host.surfaces",
+    "aiws.host.install",
 )
 
 
@@ -193,6 +197,30 @@ def create_server(root: Path | None = None):
             redirected_url=redirected_url,
             authorization_code=authorization_code,
         )
+
+    @server.tool(name="aiws.marketplaces.list")
+    def list_marketplaces(scope_id: str | None = None, backend_kind: str | None = None) -> dict[str, Any]:
+        return runtime.list_marketplaces(scope_id=scope_id, backend_kind=backend_kind)
+
+    @server.tool(name="aiws.marketplaces.register")
+    def register_marketplace(
+        marketplace_id: str,
+        scope_id: str,
+        backend_kind: str,
+        backend_ref: str,
+        replace: bool = False,
+    ) -> dict[str, Any]:
+        return runtime.register_marketplace(
+            marketplace_id=marketplace_id,
+            scope_id=scope_id,
+            backend_kind=backend_kind,
+            backend_ref=backend_ref,
+            replace=replace,
+        )
+
+    @server.tool(name="aiws.marketplaces.remove")
+    def remove_marketplace(marketplace_id: str) -> dict[str, Any]:
+        return runtime.remove_marketplace(marketplace_id=marketplace_id)
 
     @server.tool(name="aiws.skills.search")
     def search(query: str | None = None, scopes: list[str] | None = None, host_kind: str | None = None, limit: int | None = None) -> dict[str, Any]:
@@ -396,6 +424,10 @@ def create_server(root: Path | None = None):
     @server.tool(name="aiws.host.surfaces")
     def host_surfaces(host_kind: str | None = None, host_id: str | None = None) -> dict[str, Any]:
         return runtime.host_surfaces(host_kind=host_kind, host_id=host_id)
+
+    @server.tool(name="aiws.host.install")
+    def host_install(host_kind: str, host_id: str | None = None, dry_run: bool = False) -> dict[str, Any]:
+        return runtime.install_host(host_kind=host_kind, host_id=host_id, dry_run=dry_run)
 
     @server.resource("aiws://protocols/sop")
     def sop_resource() -> str:

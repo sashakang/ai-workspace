@@ -68,9 +68,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.tempdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tempdir.name) / ".aiws"
         self.claude_home = Path(self.tempdir.name) / ".claude"
+        self.cowork_home = Path(self.tempdir.name) / ".cowork"
         self.codex_home = Path(self.tempdir.name) / ".codex"
         self.env = {
             "CLAUDE_HOME": str(self.claude_home),
+            "COWORK_HOME": str(self.cowork_home),
             "CODEX_HOME": str(self.codex_home),
         }
         self.runtime = AiwsRuntime(root=self.root, env=self.env)
@@ -1100,6 +1102,47 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertTrue((codex_adapter / "skills" / "local-review" / "SKILL.md").exists())
         self.assertTrue((codex_adapter / "aiws-codex-export.json").exists())
 
+    def test_list_register_remove_marketplaces_round_trip(self) -> None:
+        registered = self.runtime.register_marketplace(
+            marketplace_id="checkout-main",
+            scope_id="project:checkout",
+            backend_kind="google_drive",
+            backend_ref="drive-folder-123",
+        )
+
+        listed = self.runtime.list_marketplaces(scope_id="project:checkout", backend_kind="google_drive")
+        removed = self.runtime.remove_marketplace(marketplace_id="checkout-main")
+        missing = self.runtime.remove_marketplace(marketplace_id="checkout-main")
+
+        self.assertEqual(registered["status"], "registered")
+        self.assertEqual(registered["marketplace"]["marketplace_id"], "checkout-main")
+        self.assertEqual(listed["count"], 1)
+        self.assertEqual(listed["marketplaces"][0]["backend_ref"], "drive-folder-123")
+        self.assertEqual(removed["status"], "removed")
+        self.assertEqual(missing["status"], "not_found")
+
+    def test_install_host_cowork_prepares_package_handoff_from_materialized_adapter(self) -> None:
+        self.write_personal_skill("local-review", "Review local work.")
+        (self.cowork_home / "packages").mkdir(parents=True)
+
+        materialized = self.runtime.materialize_skill(skill_id="local-review", host_kind="cowork")
+        result = self.runtime.install_host(host_kind="cowork")
+
+        package_path = Path(result["package_path"])
+        copied_package_path = Path(result["copied_package_path"])
+        adapter_plugin = Path(materialized["adapter_path"]) / "aiws-generated-plugin"
+
+        self.assertEqual(result["status"], "handoff_prepared")
+        self.assertTrue(result["requires_cowork_confirmation"])
+        self.assertFalse(result["requires_manual_upload"])
+        self.assertEqual(copied_package_path.parent.resolve(), (self.cowork_home / "packages").resolve())
+        self.assertTrue(package_path.is_file())
+        self.assertEqual(package_path.read_bytes(), copied_package_path.read_bytes())
+        with zipfile.ZipFile(package_path) as package:
+            self.assertIn(".claude-plugin/plugin.json", package.namelist())
+            self.assertIn("skills/local-review/SKILL.md", package.namelist())
+        self.assertTrue((adapter_plugin / ".claude-plugin" / "plugin.json").exists())
+
     def test_install_host_codex_copies_materialized_adapter_skill(self) -> None:
         self.materialize_codex_skill()
 
@@ -1592,7 +1635,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(surfaces_payload["host_kind"], "codex")
         self.assertIn("evidence_surfaces", surfaces_payload)
 
-        failed = subprocess.run(
+        cowork = subprocess.run(
             [
                 sys.executable,
                 "-m",
@@ -1602,13 +1645,35 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 "install-host",
                 "--host-kind",
                 "cowork",
+                "--config-root",
+                str(self.cowork_home),
+                "--dry-run",
+            ],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        cowork_payload = json.loads(cowork.stdout)
+        self.assertEqual(cowork_payload["status"], "no_skills")
+
+        failed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "aiws_mcp",
+                "--root",
+                str(self.root),
+                "install-host",
+                "--host-kind",
+                "claude-code",
             ],
             env=env,
             text=True,
             capture_output=True,
         )
         self.assertNotEqual(failed.returncode, 0)
-        self.assertIn("supports only host_kind='codex'", failed.stderr)
+        self.assertIn("supports only host_kind='codex' or host_kind='cowork'", failed.stderr)
 
     def test_stage_change_is_immutable_and_local(self) -> None:
         proposal = self.runtime.stage_change(

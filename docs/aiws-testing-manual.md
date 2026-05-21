@@ -1435,10 +1435,73 @@ proposal_id: skillprop_e42f97a2091e4e4087d9221d3560775a
 target_repo: sashakang/aiws-skill-tests
 submit_for_review available at stage: yes
 ```
-GitHub App secrets configured: yes
-workflow conclusion: success
-maintainer reported release loop result: pass
+
+## Scenario CW-15: Google Drive Marketplace Review, Publish, And Materialize
+
+Purpose: confirm that a Drive-backed marketplace works end to end in Cowork from proposal staging through published-skill materialization.
+
+Prerequisites:
+
+```text
+core-aiws updated through the Google Drive slices
+Google OAuth client configured once with aiws.google_drive.configure_oauth_client
+Google Drive OAuth completed with aiws.google_drive.start_oauth and aiws.google_drive.finish_oauth
+real marketplace root folder available in Google Drive
+fresh marketplace_id bound to that real folder id
 ```
+
+Flow:
+
+```text
+aiws.skills.stage_proposal
+aiws.skills.submit_for_review
+aiws.skills.refresh_proposal_state
+move proposal folder from in_review to approved in Google Drive
+aiws.skills.refresh_proposal_state
+aiws.skills.publish_approved_proposal
+aiws.skills.refresh_proposal_state
+aiws.skills.resolve
+aiws.skills.materialize
+```
+
+Expected result:
+
+```text
+stage status: staged
+submit status: submitted_for_review
+refresh in review: submitted_for_review / backend_review_state=in_review
+refresh after approval move: approved_pending_publish
+publish status: released
+refresh after release: released with published_version and file ids
+resolve status: ok
+materialize status: materialized
+```
+
+Latest live result, 2026-05-21:
+
+```text
+status: PASS
+core-aiws version: 0.3.30
+marketplace_id: checkout-main-real
+plugin_id: aiws-productivity
+proposal_id: skillprop_fb4548f0a93141ad8179aac85361d2c0
+published_version: 0.2.3
+package_file_id: 1CWT5PAonEAy_-1dg8pJ8wzumdnoOC7iH
+release_file_id: 1ueDE7SggwYlGKomr3YMuXU_YB8vJmVP_
+index_file_id: 17v86ygwRxc6STbI6_5Jw76dQSr3wx3e7
+integrity_hash: sha256:5b5268b5bd716b81f74f1f8ba22311e8b88bf24a460f73b23f27556e4beab532
+```
+
+Follow-up validation after this pass:
+
+```text
+aiws.marketplaces.list
+aiws.marketplaces.register
+aiws.marketplaces.remove
+aiws.host.install with host_kind=cowork
+```
+
+These follow-up tools exist to keep Drive marketplace bindings repairable and to prepare Cowork package handoff from the materialized adapter cache without writing directly into ~/.cowork/plugins.
 
 Marketplace sync verification, 2026-05-17:
 

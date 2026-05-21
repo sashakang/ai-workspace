@@ -999,6 +999,42 @@ def ensure_marketplace_registration(
     return existing
 
 
+def register_marketplace(
+    aiws_root: Path,
+    *,
+    marketplace_id: str,
+    scope_id: str,
+    backend_kind: str,
+    backend_ref: str,
+    replace: bool = False,
+) -> dict[str, Any]:
+    normalized = {
+        "marketplace_id": require_marketplace_id(marketplace_id),
+        "scope_id": require_non_blank_string(scope_id, "scope_id"),
+        "backend_kind": require_backend_kind(backend_kind),
+        "backend_ref": require_non_blank_string(backend_ref, "backend_ref"),
+    }
+    if not replace:
+        return ensure_marketplace_registration(aiws_root, **normalized)
+
+    registry = load_marketplace_registry(aiws_root)
+    marketplaces = registry.setdefault("marketplaces", {})
+    marketplaces[normalized["marketplace_id"]] = normalized
+    write_marketplace_registry(aiws_root, registry)
+    return normalized
+
+
+def remove_marketplace_registration(aiws_root: Path, marketplace_id: str) -> dict[str, Any] | None:
+    resolved_marketplace_id = require_marketplace_id(marketplace_id)
+    registry = load_marketplace_registry(aiws_root)
+    marketplaces = registry.setdefault("marketplaces", {})
+    removed = marketplaces.pop(resolved_marketplace_id, None)
+    if removed is None:
+        return None
+    write_marketplace_registry(aiws_root, registry)
+    return removed
+
+
 def require_host_id(value: Any) -> str:
     host_id = require_non_blank_string(value, "host_id")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", host_id):

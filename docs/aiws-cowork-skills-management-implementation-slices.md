@@ -10,6 +10,13 @@ Cowork marketplace/upload plugins remain the skills distribution and user-facing
 
 The package-update boundary is explicit. AIWS can validate source, create drafts, stage proposals, materialize adapter output under `~/.aiws/hosts/<host-id>/adapter`, cache materialized skills under `~/.aiws/hosts/<host-id>/shared-cache/skills`, and prepare package-upload artifacts. Cowork owns plugin install, plugin update, and activation through marketplace/package UI. AIWS must treat `~/.cowork/plugins` as read-only and must not require a repo clone, terminal command, manual RPM/runtime edit, direct installed-plugin edit, or `~/.claude` edit in the canonical user path.
 
+Current runtime shape after the Google Drive backend work:
+
+- `aiws.skills.resolve` and `aiws.skills.materialize` can consume a Drive-published skill bundle into AIWS-managed cache and adapter roots.
+- `aiws.host.install` may prepare a Cowork package handoff from that adapter output by copying a generated ZIP into Cowork's writable package-upload surface when it exists.
+- `aiws.host.install` for Cowork is still a handoff, not a silent install. Cowork must confirm or import that package through its supported surface.
+- `aiws.marketplaces.list`, `aiws.marketplaces.register`, and `aiws.marketplaces.remove` exist to keep Drive marketplace bindings repairable without hand-editing `~/.aiws/state/marketplace-registry.json`.
+
 The implementation must stay aligned with `core-aiws/contracts/skill-management.md`. The main implementation surfaces to inspect are `aiws-mcp/aiws_mcp/skill_manager.py` and `aiws-mcp/aiws_mcp/runtime.py`, with tests in `tests/test_aiws_skill_manager.py`, `tests/test_aiws_mcp.py`, and `tests/test_aiws_productivity_plugin.py`.
 
 The current tester-facing Phase 2A scenario is tracked in `docs/cowork-skills-management-phase2-test-plan.md`.

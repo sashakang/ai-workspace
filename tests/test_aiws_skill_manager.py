@@ -39,9 +39,12 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     inspect_installed_skill,
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     load_draft_record,
+    load_marketplace_registry,
     list_draft_files,
     read_draft_file,
+    register_marketplace,
     refresh_modified_status,
+    remove_marketplace_registration,
     prepare_update_candidate,
     resolve_update_conflict,
     revert_draft,
@@ -1960,6 +1963,49 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 )
 
             self.assert_no_proposals(aiws_root)
+
+    def test_register_marketplace_can_replace_existing_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            first = register_marketplace(
+                aiws_root,
+                marketplace_id="checkout-main",
+                scope_id="project:checkout",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+            )
+            replaced = register_marketplace(
+                aiws_root,
+                marketplace_id="checkout-main",
+                scope_id="project:checkout",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-real",
+                replace=True,
+            )
+
+            self.assertEqual(first["backend_ref"], "drive-folder-123")
+            self.assertEqual(replaced["backend_ref"], "drive-folder-real")
+            registry = load_marketplace_registry(aiws_root)
+            self.assertEqual(registry["marketplaces"]["checkout-main"]["backend_ref"], "drive-folder-real")
+
+    def test_remove_marketplace_registration_deletes_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root = Path(temp) / ".aiws"
+            register_marketplace(
+                aiws_root,
+                marketplace_id="checkout-main",
+                scope_id="project:checkout",
+                backend_kind="google_drive",
+                backend_ref="drive-folder-123",
+            )
+
+            removed = remove_marketplace_registration(aiws_root, "checkout-main")
+            missing = remove_marketplace_registration(aiws_root, "checkout-main")
+
+            self.assertEqual(removed["marketplace_id"], "checkout-main")
+            self.assertIsNone(missing)
+            registry = load_marketplace_registry(aiws_root)
+            self.assertEqual(registry["marketplaces"], {})
 
     def test_google_drive_api_token_prefers_env_over_credentials_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

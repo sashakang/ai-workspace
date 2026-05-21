@@ -187,6 +187,10 @@ Current testing scenario: `docs/cowork-skills-management-phase2-test-plan.md` co
 
 Maintainer release testing on 2026-05-16 confirmed the reusable release scaffold for the primary repo. The `AIWS Release Plugin` workflow ran successfully in `sashakang/ai-workspace`, created release PR #3 for `aiws-productivity` 0.2.4 as `app/aiws-release-bot`, and the maintainer reported the loop as pass. On 2026-05-17, Cowork showed `aiws-productivity` version `0.2.4`, confirming marketplace sync. The next release-readiness milestone is proving the same scaffold and GitHub App setup on a second participating repo.
 
+Google Drive is now a working shared-marketplace backend, not just a design. Cowork runtime validation proved the Drive path from proposal staging to real Drive submission, review-state refresh, approval by folder move, explicit publish, post-release refresh, resolve, and materialize. The published runtime can now consume a Drive-backed marketplace as `(marketplace_id, plugin_id)` and materialize the resulting skill bundle for Cowork with a stable integrity hash. The unresolved boundary is still Cowork installation itself: AIWS may prepare package handoff from adapter output, but Cowork remains the owner of package import, install, and update. AIWS must not write into `~/.cowork/plugins` to simulate activation.
+
+With the core Drive loop proven, the next cleanup slice is operational rather than architectural: keep marketplace bindings repairable through explicit registry admin tools and keep Cowork delivery honest through package handoff tools instead of ad hoc folder edits.
+
 ### Phase 3: Shared Memory Sync Foundation
 
 Make memory sync a single shared infrastructure layer across hosts. For the current v1 bridge, Claude Code may own the canonical `memory-aiws` plugin-data store while Cowork reads imported snapshots and stages candidate writes through the bridge. Claude Code can be used as an intermediate validation host or implementation target if that helps delivery, but it must not define the product semantics. The target canonical layer remains `~/.aiws/`, `memory-aiws`, and the shared memory contract.

@@ -840,8 +840,8 @@ class AiwsRuntime:
         config_root: Path | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        if host_kind != "codex":
-            raise ValueError("install-host currently supports only host_kind='codex'.")
+        if host_kind not in {"codex", "cowork"}:
+            raise ValueError("install-host currently supports only host_kind='codex' or host_kind='cowork'.")
         if host_id is not None:
             validate_host_id_component(host_id)
 
@@ -855,6 +855,100 @@ class AiwsRuntime:
         host_root = self.root / "hosts" / host.host_id
         hosts_root = self.root / "hosts"
         adapter_root = host_root / "adapter"
+        if host_kind == "cowork":
+            plugin_root = adapter_root / "aiws-generated-plugin"
+            package_output_dir = host_root / "package-output"
+            package_upload_dir = resolved_config_root / "packages"
+            result: dict[str, Any] = {
+                "status": "ok",
+                "host_id": host.host_id,
+                "host_kind": host_kind,
+                "plugin_root": str(plugin_root),
+                "package_output_dir": str(package_output_dir),
+                "package_upload_surface": str(package_upload_dir),
+                "package_path": None,
+                "copied_package_path": None,
+                "planned_writes": [],
+                "write_paths": [],
+                "errors": [],
+                "requires_cowork_confirmation": False,
+                "requires_manual_upload": False,
+                "activation_effective": False,
+                "dry_run": dry_run,
+            }
+            if hosts_root.is_symlink() or host_root.is_symlink():
+                result["status"] = "failed"
+                result["errors"] = [
+                    {
+                        "path": str(host_root),
+                        "reason": "AIWS host path must not contain symlinks.",
+                    }
+                ]
+                return result
+            host_root_resolved = host_root.resolve() if host_root.exists() else host_root.absolute()
+            if host_root.exists() and not is_relative_to(host_root_resolved, self.root):
+                result["status"] = "failed"
+                result["errors"] = [
+                    {
+                        "path": str(host_root),
+                        "reason": "AIWS host root escapes AIWS runtime root.",
+                    }
+                ]
+                return result
+            if adapter_root.is_symlink() or plugin_root.is_symlink():
+                result["status"] = "failed"
+                result["errors"] = [
+                    {
+                        "path": str(plugin_root),
+                        "reason": "Cowork adapter plugin path must not contain symlinks.",
+                    }
+                ]
+                return result
+            if adapter_root.exists() and not is_relative_to(adapter_root.resolve(), host_root_resolved):
+                result["status"] = "failed"
+                result["errors"] = [
+                    {
+                        "path": str(adapter_root),
+                        "reason": "Adapter root escapes AIWS host root.",
+                    }
+                ]
+                return result
+            if not plugin_root.exists():
+                result["status"] = "no_skills"
+                return result
+            planned_package_path = package_output_dir / "aiws-generated-plugin.zip"
+            result["planned_writes"] = [str(planned_package_path)]
+            if package_upload_dir.exists():
+                result["planned_writes"].append(str(package_upload_dir / planned_package_path.name))
+            if dry_run:
+                result["status"] = "planned"
+                result["requires_cowork_confirmation"] = package_upload_dir.exists()
+                result["requires_manual_upload"] = not package_upload_dir.exists()
+                return result
+
+            host = self._resolve_host_for_install(
+                host_kind=host_kind,
+                host_id=host_id,
+                config_root=resolved_config_root,
+                dry_run=False,
+            )
+            package_path = self._build_cowork_adapter_package(
+                plugin_root=plugin_root,
+                package_output_dir=package_output_dir,
+            )
+            result["package_path"] = str(package_path)
+            result["write_paths"].append(str(package_path))
+            if package_upload_dir.exists():
+                handoff = skill_manager.copy_package_to_upload_surface(package_path, package_upload_dir)
+                result["status"] = "handoff_prepared"
+                result["copied_package_path"] = handoff["copied_package_path"]
+                result["write_paths"].append(handoff["copied_package_path"])
+                result["requires_cowork_confirmation"] = True
+                return result
+            result["status"] = "host_capability_missing"
+            result["requires_manual_upload"] = True
+            return result
+
         adapter_skills_root = adapter_root / "skills"
         skills_root = resolved_config_root / "skills"
 
@@ -1292,6 +1386,34 @@ class AiwsRuntime:
             return
         raise ValueError(f"Unsupported host kind: {host_kind}")
 
+    def _build_cowork_adapter_package(self, *, plugin_root: Path, package_output_dir: Path) -> Path:
+        if plugin_root.is_symlink():
+            raise ValueError("Cowork adapter plugin root must not be a symlink.")
+        if not plugin_root.exists() or not plugin_root.is_dir():
+            raise ValueError("Cowork adapter plugin root is missing.")
+        if not is_relative_to(plugin_root.resolve(), self.root.resolve()):
+            raise ValueError("Cowork adapter plugin root escapes AIWS runtime root.")
+        manifest_path = plugin_root / ".claude-plugin" / "plugin.json"
+        if not manifest_path.is_file():
+            raise ValueError("Cowork adapter plugin manifest is missing.")
+        manifest = load_json(manifest_path, {})
+        package_name = manifest.get("name")
+        if not isinstance(package_name, str) or not package_name.strip():
+            raise ValueError("Cowork adapter plugin manifest name is invalid.")
+
+        ensure_dir(package_output_dir)
+        package_path = package_output_dir / f"{package_name}.zip"
+        if package_path.exists():
+            package_path.unlink()
+        with zipfile.ZipFile(package_path, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            for path in sorted(plugin_root.rglob("*")):
+                if path.is_symlink():
+                    raise ValueError(f"Cowork adapter plugin must not contain symlinks: {path}")
+                if not path.is_file():
+                    continue
+                package.write(path, arcname=path.relative_to(plugin_root).as_posix())
+        return package_path
+
     def discover_installed_plugins(
         self,
         *,
@@ -1591,6 +1713,62 @@ class AiwsRuntime:
             redirected_url=redirected_url,
             authorization_code=authorization_code,
         )
+
+    def list_marketplaces(
+        self,
+        *,
+        scope_id: str | None = None,
+        backend_kind: str | None = None,
+    ) -> dict[str, Any]:
+        registry = skill_manager.load_marketplace_registry(self.root)
+        entries = []
+        for marketplace_id in sorted(registry.get("marketplaces", {})):
+            entry = dict(registry["marketplaces"][marketplace_id])
+            if scope_id is not None and entry.get("scope_id") != scope_id:
+                continue
+            if backend_kind is not None and entry.get("backend_kind") != backend_kind:
+                continue
+            entries.append(entry)
+        return {
+            "status": "ok",
+            "marketplaces": entries,
+            "count": len(entries),
+        }
+
+    def register_marketplace(
+        self,
+        *,
+        marketplace_id: str,
+        scope_id: str,
+        backend_kind: str,
+        backend_ref: str,
+        replace: bool = False,
+    ) -> dict[str, Any]:
+        entry = skill_manager.register_marketplace(
+            self.root,
+            marketplace_id=marketplace_id,
+            scope_id=scope_id,
+            backend_kind=backend_kind,
+            backend_ref=backend_ref,
+            replace=replace,
+        )
+        return {
+            "status": "registered",
+            "replaced": replace,
+            "marketplace": entry,
+        }
+
+    def remove_marketplace(self, *, marketplace_id: str) -> dict[str, Any]:
+        removed = skill_manager.remove_marketplace_registration(self.root, marketplace_id)
+        if removed is None:
+            return {
+                "status": "not_found",
+                "marketplace_id": marketplace_id,
+            }
+        return {
+            "status": "removed",
+            "marketplace": removed,
+        }
 
     def stage_change(
         self,
