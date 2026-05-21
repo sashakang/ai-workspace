@@ -1616,9 +1616,26 @@ def copy_package_to_upload_surface(package_path: Path, package_upload_dir: Path)
     }
 
 
-def validate_draft(aiws_root: Path, record_id: str) -> dict[str, Any]:
+def validate_draft(
+    aiws_root: Path,
+    record_id: str,
+    *,
+    expected_plugin_id: str | None = None,
+    expected_marketplace_id: str | None = None,
+) -> dict[str, Any]:
     record_id = require_non_blank_string(record_id, "record_id")
     record = safely_identify_draft_record(aiws_root, record_id)
+    if expected_plugin_id is not None and record.plugin_id != expected_plugin_id:
+        persist_validation_failure(aiws_root, record_id, digest_failed=True)
+        raise SkillManagerError(
+            f"Draft plugin_id {record.plugin_id!r} does not match expected plugin_id {expected_plugin_id!r}."
+        )
+    if expected_marketplace_id is not None and record.origin_marketplace != expected_marketplace_id:
+        persist_validation_failure(aiws_root, record_id, digest_failed=True)
+        raise SkillManagerError(
+            "Draft origin_marketplace "
+            f"{record.origin_marketplace!r} does not match expected marketplace_id {expected_marketplace_id!r}."
+        )
     canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
     if canonical_record_id != record_id:
         persist_validation_failure(aiws_root, record_id, digest_failed=True)
@@ -2321,6 +2338,12 @@ def stage_proposal(
     canonical_record_id = draft_id(record.plugin_id, record.skill_id, record.origin_repo)
     if canonical_record_id != record_id:
         raise SkillManagerError(f"Draft record id does not match canonical draft id {canonical_record_id}.")
+    if target["backend_kind"] == "google_drive" and target["marketplace_id"] is not None:
+        if record.origin_marketplace != target["marketplace_id"]:
+            raise SkillManagerError(
+                "Draft origin_marketplace "
+                f"{record.origin_marketplace!r} does not match target marketplace_id {target['marketplace_id']!r}."
+            )
 
     plugins_root = aiws_root / "plugins"
     draft_path = require_path_under(Path(record.draft_path), plugins_root, label="Draft path")

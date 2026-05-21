@@ -649,6 +649,10 @@ class AiwsRuntime:
                 # generated artifacts instead of crashing catalog reads after upgrade.
                 validate_skill_content(content, skill_root.name)
                 continue
+            manifest_payload = load_json(skill_root / ".aiws-skill-manifest.json", {})
+            marketplace_id = manifest_payload.get("marketplace_id")
+            plugin_id = manifest_payload.get("plugin_id")
+            source = manifest_payload.get("artifact_ref")
             records.append(
                 SkillRecord(
                     skill_id=skill_id,
@@ -656,11 +660,13 @@ class AiwsRuntime:
                     description=metadata["description"],
                     scope=skill_root.parent.parent.name,
                     version=skill_root.name,
-                    source=str(skill_root),
+                    source=source if isinstance(source, str) and source else str(skill_root),
                     root=skill_root,
                     entrypoint_content=None,
                     supported_hosts=tuple(sorted(HOST_KINDS)),
                     materialized=True,
+                    marketplace_id=marketplace_id if isinstance(marketplace_id, str) and marketplace_id else None,
+                    plugin_id=plugin_id if isinstance(plugin_id, str) and plugin_id else None,
                 )
             )
         return records
@@ -686,6 +692,7 @@ class AiwsRuntime:
         *,
         query: str | None = None,
         scopes: list[str] | None = None,
+        marketplace_id: str | None = None,
         host_kind: str | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
@@ -699,6 +706,8 @@ class AiwsRuntime:
             ]
         if scopes:
             records = [record for record in records if record.scope in scopes]
+        if marketplace_id:
+            records = [record for record in records if record.marketplace_id == marketplace_id]
         if host_kind:
             records = [record for record in records if host_kind in record.supported_hosts]
         records = records[:limit] if limit is not None else records
@@ -721,12 +730,15 @@ class AiwsRuntime:
         skill_id: str,
         *,
         scope: str | None = None,
+        marketplace_id: str | None = None,
         version: str | None = None,
         host_kind: str | None = None,
     ) -> dict[str, Any]:
         records = [record for record in self.catalog_records() if record.skill_id == skill_id]
         if scope:
             records = [record for record in records if record.scope == scope]
+        if marketplace_id:
+            records = [record for record in records if record.marketplace_id == marketplace_id]
         if version:
             records = [record for record in records if record.version == version]
         if host_kind:
@@ -735,12 +747,12 @@ class AiwsRuntime:
             return {"status": "not_found", "reason": f"No skill found for {skill_id}."}
         unique: dict[tuple[str, str], SkillRecord] = {}
         for record in records:
-            key = (record.scope, record.version)
+            key = (record.marketplace_id or "", record.scope, record.version)
             existing = unique.get(key)
             if existing is None or (record.materialized and not existing.materialized):
                 unique[key] = record
         records = list(unique.values())
-        if len(records) > 1 and not (scope or version):
+        if len(records) > 1 and not (scope or marketplace_id or version):
             return {"status": "ambiguous", "candidates": [record.summary() for record in records]}
         return {"status": "ok", "manifest": records[0].manifest()}
 
@@ -749,10 +761,11 @@ class AiwsRuntime:
         skill_id: str,
         *,
         scope: str | None = None,
+        marketplace_id: str | None = None,
         version: str | None = None,
         include_content: bool = False,
     ) -> dict[str, Any]:
-        resolved = self.resolve_skill(skill_id, scope=scope, version=version)
+        resolved = self.resolve_skill(skill_id, scope=scope, marketplace_id=marketplace_id, version=version)
         if resolved["status"] != "ok":
             return resolved
         record = self._record_from_manifest(resolved["manifest"])
@@ -764,12 +777,15 @@ class AiwsRuntime:
 
     def _record_from_manifest(self, manifest: dict[str, Any]) -> SkillRecord:
         for record in self.catalog_records():
-            if (
-                record.skill_id == manifest["skill_id"]
-                and record.scope == manifest["scope"]
-                and record.version == manifest["version"]
-            ):
-                return record
+            if record.skill_id != manifest["skill_id"]:
+                continue
+            if record.scope != manifest["scope"] or record.version != manifest["version"]:
+                continue
+            if "marketplace_id" in manifest and record.marketplace_id != manifest.get("marketplace_id"):
+                continue
+            if "plugin_id" in manifest and record.plugin_id != manifest.get("plugin_id"):
+                continue
+            return record
         raise KeyError(f"Manifest no longer resolves: {manifest['skill_id']}")
 
     def _entrypoint_content(self, record: SkillRecord) -> str | None:
@@ -791,7 +807,7 @@ class AiwsRuntime:
             if path.is_file()
         ]
 
-    def _materialize_google_drive_skill(self, record: SkillRecord, target_root: Path) -> None:
+    def _materialize_google_drive_skill(self, record: SkillRecord, target_root: Path, plugin_root: Path | None = None) -> None:
         parts = record.source.split(":")
         if len(parts) != 4 or parts[0] != "google-drive":
             raise ValueError(f"Unsupported Google Drive artifact ref: {record.source}")
@@ -805,26 +821,51 @@ class AiwsRuntime:
         if target_root.exists():
             shutil.rmtree(target_root)
         ensure_dir(target_root)
+        if plugin_root is not None:
+            if plugin_root.exists():
+                shutil.rmtree(plugin_root)
+            ensure_dir(plugin_root)
         extracted = False
         with zipfile.ZipFile(io.BytesIO(package_bytes)) as package:
             for info in package.infolist():
                 name = info.filename
-                if not name.startswith(skill_prefix) or name.endswith("/"):
+                if name.endswith("/"):
                     continue
-                relative = name.removeprefix(skill_prefix)
-                if not relative or relative.startswith("/") or ".." in Path(relative).parts:
+                if not name or name.startswith("/") or ".." in Path(name).parts:
                     raise ValueError(f"Unsafe Google Drive package entry: {name}")
-                destination = target_root / relative
-                ensure_dir(destination.parent)
-                with package.open(info) as source, destination.open("wb") as handle:
-                    shutil.copyfileobj(source, handle)
-                extracted = True
+                if plugin_root is not None:
+                    plugin_destination = plugin_root / name
+                    ensure_dir(plugin_destination.parent)
+                    with package.open(info) as source, plugin_destination.open("wb") as handle:
+                        shutil.copyfileobj(source, handle)
+                if name.startswith(skill_prefix):
+                    relative = name.removeprefix(skill_prefix)
+                    if not relative or relative.startswith("/") or ".." in Path(relative).parts:
+                        raise ValueError(f"Unsafe Google Drive package entry: {name}")
+                    destination = target_root / relative
+                    ensure_dir(destination.parent)
+                    with package.open(info) as source, destination.open("wb") as handle:
+                        shutil.copyfileobj(source, handle)
+                    extracted = True
         if not extracted:
             raise ValueError(f"Google Drive package does not contain skills/{record.skill_id}/")
         entrypoint = target_root / "SKILL.md"
         if not entrypoint.is_file():
             raise ValueError(f"Google Drive package does not contain skills/{record.skill_id}/SKILL.md")
         validate_skill_content(entrypoint.read_text(), record.skill_id)
+        write_json_atomic(target_root / ".aiws-skill-manifest.json", record.manifest())
+        if plugin_root is not None and record.plugin_id is not None:
+            manifest_path = plugin_root / ".claude-plugin" / "plugin.json"
+            if not manifest_path.exists():
+                write_json_atomic(
+                    manifest_path,
+                    {
+                        "name": record.plugin_id,
+                        "description": f"Materialized Google Drive plugin {record.plugin_id}.",
+                        "version": record.version,
+                    },
+                )
+            skill_manager.validate_plugin(plugin_root, expected_name=record.plugin_id)
 
     def materialize_skill(
         self,
@@ -833,10 +874,17 @@ class AiwsRuntime:
         host_kind: str | None = None,
         host_id: str | None = None,
         scope: str | None = None,
+        marketplace_id: str | None = None,
         version: str | None = None,
     ) -> dict[str, Any]:
         host = self.ensure_host(host_kind=host_kind, host_id=host_id)
-        resolved = self.resolve_skill(skill_id, scope=scope, version=version, host_kind=host.host_kind)
+        resolved = self.resolve_skill(
+            skill_id,
+            scope=scope,
+            marketplace_id=marketplace_id,
+            version=version,
+            host_kind=host.host_kind,
+        )
         if resolved["status"] != "ok":
             return resolved
         record = self._record_from_manifest(resolved["manifest"])
@@ -846,16 +894,18 @@ class AiwsRuntime:
         cache_root = self.root / "hosts" / host.host_id / "shared-cache" / "skills"
         target_root = cache_root / self._safe_scope(record.scope) / record.skill_id / record.version
         ensure_dir(target_root.parent)
+        plugin_root = self._drive_plugin_cache_root(host, record)
 
         if record.root is not None:
             safe_copytree(record.root, target_root)
         elif record.source.startswith("google-drive:"):
-            self._materialize_google_drive_skill(record, target_root)
+            self._materialize_google_drive_skill(record, target_root, plugin_root=plugin_root)
         else:
             if target_root.exists():
                 shutil.rmtree(target_root)
             ensure_dir(target_root)
             write_text_atomic(target_root / "SKILL.md", record.entrypoint_content or "")
+            write_json_atomic(target_root / ".aiws-skill-manifest.json", record.manifest())
 
         integrity_hash = bundle_digest(target_root)
         adapter_root = self.root / "hosts" / host.host_id / "adapter"
@@ -871,6 +921,7 @@ class AiwsRuntime:
             "manifest": manifest,
             "cache_path": str(target_root),
             "adapter_path": str(adapter_root),
+            "plugin_cache_path": str(plugin_root) if plugin_root is not None else None,
             "integrity_hash": integrity_hash,
         }
 
@@ -898,7 +949,8 @@ class AiwsRuntime:
         hosts_root = self.root / "hosts"
         adapter_root = host_root / "adapter"
         if host_kind == "cowork":
-            plugin_root = adapter_root / "aiws-generated-plugin"
+            default_plugin_root = adapter_root / "aiws-generated-plugin"
+            plugin_root = default_plugin_root
             package_output_dir = host_root / "package-output"
             package_upload_dir = self._cowork_package_upload_surface(host)
             declared_package_upload_dir = resolved_config_root / "packages"
@@ -938,11 +990,11 @@ class AiwsRuntime:
                     }
                 ]
                 return result
-            if adapter_root.is_symlink() or plugin_root.is_symlink():
+            if adapter_root.is_symlink() or default_plugin_root.is_symlink():
                 result["status"] = "failed"
                 result["errors"] = [
                     {
-                        "path": str(plugin_root),
+                        "path": str(default_plugin_root),
                         "reason": "Cowork adapter plugin path must not contain symlinks.",
                     }
                 ]
@@ -956,10 +1008,48 @@ class AiwsRuntime:
                     }
                 ]
                 return result
+            if not default_plugin_root.exists() and adapter_root.is_dir():
+                plugin_roots = sorted(
+                    child
+                    for child in adapter_root.iterdir()
+                    if child.is_dir() and (child / ".claude-plugin" / "plugin.json").is_file()
+                )
+                if len(plugin_roots) == 1:
+                    plugin_root = plugin_roots[0]
+                    result["plugin_root"] = str(plugin_root)
+                elif len(plugin_roots) > 1:
+                    result["status"] = "multiple_adapter_plugins"
+                    result["errors"] = [
+                        {
+                            "path": str(adapter_root),
+                            "reason": "Cowork adapter contains multiple plugin roots; install one at a time.",
+                        }
+                    ]
+                    return result
+            if plugin_root.is_symlink():
+                result["status"] = "failed"
+                result["errors"] = [
+                    {
+                        "path": str(plugin_root),
+                        "reason": "Cowork adapter plugin path must not contain symlinks.",
+                    }
+                ]
+                return result
             if not plugin_root.exists():
                 result["status"] = "no_skills"
                 return result
-            planned_package_path = package_output_dir / "aiws-generated-plugin.zip"
+            manifest = load_json(plugin_root / ".claude-plugin" / "plugin.json", {})
+            package_name = manifest.get("name")
+            if not isinstance(package_name, str) or not package_name.strip():
+                result["status"] = "failed"
+                result["errors"] = [
+                    {
+                        "path": str(plugin_root / ".claude-plugin" / "plugin.json"),
+                        "reason": "Cowork adapter plugin manifest name is invalid.",
+                    }
+                ]
+                return result
+            planned_package_path = package_output_dir / f"{package_name.strip()}.zip"
             result["planned_writes"] = [str(planned_package_path)]
             if package_upload_dir is not None:
                 result["planned_writes"].append(str(package_upload_dir / planned_package_path.name))
@@ -1396,21 +1486,52 @@ class AiwsRuntime:
     def _safe_scope(self, scope: str) -> str:
         return scope.replace(":", "_").replace("/", "_")
 
+    def _safe_cache_component(self, value: str) -> str:
+        return value.replace(":", "_").replace("/", "_")
+
+    def _display_label(self, value: str) -> str:
+        overrides = {
+            "meeting-followup": "Meeting Follow-up",
+        }
+        if value in overrides:
+            return overrides[value]
+        return value.replace("-", " ").title()
+
+    def _drive_plugin_cache_root(self, host: HostIdentity, record: SkillRecord) -> Path | None:
+        if record.marketplace_id is None or record.plugin_id is None:
+            return None
+        return (
+            self.root
+            / "hosts"
+            / host.host_id
+            / "shared-cache"
+            / "plugins"
+            / self._safe_cache_component(record.marketplace_id)
+            / self._safe_cache_component(record.plugin_id)
+            / self._safe_cache_component(record.version)
+        )
+
     def _write_adapter(self, host_kind: str, adapter_root: Path, skill_root: Path, record: SkillRecord) -> None:
         if host_kind == "claude-code":
             target = adapter_root / ".claude" / "skills" / record.skill_id
             safe_copytree(skill_root, target)
             return
         if host_kind == "cowork":
-            plugin_root = adapter_root / "aiws-generated-plugin"
+            plugin_id = record.plugin_id if record.source.startswith("google-drive:") else None
+            plugin_name = plugin_id or "aiws-generated-plugin"
+            plugin_root = adapter_root / self._safe_cache_component(plugin_name)
             target = plugin_root / "skills" / record.skill_id
             safe_copytree(skill_root, target)
             write_json_atomic(
                 plugin_root / ".claude-plugin" / "plugin.json",
                 {
-                    "name": "aiws-generated-plugin",
-                    "description": "AIWS generated skill adapter package.",
-                    "version": "0.1.0",
+                    "name": plugin_name,
+                    "description": (
+                        f"Google Drive marketplace adapter for {plugin_name}."
+                        if plugin_id is not None
+                        else "AIWS generated skill adapter package."
+                    ),
+                    "version": record.version if plugin_id is not None else "0.1.0",
                 },
             )
             return
@@ -1486,6 +1607,26 @@ class AiwsRuntime:
             env=self.env,
         )
 
+    def _find_materialized_plugin_root(
+        self,
+        *,
+        marketplace_id: str,
+        plugin_id: str,
+        skill_id: str,
+        version: str | None = None,
+    ) -> Path | None:
+        roots = sorted(
+            (self.root / "hosts").glob(
+                f"*/shared-cache/plugins/{self._safe_cache_component(marketplace_id)}/{self._safe_cache_component(plugin_id)}/*"
+            )
+        )
+        if version is not None:
+            roots = [root for root in roots if root.name == self._safe_cache_component(version)]
+        for root in reversed(roots):
+            if (root / "skills" / skill_id / "SKILL.md").is_file():
+                return root
+        return None
+
     def create_or_open_draft(
         self,
         *,
@@ -1500,26 +1641,45 @@ class AiwsRuntime:
         base_commit: str | None = None,
         search_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
         allow_parallel_draft: bool = False,
+        marketplace_id: str | None = None,
     ) -> dict[str, Any]:
         discovered: dict[str, Any] | None = None
         inspection: dict[str, Any] | None = None
+        selected_marketplace_id = marketplace_id or origin_marketplace
         if source_plugin_root is None:
-            inspection = self.inspect_installed_skill(
-                plugin_id=plugin_id,
-                skill_id=skill_id,
-                search_roots=search_roots,
-            )
-            discovered = inspection.get("discovery")
-            selected = inspection.get("selected_instance")
-            if inspection.get("status") != "ok" or not isinstance(selected, dict):
-                raise ValueError(
-                    f"{inspection.get('status')}: cannot select one installed skill for {plugin_id!r}:{skill_id!r}."
+            if selected_marketplace_id:
+                materialized_root = self._find_materialized_plugin_root(
+                    marketplace_id=selected_marketplace_id,
+                    plugin_id=plugin_id,
+                    skill_id=skill_id,
+                    version=base_version,
                 )
-            source_plugin_root = selected["source_plugin_root"]
-            origin_marketplace = origin_marketplace or selected.get("origin_marketplace")
-            origin_ref = origin_ref or selected.get("origin_ref")
-            base_version = base_version or selected.get("base_version")
-            base_commit = base_commit or selected.get("base_commit")
+                if materialized_root is not None:
+                    source_plugin_root = materialized_root
+                    origin_marketplace = origin_marketplace or selected_marketplace_id
+                    origin_ref = origin_ref or selected_marketplace_id
+                    base_version = base_version or skill_manager.validate_plugin(
+                        materialized_root,
+                        expected_name=plugin_id,
+                    )["version"]
+                    base_commit = base_commit or "google-drive"
+            if source_plugin_root is None:
+                inspection = self.inspect_installed_skill(
+                    plugin_id=plugin_id,
+                    skill_id=skill_id,
+                    search_roots=search_roots,
+                )
+                discovered = inspection.get("discovery")
+                selected = inspection.get("selected_instance")
+                if inspection.get("status") != "ok" or not isinstance(selected, dict):
+                    raise ValueError(
+                        f"{inspection.get('status')}: cannot select one installed skill for {plugin_id!r}:{skill_id!r}."
+                    )
+                source_plugin_root = selected["source_plugin_root"]
+                origin_marketplace = origin_marketplace or selected.get("origin_marketplace")
+                origin_ref = origin_ref or selected.get("origin_ref")
+                base_version = base_version or selected.get("base_version")
+                base_commit = base_commit or selected.get("base_commit")
 
         source_root = Path(source_plugin_root).expanduser()
         if base_version is None:
@@ -1566,8 +1726,19 @@ class AiwsRuntime:
     def revert_draft(self, draft_id: str) -> dict[str, Any]:
         return skill_manager.revert_draft(self.root, draft_id)
 
-    def validate_draft(self, draft_id: str) -> dict[str, Any]:
-        return skill_manager.validate_draft(self.root, draft_id)
+    def validate_draft(
+        self,
+        draft_id: str,
+        *,
+        expected_plugin_id: str | None = None,
+        expected_marketplace_id: str | None = None,
+    ) -> dict[str, Any]:
+        return skill_manager.validate_draft(
+            self.root,
+            draft_id,
+            expected_plugin_id=expected_plugin_id,
+            expected_marketplace_id=expected_marketplace_id,
+        )
 
     def activate_draft(
         self,
@@ -1777,6 +1948,73 @@ class AiwsRuntime:
             "status": "ok",
             "marketplaces": entries,
             "count": len(entries),
+        }
+
+    def drive_marketplace_workflow(self, *, marketplace_id: str | None = None, host_kind: str = "cowork") -> dict[str, Any]:
+        listed = self.list_marketplaces(backend_kind="google_drive")
+        marketplaces = listed["marketplaces"]
+        if marketplace_id is not None:
+            marketplaces = [entry for entry in marketplaces if entry.get("marketplace_id") == marketplace_id]
+        records = self.catalog_records()
+        marketplace_payloads: list[dict[str, Any]] = []
+        for marketplace in marketplaces:
+            current_marketplace_id = marketplace.get("marketplace_id")
+            marketplace_records = [
+                record
+                for record in records
+                if record.marketplace_id == current_marketplace_id
+                and (host_kind is None or host_kind in record.supported_hosts)
+            ]
+            plugins: dict[str, dict[str, Any]] = {}
+            for record in marketplace_records:
+                plugin_id = record.plugin_id or "unknown"
+                plugin = plugins.setdefault(
+                    plugin_id,
+                    {
+                        "plugin_id": plugin_id,
+                        "display_name": self._display_label(plugin_id),
+                        "skills": [],
+                    },
+                )
+                plugin["skills"].append(
+                    {
+                        "skill_id": record.skill_id,
+                        "display_name": (
+                            self._display_label(record.skill_id)
+                            if record.name == record.skill_id
+                            else record.name
+                        ),
+                        "description": record.description,
+                        "version": record.version,
+                        "marketplace_id": record.marketplace_id,
+                        "scope": record.scope,
+                        "materialized": record.materialized,
+                    }
+                )
+            marketplace_payloads.append(
+                {
+                    **marketplace,
+                    "display_name": self._display_label(str(current_marketplace_id)),
+                    "plugins": list(plugins.values()),
+                    "plugin_count": len(plugins),
+                    "skill_count": len(marketplace_records),
+                }
+            )
+        return {
+            "status": "ok",
+            "host_kind": host_kind,
+            "note": "AIWS Google Drive marketplace skills are managed through AIWS tools and do not appear in Cowork's native plugin sidebar yet.",
+            "marketplaces": marketplace_payloads,
+            "workflow": [
+                "aiws.marketplaces.drive_workflow: list Drive marketplaces and browse plugins/skills.",
+                "aiws.skills.search: find a skill with marketplace_id.",
+                "aiws.skills.materialize: materialize the skill with marketplace_id and host_kind.",
+                "aiws.skills.create_or_open_draft: open a draft using marketplace_id, plugin_id, and skill_id.",
+                "aiws.skills.read_draft_file / aiws.skills.write_draft_file: inspect and edit the draft.",
+                "aiws.skills.validate_draft: validate with expected_plugin_id and expected_marketplace_id.",
+                "aiws.skills.stage_proposal: stage to backend_kind=google_drive with the same marketplace_id.",
+                "aiws.skills.submit_pr / aiws.skills.refresh_proposal_state / aiws.skills.publish_approved_proposal: review, approve, publish, then materialize again from a fresh task.",
+            ],
         }
 
     def register_marketplace(

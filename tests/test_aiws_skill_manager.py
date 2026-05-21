@@ -1893,7 +1893,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
     def test_stage_proposal_google_drive_requires_marketplace_and_registers_backend(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nLocal proposal edit.\n")
 
             result = stage_proposal(
@@ -1928,9 +1928,32 @@ class AiwsSkillManagerTests(unittest.TestCase):
                 },
             )
 
+    def test_stage_proposal_google_drive_rejects_draft_marketplace_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
+            self.edit_draft_skill(record, "\nLocal proposal edit.\n")
+
+            with self.assertRaisesRegex(
+                SkillManagerError,
+                "Draft origin_marketplace 'checkout-main' does not match target marketplace_id 'other-market'.",
+            ):
+                stage_proposal(
+                    aiws_root,
+                    record_id,
+                    "project:other",
+                    None,
+                    "Improve meeting follow-up",
+                    "The current instructions miss owner handoffs.",
+                    backend_kind="google_drive",
+                    backend_ref="drive-folder-456",
+                    marketplace_id="other-market",
+                )
+
+            self.assert_no_proposals(aiws_root)
+
     def test_stage_proposal_google_drive_rejects_marketplace_identity_collision(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nLocal proposal edit.\n")
             registry_path = aiws_root / "state" / "marketplace-registry.json"
             registry_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2632,7 +2655,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
     def test_submit_pr_google_drive_creates_review_packet_and_persists_review_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nLocal proposal edit.\n")
             staged = stage_proposal(
                 aiws_root,
@@ -2707,7 +2730,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
     def test_submit_pr_google_drive_already_submitted_proposal_returns_existing_metadata_without_submitter_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nLocal proposal edit.\n")
             staged = stage_proposal(
                 aiws_root,
@@ -2740,7 +2763,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
     def test_refresh_proposal_state_google_drive_marks_approved_pending_publish(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nLocal proposal edit.\n")
             staged = stage_proposal(
                 aiws_root,
@@ -2790,7 +2813,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
     def test_refresh_proposal_state_google_drive_marks_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nLocal proposal edit.\n")
             staged = stage_proposal(
                 aiws_root,
@@ -2830,7 +2853,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
     def test_refresh_proposal_state_google_drive_marks_needs_reapproval_when_approved_file_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nLocal proposal edit.\n")
             staged = stage_proposal(
                 aiws_root,
@@ -2873,7 +2896,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
     def test_publish_approved_proposal_google_drive_builds_package_and_updates_release_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nPublished review change.\n")
             staged = stage_proposal(
                 aiws_root,
@@ -2933,7 +2956,7 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
     def test_publish_approved_proposal_google_drive_fails_closed_on_stale_index(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            aiws_root, record_id, _plugin_root, record = self.create_meeting_followup_draft(Path(temp))
+            aiws_root, record_id, _plugin_root, record = self.create_drive_meeting_followup_draft(Path(temp))
             self.edit_draft_skill(record, "\nPublished review change.\n")
             staged = stage_proposal(
                 aiws_root,
@@ -3869,6 +3892,24 @@ class AiwsSkillManagerTests(unittest.TestCase):
             base_commit="abc123",
         )
         record_id = draft_id("example-plugin", "meeting-followup", "https://github.com/example/example-plugin")
+        return aiws_root, record_id, plugin_root, record
+
+    def create_drive_meeting_followup_draft(self, temp_root: Path) -> tuple[Path, str, Path, object]:
+        aiws_root = temp_root / ".aiws"
+        plugin_root = self.write_plugin(temp_root, public_skills=["meeting-followup"])
+        self.write_skill(plugin_root, "meeting-followup")
+        record = create_or_open_draft(
+            aiws_root,
+            source_plugin_root=plugin_root,
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            origin_marketplace="checkout-main",
+            origin_repo="checkout-main",
+            origin_ref="google-drive",
+            base_version="1.0.0",
+            base_commit="abc123",
+        )
+        record_id = draft_id("example-plugin", "meeting-followup", "checkout-main")
         return aiws_root, record_id, plugin_root, record
 
     def create_staged_meeting_followup_proposal(

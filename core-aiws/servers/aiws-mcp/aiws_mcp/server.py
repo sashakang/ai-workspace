@@ -25,6 +25,7 @@ LOCAL_TOOL_NAMES = (
     "aiws.google_drive.configure_oauth_client",
     "aiws.google_drive.finish_oauth",
     "aiws.marketplaces.list",
+    "aiws.marketplaces.drive_workflow",
     "aiws.marketplaces.register",
     "aiws.marketplaces.remove",
     "aiws.skills.search",
@@ -202,6 +203,13 @@ def create_server(root: Path | None = None):
     def list_marketplaces(scope_id: str | None = None, backend_kind: str | None = None) -> dict[str, Any]:
         return runtime.list_marketplaces(scope_id=scope_id, backend_kind=backend_kind)
 
+    @server.tool(name="aiws.marketplaces.drive_workflow")
+    def drive_marketplace_workflow(
+        marketplace_id: str | None = None,
+        host_kind: str = "cowork",
+    ) -> dict[str, Any]:
+        return runtime.drive_marketplace_workflow(marketplace_id=marketplace_id, host_kind=host_kind)
+
     @server.tool(name="aiws.marketplaces.register")
     def register_marketplace(
         marketplace_id: str,
@@ -223,24 +231,24 @@ def create_server(root: Path | None = None):
         return runtime.remove_marketplace(marketplace_id=marketplace_id)
 
     @server.tool(name="aiws.skills.search")
-    def search(query: str | None = None, scopes: list[str] | None = None, host_kind: str | None = None, limit: int | None = None) -> dict[str, Any]:
-        return runtime.search_skills(query=query, scopes=scopes, host_kind=host_kind, limit=limit)
+    def search(query: str | None = None, scopes: list[str] | None = None, marketplace_id: str | None = None, host_kind: str | None = None, limit: int | None = None) -> dict[str, Any]:
+        return runtime.search_skills(query=query, scopes=scopes, marketplace_id=marketplace_id, host_kind=host_kind, limit=limit)
 
     @server.tool(name="aiws.skills.resolve")
-    def resolve(skill_id: str, scope: str | None = None, version: str | None = None, host_kind: str | None = None) -> dict[str, Any]:
-        return runtime.resolve_skill(skill_id, scope=scope, version=version, host_kind=host_kind)
+    def resolve(skill_id: str, scope: str | None = None, marketplace_id: str | None = None, version: str | None = None, host_kind: str | None = None) -> dict[str, Any]:
+        return runtime.resolve_skill(skill_id, scope=scope, marketplace_id=marketplace_id, version=version, host_kind=host_kind)
 
     @server.tool(name="aiws.skills.materialize")
-    def materialize(skill_id: str, host_kind: str | None = None, host_id: str | None = None, scope: str | None = None, version: str | None = None) -> dict[str, Any]:
-        return runtime.materialize_skill(skill_id=skill_id, host_kind=host_kind, host_id=host_id, scope=scope, version=version)
+    def materialize(skill_id: str, host_kind: str | None = None, host_id: str | None = None, scope: str | None = None, marketplace_id: str | None = None, version: str | None = None) -> dict[str, Any]:
+        return runtime.materialize_skill(skill_id=skill_id, host_kind=host_kind, host_id=host_id, scope=scope, marketplace_id=marketplace_id, version=version)
 
     @server.tool(name="aiws.skills.list_local")
     def list_local(scope: str | None = None, host_kind: str | None = None) -> dict[str, Any]:
         return runtime.list_local_skills(scope=scope, host_kind=host_kind)
 
     @server.tool(name="aiws.skills.get")
-    def get(skill_id: str, scope: str | None = None, version: str | None = None, include_content: bool = False) -> dict[str, Any]:
-        return runtime.get_skill(skill_id, scope=scope, version=version, include_content=include_content)
+    def get(skill_id: str, scope: str | None = None, marketplace_id: str | None = None, version: str | None = None, include_content: bool = False) -> dict[str, Any]:
+        return runtime.get_skill(skill_id, scope=scope, marketplace_id=marketplace_id, version=version, include_content=include_content)
 
     @server.tool(name="aiws.skills.discover_installed_plugins")
     def discover_installed_plugins(plugin_id: str | None = None, search_roots: list[str] | None = None) -> dict[str, Any]:
@@ -273,6 +281,7 @@ def create_server(root: Path | None = None):
         base_commit: str | None = None,
         search_roots: list[str] | None = None,
         allow_parallel_draft: bool = False,
+        marketplace_id: str | None = None,
     ) -> dict[str, Any]:
         return runtime.create_or_open_draft(
             plugin_id=plugin_id,
@@ -286,6 +295,7 @@ def create_server(root: Path | None = None):
             base_commit=base_commit,
             search_roots=search_roots,
             allow_parallel_draft=allow_parallel_draft,
+            marketplace_id=marketplace_id,
         )
 
     @server.tool(name="aiws.skills.list_draft_files")
@@ -313,8 +323,16 @@ def create_server(root: Path | None = None):
         return runtime.revert_draft(draft_id)
 
     @server.tool(name="aiws.skills.validate_draft")
-    def validate_draft(draft_id: str) -> dict[str, Any]:
-        return runtime.validate_draft(draft_id)
+    def validate_draft(
+        draft_id: str,
+        expected_plugin_id: str | None = None,
+        expected_marketplace_id: str | None = None,
+    ) -> dict[str, Any]:
+        return runtime.validate_draft(
+            draft_id,
+            expected_plugin_id=expected_plugin_id,
+            expected_marketplace_id=expected_marketplace_id,
+        )
 
     @server.tool(name="aiws.skills.activate_draft")
     def activate_draft(

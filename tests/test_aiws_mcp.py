@@ -784,19 +784,58 @@ class AiwsMcpSkillTests(unittest.TestCase):
             self.assertEqual(resolved["status"], "ok")
             self.assertEqual(resolved["manifest"]["marketplace_id"], "checkout-main-real")
             self.assertEqual(resolved["manifest"]["plugin_id"], "example-plugin")
+            resolved_by_marketplace = self.runtime.resolve_skill(
+                "meeting-followup",
+                marketplace_id="checkout-main-real",
+                host_kind="codex",
+            )
+            self.assertEqual(resolved_by_marketplace["status"], "ok")
 
             result = self.runtime.materialize_skill(
                 skill_id="meeting-followup",
                 host_kind="codex",
-                scope="project:checkout",
+                marketplace_id="checkout-main-real",
             )
 
         self.assertEqual(result["status"], "materialized")
         cache_path = Path(result["cache_path"])
         self.assertTrue((cache_path / "SKILL.md").is_file())
         self.assertTrue((cache_path / "references" / "notes.md").is_file())
+        plugin_cache_path = Path(str(result["plugin_cache_path"]))
+        self.assertTrue((plugin_cache_path / ".claude-plugin" / "plugin.json").is_file())
+        plugin_manifest = json.loads((plugin_cache_path / ".claude-plugin" / "plugin.json").read_text())
+        self.assertEqual(plugin_manifest["name"], "example-plugin")
+        self.assertEqual(plugin_manifest["version"], "1.0.1")
         self.assertEqual(result["manifest"]["marketplace_id"], "checkout-main-real")
         self.assertEqual(result["manifest"]["plugin_id"], "example-plugin")
+
+        (self.cowork_home / "packages").mkdir(parents=True)
+        cowork = self.runtime.materialize_skill(
+            skill_id="meeting-followup",
+            host_kind="cowork",
+            marketplace_id="checkout-main-real",
+        )
+        cowork_adapter_plugin = Path(cowork["adapter_path"]) / "example-plugin"
+        cowork_manifest = json.loads((cowork_adapter_plugin / ".claude-plugin" / "plugin.json").read_text())
+        self.assertEqual(cowork_manifest["name"], "example-plugin")
+        self.assertEqual(cowork_manifest["version"], "1.0.1")
+        self.assertTrue((cowork_adapter_plugin / "skills" / "meeting-followup" / "SKILL.md").is_file())
+
+        install = self.runtime.install_host(host_kind="cowork")
+        self.assertEqual(install["status"], "handoff_prepared")
+        self.assertTrue(str(install["package_path"]).endswith("example-plugin.zip"))
+
+        draft = self.runtime.create_or_open_draft(
+            plugin_id="example-plugin",
+            skill_id="meeting-followup",
+            target_repo="checkout-main-real",
+            origin_marketplace="checkout-main-real",
+        )
+        self.assertTrue(draft["record_id"].startswith("example-plugin--meeting-followup--"))
+        self.assertEqual(draft["plugin_id"], "example-plugin")
+        self.assertEqual(draft["origin_marketplace"], "checkout-main-real")
+        with self.assertRaisesRegex(Exception, "expected plugin_id 'other-plugin'"):
+            self.runtime.validate_draft(draft["record_id"], expected_plugin_id="other-plugin")
 
     def test_materialize_skill_from_google_drive_skips_stale_marketplace_entries(self) -> None:
         package_buffer = io.BytesIO()
@@ -1128,6 +1167,48 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(listed["marketplaces"][0]["backend_ref"], "drive-folder-123")
         self.assertEqual(removed["status"], "removed")
         self.assertEqual(missing["status"], "not_found")
+
+    def test_drive_marketplace_workflow_browses_google_drive_plugins_and_skills(self) -> None:
+        package_buffer = io.BytesIO()
+        with zipfile.ZipFile(package_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.writestr(
+                "skills/meeting-followup/SKILL.md",
+                "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n",
+            )
+        self.runtime.register_marketplace(
+            marketplace_id="checkout-main-real",
+            scope_id="project:checkout",
+            backend_kind="google_drive",
+            backend_ref="drive-root-1",
+        )
+
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=FakeRuntimeGoogleDriveClient(package_buffer.getvalue()),
+            ),
+        ):
+            workflow = self.runtime.drive_marketplace_workflow(
+                marketplace_id="checkout-main-real",
+                host_kind="cowork",
+            )
+
+        self.assertEqual(workflow["status"], "ok")
+        self.assertIn("do not appear in Cowork's native plugin sidebar yet", workflow["note"])
+        self.assertEqual(workflow["marketplaces"][0]["marketplace_id"], "checkout-main-real")
+        self.assertEqual(workflow["marketplaces"][0]["display_name"], "Checkout Main Real")
+        self.assertEqual(workflow["marketplaces"][0]["plugins"][0]["plugin_id"], "example-plugin")
+        self.assertEqual(
+            workflow["marketplaces"][0]["plugins"][0]["skills"][0]["skill_id"],
+            "meeting-followup",
+        )
+        self.assertEqual(
+            workflow["marketplaces"][0]["plugins"][0]["skills"][0]["display_name"],
+            "Meeting Follow-up",
+        )
+        self.assertIn("aiws.skills.materialize", "\n".join(workflow["workflow"]))
 
     def test_install_host_cowork_prepares_package_handoff_from_materialized_adapter(self) -> None:
         self.write_personal_skill("local-review", "Review local work.")
