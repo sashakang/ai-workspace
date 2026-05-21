@@ -30,6 +30,27 @@ class SkillValidationError(ValueError):
     """Raised when an Agent Skills bundle is invalid."""
 
 
+def surface_path_state(path: Path, kind: str, *, wants_writable: bool) -> dict[str, Any]:
+    expanded = path.expanduser()
+    exists = expanded.exists()
+    payload: dict[str, Any] = {
+        "exists": exists,
+        "is_symlink": expanded.is_symlink(),
+        "is_file": expanded.is_file() if exists else False,
+        "is_directory": expanded.is_dir() if exists else False,
+        "writable_effective": False,
+    }
+    if not exists:
+        return payload
+    if kind == "directory":
+        payload["writable_effective"] = expanded.is_dir() and os.access(expanded, os.W_OK)
+    elif kind in {"file", "jsonl"}:
+        payload["writable_effective"] = expanded.is_file() and os.access(expanded, os.W_OK)
+    else:
+        payload["writable_effective"] = wants_writable and os.access(expanded, os.W_OK)
+    return payload
+
+
 @dataclass(frozen=True)
 class HostEvidenceSurface:
     name: str
@@ -48,6 +69,7 @@ class HostEvidenceSurface:
         }
         if self.path is not None:
             payload["path"] = str(self.path)
+            payload.update(surface_path_state(self.path, self.kind, wants_writable=self.writable))
         if self.resource_uri is not None:
             payload["resource_uri"] = self.resource_uri
         return payload
@@ -448,6 +470,26 @@ class AiwsRuntime:
             "capabilities": payload["capabilities"],
             "evidence_surfaces": payload["evidence_surfaces"],
         }
+
+    def _cowork_package_upload_surface(self, host: HostIdentity) -> Path | None:
+        if host.host_kind != "cowork":
+            return None
+        payload = self._host_json_payload(host)
+        for surface in payload["evidence_surfaces"]:
+            if surface.get("name") != "package_uploads":
+                continue
+            if (
+                surface.get("kind") == "directory"
+                and surface.get("writable") is True
+                and surface.get("exists") is True
+                and surface.get("is_symlink") is False
+                and surface.get("is_directory") is True
+                and surface.get("writable_effective") is True
+            ):
+                path = surface.get("path")
+                if isinstance(path, str) and path:
+                    return Path(path)
+        return None
 
     def built_in_records(self) -> list[SkillRecord]:
         records = []
@@ -858,14 +900,15 @@ class AiwsRuntime:
         if host_kind == "cowork":
             plugin_root = adapter_root / "aiws-generated-plugin"
             package_output_dir = host_root / "package-output"
-            package_upload_dir = resolved_config_root / "packages"
+            package_upload_dir = self._cowork_package_upload_surface(host)
+            declared_package_upload_dir = resolved_config_root / "packages"
             result: dict[str, Any] = {
                 "status": "ok",
                 "host_id": host.host_id,
                 "host_kind": host_kind,
                 "plugin_root": str(plugin_root),
                 "package_output_dir": str(package_output_dir),
-                "package_upload_surface": str(package_upload_dir),
+                "package_upload_surface": str(package_upload_dir or declared_package_upload_dir),
                 "package_path": None,
                 "copied_package_path": None,
                 "planned_writes": [],
@@ -918,12 +961,12 @@ class AiwsRuntime:
                 return result
             planned_package_path = package_output_dir / "aiws-generated-plugin.zip"
             result["planned_writes"] = [str(planned_package_path)]
-            if package_upload_dir.exists():
+            if package_upload_dir is not None:
                 result["planned_writes"].append(str(package_upload_dir / planned_package_path.name))
             if dry_run:
                 result["status"] = "planned"
-                result["requires_cowork_confirmation"] = package_upload_dir.exists()
-                result["requires_manual_upload"] = not package_upload_dir.exists()
+                result["requires_cowork_confirmation"] = package_upload_dir is not None
+                result["requires_manual_upload"] = package_upload_dir is None
                 return result
 
             host = self._resolve_host_for_install(
@@ -938,9 +981,10 @@ class AiwsRuntime:
             )
             result["package_path"] = str(package_path)
             result["write_paths"].append(str(package_path))
-            if package_upload_dir.exists():
+            if package_upload_dir is not None:
                 handoff = skill_manager.copy_package_to_upload_surface(package_path, package_upload_dir)
                 result["status"] = "handoff_prepared"
+                result["package_upload_surface"] = handoff["package_upload_surface"]
                 result["copied_package_path"] = handoff["copied_package_path"]
                 result["write_paths"].append(handoff["copied_package_path"])
                 result["requires_cowork_confirmation"] = True

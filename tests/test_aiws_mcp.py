@@ -1017,6 +1017,14 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("observations", claude_surfaces)
         self.assertIn("installed_contracts", claude_surfaces)
 
+        cowork = self.runtime.host_surfaces(host_kind="cowork")
+        cowork_surfaces = {surface["name"]: surface for surface in cowork["evidence_surfaces"]}
+        self.assertIn("package_uploads", cowork_surfaces)
+        self.assertTrue(cowork_surfaces["package_uploads"]["writable"])
+        self.assertFalse(cowork_surfaces["package_uploads"]["exists"])
+        self.assertFalse(cowork_surfaces["package_uploads"]["is_symlink"])
+        self.assertFalse(cowork_surfaces["package_uploads"]["writable_effective"])
+
     def test_materialize_generates_claude_adapter_and_integrity(self) -> None:
         self.write_personal_skill("local-review", "Review local work.")
 
@@ -1142,6 +1150,19 @@ class AiwsMcpSkillTests(unittest.TestCase):
             self.assertIn(".claude-plugin/plugin.json", package.namelist())
             self.assertIn("skills/local-review/SKILL.md", package.namelist())
         self.assertTrue((adapter_plugin / ".claude-plugin" / "plugin.json").exists())
+
+    def test_install_host_cowork_requires_verified_package_upload_directory(self) -> None:
+        self.write_personal_skill("local-review", "Review local work.")
+        self.cowork_home.mkdir(parents=True)
+        (self.cowork_home / "packages").write_text("not a directory", encoding="utf-8")
+
+        self.runtime.materialize_skill(skill_id="local-review", host_kind="cowork")
+        result = self.runtime.install_host(host_kind="cowork")
+
+        self.assertEqual(result["status"], "host_capability_missing")
+        self.assertTrue(result["requires_manual_upload"])
+        self.assertFalse(result["requires_cowork_confirmation"])
+        self.assertIsNone(result["copied_package_path"])
 
     def test_install_host_codex_copies_materialized_adapter_skill(self) -> None:
         self.materialize_codex_skill()
