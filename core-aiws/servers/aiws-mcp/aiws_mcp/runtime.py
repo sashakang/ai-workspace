@@ -535,56 +535,59 @@ class AiwsRuntime:
                 continue
             if not isinstance(scope_id, str) or not scope_id.strip():
                 continue
-            plugins_folder = client.find_child(
-                backend_ref.strip(),
-                "plugins",
-                mime_type="application/vnd.google-apps.folder",
-            )
-            if plugins_folder is None:
-                continue
-            plugin_folders = client.list_children(
-                str(plugins_folder["id"]),
-                mime_type="application/vnd.google-apps.folder",
-            )
-            for plugin_folder in plugin_folders:
-                plugin_id = plugin_folder.get("name")
-                if not isinstance(plugin_id, str) or not plugin_id:
+            try:
+                plugins_folder = client.find_child(
+                    backend_ref.strip(),
+                    "plugins",
+                    mime_type="application/vnd.google-apps.folder",
+                )
+                if plugins_folder is None:
                     continue
-                index_payload = skill_manager.read_drive_json_file(client, str(plugin_folder["id"]), "index.json")
-                if index_payload is None:
-                    continue
-                current_version = index_payload.get("current_version")
-                package_file_id = index_payload.get("package_file_id")
-                if not isinstance(current_version, str) or not current_version.strip():
-                    continue
-                if not isinstance(package_file_id, str) or not package_file_id.strip():
-                    continue
-                package_bytes = client.download_file_bytes(package_file_id.strip())
-                with zipfile.ZipFile(io.BytesIO(package_bytes)) as package:
-                    for name in sorted(package.namelist()):
-                        if not name.startswith("skills/") or not name.endswith("/SKILL.md"):
-                            continue
-                        parts = Path(name).parts
-                        if len(parts) != 3:
-                            continue
-                        skill_id = parts[1]
-                        content = package.read(name).decode("utf-8")
-                        metadata = validate_skill_content(content, skill_id)
-                        records.append(
-                            SkillRecord(
-                                skill_id=skill_id,
-                                name=metadata["name"],
-                                description=metadata["description"],
-                                scope=scope_id.strip(),
-                                version=current_version.strip(),
-                                source=f"google-drive:{marketplace_id}:{plugin_id}:{package_file_id.strip()}",
-                                root=None,
-                                entrypoint_content=content,
-                                supported_hosts=tuple(sorted(HOST_KINDS)),
-                                marketplace_id=marketplace_id,
-                                plugin_id=plugin_id,
+                plugin_folders = client.list_children(
+                    str(plugins_folder["id"]),
+                    mime_type="application/vnd.google-apps.folder",
+                )
+                for plugin_folder in plugin_folders:
+                    plugin_id = plugin_folder.get("name")
+                    if not isinstance(plugin_id, str) or not plugin_id:
+                        continue
+                    index_payload = skill_manager.read_drive_json_file(client, str(plugin_folder["id"]), "index.json")
+                    if index_payload is None:
+                        continue
+                    current_version = index_payload.get("current_version")
+                    package_file_id = index_payload.get("package_file_id")
+                    if not isinstance(current_version, str) or not current_version.strip():
+                        continue
+                    if not isinstance(package_file_id, str) or not package_file_id.strip():
+                        continue
+                    package_bytes = client.download_file_bytes(package_file_id.strip())
+                    with zipfile.ZipFile(io.BytesIO(package_bytes)) as package:
+                        for name in sorted(package.namelist()):
+                            if not name.startswith("skills/") or not name.endswith("/SKILL.md"):
+                                continue
+                            parts = Path(name).parts
+                            if len(parts) != 3:
+                                continue
+                            skill_id = parts[1]
+                            content = package.read(name).decode("utf-8")
+                            metadata = validate_skill_content(content, skill_id)
+                            records.append(
+                                SkillRecord(
+                                    skill_id=skill_id,
+                                    name=metadata["name"],
+                                    description=metadata["description"],
+                                    scope=scope_id.strip(),
+                                    version=current_version.strip(),
+                                    source=f"google-drive:{marketplace_id}:{plugin_id}:{package_file_id.strip()}",
+                                    root=None,
+                                    entrypoint_content=content,
+                                    supported_hosts=tuple(sorted(HOST_KINDS)),
+                                    marketplace_id=marketplace_id,
+                                    plugin_id=plugin_id,
+                                )
                             )
-                        )
+            except skill_manager.SkillManagerError:
+                continue
         return records
 
     def materialized_records(self) -> list[SkillRecord]:

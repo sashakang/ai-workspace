@@ -56,6 +56,13 @@ class FakeRuntimeGoogleDriveClient:
         return self.package_bytes
 
 
+class MixedRuntimeGoogleDriveClient(FakeRuntimeGoogleDriveClient):
+    def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None):
+        if parent_id == "stale-drive-root":
+            raise runtime_module.skill_manager.SkillManagerError("Google Drive API request failed (404): File not found: .")
+        return super().find_child(parent_id, name, mime_type=mime_type)
+
+
 class AiwsMcpSkillTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
@@ -788,6 +795,52 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertTrue((cache_path / "references" / "notes.md").is_file())
         self.assertEqual(result["manifest"]["marketplace_id"], "checkout-main-real")
         self.assertEqual(result["manifest"]["plugin_id"], "example-plugin")
+
+    def test_materialize_skill_from_google_drive_skips_stale_marketplace_entries(self) -> None:
+        package_buffer = io.BytesIO()
+        with zipfile.ZipFile(package_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.writestr(
+                "skills/meeting-followup/SKILL.md",
+                "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n",
+            )
+        registry_path = self.root / "state" / "marketplace-registry.json"
+        registry_path.parent.mkdir(parents=True, exist_ok=True)
+        registry_path.write_text(
+            json.dumps(
+                {
+                    "marketplaces": {
+                        "checkout-main": {
+                            "marketplace_id": "checkout-main",
+                            "scope_id": "project:checkout",
+                            "backend_kind": "google_drive",
+                            "backend_ref": "stale-drive-root",
+                        },
+                        "checkout-main-real": {
+                            "marketplace_id": "checkout-main-real",
+                            "scope_id": "project:checkout",
+                            "backend_kind": "google_drive",
+                            "backend_ref": "drive-root-1",
+                        },
+                    }
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=MixedRuntimeGoogleDriveClient(package_buffer.getvalue()),
+            ),
+        ):
+            resolved = self.runtime.resolve_skill("meeting-followup", scope="project:checkout", host_kind="codex")
+
+        self.assertEqual(resolved["status"], "ok")
+        self.assertEqual(resolved["manifest"]["marketplace_id"], "checkout-main-real")
 
     def test_cowork_runtime_start_google_drive_oauth_delegates_to_skill_manager(self) -> None:
         with patch.object(
