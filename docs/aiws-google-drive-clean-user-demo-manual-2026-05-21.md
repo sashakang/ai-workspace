@@ -11,7 +11,7 @@
 | Infrastructure marketplace | `ai-workspace` |
 | Infrastructure source | `sashakang/ai-workspace@master` |
 | Required infrastructure plugin | `core-aiws` |
-| Verified infrastructure version | `0.3.45` |
+| Verified infrastructure version | `0.3.46` |
 | Drive marketplace display name | Checkout Main |
 | Drive marketplace_id | `checkout-main` |
 | Drive backend_ref | `1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z` |
@@ -40,7 +40,7 @@ Use `AIWS` only for the infrastructure/platform. The Google Drive demo domain pl
 
 The demo passes only if:
 
-1. `core-aiws` runs at `0.3.45` or newer.
+1. `core-aiws` runs at `0.3.46` or newer.
 2. `aiws.marketplaces.drive_workflow` shows `checkout-main`.
 3. `meeting-followup` resolves from `marketplace_id: checkout-main` with `plugin_id: productivity`.
 4. Materialization creates AIWS cache paths under `~/.aiws/.../shared-cache/...`, not Cowork hostloop temp paths.
@@ -68,7 +68,7 @@ Report plugin_version and declared_tools count.
 Expected:
 
 ```text
-plugin_version: 0.3.45
+plugin_version: 0.3.46
 declared_tools count: 39
 ```
 
@@ -106,6 +106,8 @@ workflow_schema_version: 1
 cowork_native_visible: false
 current_skill: productivity / meeting-followup / 0.2.4
 filters: marketplace_id checkout-main, plugin_id productivity, skill_id meeting-followup
+selection_status: matched
+selected_skill_count: 1
 next_action_detail: open_draft
 actions include: materialize_skill, open_draft, validate_draft, stage_proposal, submit_for_review, refresh_proposal_state, publish_approved_proposal, delete_old_artifact_dry_run, check_core_update_status
 ```

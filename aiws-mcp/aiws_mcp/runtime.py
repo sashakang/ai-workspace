@@ -2297,6 +2297,14 @@ class AiwsRuntime:
                     "backend_ref": marketplace.get("backend_ref"),
                 }
             marketplace_payloads.append(marketplace_payload)
+        selected_skill_count = sum(payload["skill_count"] for payload in marketplace_payloads)
+        selection_status = (
+            "browse"
+            if not any((marketplace_id, plugin_id, skill_id))
+            else "matched"
+            if selected_skill_count
+            else "not_found"
+        )
         return {
             "status": "ok",
             "host_kind": host_kind,
@@ -2305,6 +2313,8 @@ class AiwsRuntime:
                 "plugin_id": plugin_id,
                 "skill_id": skill_id,
             },
+            "selection_status": selection_status,
+            "selected_skill_count": selected_skill_count,
             "workflow_schema_version": 1,
             "latest_only": latest_only,
             "include_history": include_history,

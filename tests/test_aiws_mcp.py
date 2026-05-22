@@ -976,6 +976,13 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 host_kind="cowork",
                 latest_only=True,
             )
+            missing_workflow = self.runtime.drive_marketplace_workflow(
+                marketplace_id="checkout-main-real",
+                plugin_id="example-plugin",
+                skill_id="missing-skill",
+                host_kind="cowork",
+                latest_only=True,
+            )
             debug_workflow = self.runtime.drive_marketplace_workflow(
                 marketplace_id="checkout-main-real",
                 host_kind="cowork",
@@ -1078,6 +1085,12 @@ class AiwsMcpSkillTests(unittest.TestCase):
         )
         self.assertEqual(filtered_workflow["marketplaces"][0]["current_skill"]["skill_id"], "meeting-followup")
         self.assertEqual(filtered_workflow["marketplaces"][0]["skill_count"], 1)
+        self.assertEqual(filtered_workflow["selection_status"], "matched")
+        self.assertEqual(filtered_workflow["selected_skill_count"], 1)
+        self.assertEqual(missing_workflow["selection_status"], "not_found")
+        self.assertEqual(missing_workflow["selected_skill_count"], 0)
+        self.assertEqual(missing_workflow["marketplaces"][0]["skill_count"], 0)
+        self.assertNotIn("current_skill", missing_workflow["marketplaces"][0])
         debug_skill = debug_workflow["marketplaces"][0]["plugins"][0]["skills"][0]
         self.assertEqual(debug_workflow["marketplaces"][0]["debug"]["scope_id"], "project:checkout")
         self.assertEqual(debug_skill["debug"]["legacy_scope_id"], "project:checkout")
@@ -1442,6 +1455,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
 
         self.assertEqual(workflow["status"], "ok")
         self.assertEqual(workflow["workflow_schema_version"], 1)
+        self.assertEqual(workflow["selection_status"], "matched")
+        self.assertEqual(workflow["selected_skill_count"], 1)
         self.assertFalse(workflow["latest_only"])
         self.assertTrue(workflow["include_history"])
         self.assertIn("do not appear in Cowork's native plugin sidebar yet", workflow["note"])
