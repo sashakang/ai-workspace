@@ -23,8 +23,16 @@ import aiws_mcp.runtime as runtime_module  # noqa: E402
 
 
 class FakeRuntimeGoogleDriveClient:
-    def __init__(self, package_bytes: bytes) -> None:
+    def __init__(
+        self,
+        package_bytes: bytes,
+        *,
+        current_version: str = "1.0.1",
+        package_file_id: str = "package-file-1",
+    ) -> None:
         self.package_bytes = package_bytes
+        self.current_version = current_version
+        self.package_file_id = package_file_id
 
     def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None):
         if parent_id == "drive-root-1" and name == "plugins":
@@ -44,14 +52,14 @@ class FakeRuntimeGoogleDriveClient:
                 {
                     "plugin_id": "example-plugin",
                     "marketplace_id": "checkout-main-real",
-                    "current_version": "1.0.1",
-                    "package_file_id": "package-file-1",
+                    "current_version": self.current_version,
+                    "package_file_id": self.package_file_id,
                 }
             )
         raise AssertionError(f"Unexpected read_text_file: {file_id}")
 
     def download_file_bytes(self, file_id: str) -> bytes:
-        if file_id != "package-file-1":
+        if file_id != self.package_file_id:
             raise AssertionError(f"Unexpected download_file_bytes: {file_id}")
         return self.package_bytes
 
@@ -836,6 +844,89 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(draft["origin_marketplace"], "checkout-main-real")
         with self.assertRaisesRegex(Exception, "expected plugin_id 'other-plugin'"):
             self.runtime.validate_draft(draft["record_id"], expected_plugin_id="other-plugin")
+
+    def test_resolve_google_drive_marketplace_prefers_current_published_over_stale_cache(self) -> None:
+        package_buffer = io.BytesIO()
+        with zipfile.ZipFile(package_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.writestr(
+                "skills/meeting-followup/SKILL.md",
+                "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n",
+            )
+        registry_path = self.root / "state" / "marketplace-registry.json"
+        registry_path.parent.mkdir(parents=True, exist_ok=True)
+        registry_path.write_text(
+            json.dumps(
+                {
+                    "marketplaces": {
+                        "checkout-main-real": {
+                            "marketplace_id": "checkout-main-real",
+                            "scope_id": "project:checkout",
+                            "backend_kind": "google_drive",
+                            "backend_ref": "drive-root-1",
+                        }
+                    }
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=FakeRuntimeGoogleDriveClient(
+                    package_buffer.getvalue(),
+                    current_version="1.0.1",
+                    package_file_id="package-file-old",
+                ),
+            ),
+        ):
+            old = self.runtime.materialize_skill(
+                skill_id="meeting-followup",
+                host_kind="cowork",
+                marketplace_id="checkout-main-real",
+            )
+
+        self.assertEqual(old["manifest"]["version"], "1.0.1")
+        self.assertEqual(old["manifest"]["artifact_ref"], "google-drive:checkout-main-real:example-plugin:package-file-old")
+
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=FakeRuntimeGoogleDriveClient(
+                    package_buffer.getvalue(),
+                    current_version="1.0.2",
+                    package_file_id="package-file-new",
+                ),
+            ),
+        ):
+            resolved = self.runtime.resolve_skill(
+                "meeting-followup",
+                marketplace_id="checkout-main-real",
+                host_kind="cowork",
+            )
+            materialized = self.runtime.materialize_skill(
+                skill_id="meeting-followup",
+                host_kind="cowork",
+                marketplace_id="checkout-main-real",
+            )
+
+        self.assertEqual(resolved["status"], "ok")
+        self.assertEqual(resolved["manifest"]["version"], "1.0.2")
+        self.assertEqual(
+            resolved["manifest"]["artifact_ref"],
+            "google-drive:checkout-main-real:example-plugin:package-file-new",
+        )
+        self.assertEqual(materialized["manifest"]["version"], "1.0.2")
+        self.assertEqual(
+            materialized["manifest"]["artifact_ref"],
+            "google-drive:checkout-main-real:example-plugin:package-file-new",
+        )
+        self.assertTrue(str(materialized["plugin_cache_path"]).endswith("/checkout-main-real/example-plugin/1.0.2"))
 
     def test_materialize_skill_from_google_drive_skips_stale_marketplace_entries(self) -> None:
         package_buffer = io.BytesIO()

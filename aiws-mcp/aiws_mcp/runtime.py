@@ -745,6 +745,16 @@ class AiwsRuntime:
             records = [record for record in records if host_kind in record.supported_hosts]
         if not records:
             return {"status": "not_found", "reason": f"No skill found for {skill_id}."}
+        if marketplace_id and version is None:
+            marketplace_published = [
+                record
+                for record in records
+                if record.marketplace_id == marketplace_id
+                and not record.materialized
+                and record.source.startswith("google-drive:")
+            ]
+            if marketplace_published:
+                records = marketplace_published
         unique: dict[tuple[str, str], SkillRecord] = {}
         for record in records:
             key = (record.marketplace_id or "", record.scope, record.version)
