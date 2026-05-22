@@ -13,7 +13,7 @@ This report captures what was actually proven in Cowork for the clean Google Dri
 | Infrastructure repo | `sashakang/ai-workspace` |
 | Infrastructure marketplace | `ai-workspace` |
 | Infrastructure plugin | `core-aiws` |
-| Verified infrastructure version | `0.3.41` |
+| Verified infrastructure version | `0.3.42` |
 | Drive marketplace display name | Checkout Main |
 | Drive marketplace_id | `checkout-main` |
 | Drive folder id | `1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z` |
@@ -127,7 +127,7 @@ Meeting Follow-up 0.2.3 materialized true
 Meeting Follow-up 0.2.4 materialized true
 ```
 
-This is expected version history, not the duplicate-scope bug. Both should use canonical scope:
+This is expected version history, not the duplicate-scope bug. The default workflow payload no longer shows scope; `include_debug: true` exposes the legacy canonical scope when diagnostics need it:
 
 ```text
 project:checkout-main
@@ -137,7 +137,7 @@ For a clean demo view, call `aiws.marketplaces.drive_workflow` with `latest_only
 
 ```text
 Meeting Follow-up 0.2.4 materialized true
-scope: project:checkout-main
+scope: absent from the default workflow payload
 ```
 
 ## Not Proven / Follow-Up
@@ -146,4 +146,4 @@ scope: project:checkout-main
 - `core-aiws` cannot update itself from inside its own MCP runtime; use `aiws.runtime.update_status` for exact native Cowork Directory update instructions.
 - Old Drive package deletion is intentionally not part of the demo path.
 - Maintenance cleanup is available through guarded `aiws.marketplaces.delete_artifact`.
-- Add later: remove or retire user-facing scopes after explicit `marketplace_id` paths stay stable.
+- Scopes remain as debug/internal storage until the compatibility migration is complete.

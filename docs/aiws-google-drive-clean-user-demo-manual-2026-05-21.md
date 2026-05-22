@@ -11,11 +11,11 @@
 | Infrastructure marketplace | `ai-workspace` |
 | Infrastructure source | `sashakang/ai-workspace@master` |
 | Required infrastructure plugin | `core-aiws` |
-| Verified infrastructure version | `0.3.41` |
+| Verified infrastructure version | `0.3.42` |
 | Drive marketplace display name | Checkout Main |
 | Drive marketplace_id | `checkout-main` |
 | Drive backend_ref | `1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z` |
-| Drive scope_id | `project:checkout-main` |
+| Legacy Drive scope_id (debug/internal) | `project:checkout-main` |
 | Demo domain plugin display name | Productivity |
 | Demo domain plugin_id | `productivity` |
 | Demo skill display name | Meeting Follow-up |
@@ -40,7 +40,7 @@ Use `AIWS` only for the infrastructure/platform. The Google Drive demo domain pl
 
 The demo passes only if:
 
-1. `core-aiws` runs at `0.3.41` or newer.
+1. `core-aiws` runs at `0.3.42` or newer.
 2. `aiws.marketplaces.drive_workflow` shows `checkout-main`.
 3. `meeting-followup` resolves from `marketplace_id: checkout-main` with `plugin_id: productivity`.
 4. Materialization creates AIWS cache paths under `~/.aiws/.../shared-cache/...`, not Cowork hostloop temp paths.
@@ -68,7 +68,7 @@ Report plugin_version and declared_tools count.
 Expected:
 
 ```text
-plugin_version: 0.3.41
+plugin_version: 0.3.42
 declared_tools count: 39
 ```
 
@@ -92,7 +92,7 @@ required_action: Update or reinstall core-aiws@ai-workspace in Cowork's native D
 
 ```text
 Call aiws.marketplaces.drive_workflow with marketplace_id: checkout-main and host_kind: cowork.
-Report the Checkout Main marketplace, Productivity plugin, Meeting Follow-up skill rows, versions, scopes, and materialized status.
+Report the Checkout Main marketplace, Productivity plugin, Meeting Follow-up skill rows, versions, materialized status, and whether any user-facing scope field is present.
 ```
 
 Expected:
@@ -101,7 +101,7 @@ Expected:
 marketplace_id: checkout-main
 plugin_id: productivity
 skill_id: meeting-followup
-scope: project:checkout-main
+scope: absent from the default workflow payload
 workflow_schema_version: 1
 cowork_native_visible: false
 actions include: materialize_skill, open_draft, validate_draft, stage_proposal, submit_for_review, refresh_proposal_state, publish_approved_proposal, delete_old_artifact_dry_run, check_core_update_status
@@ -120,7 +120,7 @@ Expected after the full demo:
 
 ```text
 Meeting Follow-up 0.2.4 materialized true
-scope: project:checkout-main
+scope: absent from the default workflow payload
 ```
 
 ## Phase 2: Resolve And Materialize
@@ -407,4 +407,4 @@ Do after the demo path is locked:
 
 - Add a first-class Cowork native plugin update workflow.
 - Render AIWS Drive marketplaces in the Cowork-visible marketplace workflow/UI.
-- Remove or retire user-facing scopes after explicit `marketplace_id` resolution remains stable.
+- Keep scopes as debug/internal storage until the compatibility migration is complete.

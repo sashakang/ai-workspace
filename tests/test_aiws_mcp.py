@@ -969,6 +969,12 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 host_kind="cowork",
                 latest_only=True,
             )
+            debug_workflow = self.runtime.drive_marketplace_workflow(
+                marketplace_id="checkout-main-real",
+                host_kind="cowork",
+                latest_only=True,
+                include_debug=True,
+            )
 
         self.assertEqual(resolved["status"], "ok")
         self.assertEqual(resolved["manifest"]["version"], "1.0.2")
@@ -1003,7 +1009,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         ]
         self.assertEqual(len(old_workflow_skills), 1)
         self.assertEqual(len(current_workflow_skills), 1)
-        self.assertEqual(current_workflow_skills[0]["scope"], "project:checkout")
+        self.assertNotIn("scope", current_workflow_skills[0])
         self.assertEqual(
             current_workflow_skills[0]["source"],
             "google-drive:checkout-main-real:example-plugin:package-file-new",
@@ -1045,6 +1051,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
             "Current marketplace version cannot be deleted.",
         )
         self.assertTrue(latest_workflow["latest_only"])
+        self.assertFalse(latest_workflow["include_debug"])
+        self.assertNotIn("scope_id", latest_workflow["marketplaces"][0])
+        debug_skill = debug_workflow["marketplaces"][0]["plugins"][0]["skills"][0]
+        self.assertEqual(debug_workflow["marketplaces"][0]["debug"]["scope_id"], "project:checkout")
+        self.assertEqual(debug_skill["debug"]["legacy_scope_id"], "project:checkout")
 
     def test_materialize_skill_from_google_drive_skips_stale_marketplace_entries(self) -> None:
         package_buffer = io.BytesIO()
@@ -1411,12 +1422,15 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("do not appear in Cowork's native plugin sidebar yet", workflow["note"])
         self.assertEqual(workflow["marketplaces"][0]["marketplace_id"], "checkout-main-real")
         self.assertEqual(workflow["marketplaces"][0]["display_name"], "Checkout Main Real")
+        self.assertNotIn("scope_id", workflow["marketplaces"][0])
         self.assertFalse(workflow["marketplaces"][0]["cowork_native_visible"])
         self.assertEqual(workflow["marketplaces"][0]["plugins"][0]["plugin_id"], "example-plugin")
         skill = workflow["marketplaces"][0]["plugins"][0]["skills"][0]
         self.assertEqual(skill["skill_id"], "meeting-followup")
         self.assertEqual(skill["display_name"], "Meeting Follow-up")
         self.assertEqual(skill["source"], "google-drive:checkout-main-real:example-plugin:package-file-1")
+        self.assertNotIn("scope", skill)
+        self.assertNotIn("debug", skill)
         self.assertEqual(skill["status_label"], "Available")
         self.assertEqual(skill["next_action"], "materialize_skill")
         actions = {action["id"]: action for action in skill["actions"]}

@@ -2185,6 +2185,7 @@ class AiwsRuntime:
         host_kind: str = "cowork",
         latest_only: bool = False,
         include_history: bool = True,
+        include_debug: bool = False,
     ) -> dict[str, Any]:
         listed = self.list_marketplaces(backend_kind="google_drive")
         marketplaces = listed["marketplaces"]
@@ -2229,54 +2230,60 @@ class AiwsRuntime:
                     if record.name == record.skill_id
                     else record.name
                 )
-                plugin["skills"].append(
-                    {
-                        "skill_id": record.skill_id,
-                        "display_name": skill_display_name,
-                        "description": record.description,
-                        "version": record.version,
-                        "source": record.source,
-                        "marketplace_id": record.marketplace_id,
-                        "scope": record.scope,
-                        "materialized": record.materialized,
-                        "status_label": "Materialized" if record.materialized else "Available",
-                        "next_action": "open_draft" if record.materialized else "materialize_skill",
-                        "actions": self._drive_workflow_actions(
-                            record,
-                            host_kind=host_kind,
-                            skill_display_name=skill_display_name,
-                            is_current_version=(
-                                (
-                                    record.marketplace_id or "",
-                                    record.plugin_id or "",
-                                    record.skill_id,
-                                    record.scope,
-                                    record.version,
-                                )
-                                in current_keys
-                            ),
-                            backend_ref=marketplace.get("backend_ref")
-                            if isinstance(marketplace.get("backend_ref"), str)
-                            else None,
+                skill_payload = {
+                    "skill_id": record.skill_id,
+                    "display_name": skill_display_name,
+                    "description": record.description,
+                    "version": record.version,
+                    "source": record.source,
+                    "marketplace_id": record.marketplace_id,
+                    "materialized": record.materialized,
+                    "status_label": "Materialized" if record.materialized else "Available",
+                    "next_action": "open_draft" if record.materialized else "materialize_skill",
+                    "actions": self._drive_workflow_actions(
+                        record,
+                        host_kind=host_kind,
+                        skill_display_name=skill_display_name,
+                        is_current_version=(
+                            (
+                                record.marketplace_id or "",
+                                record.plugin_id or "",
+                                record.skill_id,
+                                record.scope,
+                                record.version,
+                            )
+                            in current_keys
                         ),
-                    }
-                )
-            marketplace_payloads.append(
-                {
-                    **marketplace,
-                    "display_name": self._display_label(str(current_marketplace_id)),
-                    "cowork_native_visible": False,
-                    "plugins": list(plugins.values()),
-                    "plugin_count": len(plugins),
-                    "skill_count": len(marketplace_records),
+                        backend_ref=marketplace.get("backend_ref")
+                        if isinstance(marketplace.get("backend_ref"), str)
+                        else None,
+                    ),
                 }
-            )
+                if include_debug:
+                    skill_payload["debug"] = {"legacy_scope_id": record.scope}
+                plugin["skills"].append(skill_payload)
+            marketplace_payload = {
+                "marketplace_id": current_marketplace_id,
+                "backend_kind": marketplace.get("backend_kind"),
+                "display_name": self._display_label(str(current_marketplace_id)),
+                "cowork_native_visible": False,
+                "plugins": list(plugins.values()),
+                "plugin_count": len(plugins),
+                "skill_count": len(marketplace_records),
+            }
+            if include_debug:
+                marketplace_payload["debug"] = {
+                    "scope_id": marketplace.get("scope_id"),
+                    "backend_ref": marketplace.get("backend_ref"),
+                }
+            marketplace_payloads.append(marketplace_payload)
         return {
             "status": "ok",
             "host_kind": host_kind,
             "workflow_schema_version": 1,
             "latest_only": latest_only,
             "include_history": include_history,
+            "include_debug": include_debug,
             "note": "AIWS Google Drive marketplace skills are managed through AIWS tools and do not appear in Cowork's native plugin sidebar yet.",
             "marketplaces": marketplace_payloads,
             "workflow": [

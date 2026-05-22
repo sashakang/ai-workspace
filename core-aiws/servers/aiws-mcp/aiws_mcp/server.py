@@ -274,12 +274,14 @@ def create_server(root: Path | None = None):
         host_kind: str = "cowork",
         latest_only: bool = False,
         include_history: bool = True,
+        include_debug: bool = False,
     ) -> dict[str, Any]:
         return runtime.drive_marketplace_workflow(
             marketplace_id=marketplace_id,
             host_kind=host_kind,
             latest_only=latest_only,
             include_history=include_history,
+            include_debug=include_debug,
         )
 
     @server.tool(name="aiws.marketplaces.register")
