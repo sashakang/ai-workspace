@@ -30,6 +30,7 @@ LOCAL_TOOL_NAMES = (
     "aiws.marketplaces.register",
     "aiws.marketplaces.remove",
     "aiws.marketplaces.delete_artifact",
+    "aiws.marketplaces.export_cowork_bridge",
     "aiws.skills.search",
     "aiws.skills.resolve",
     "aiws.skills.materialize",
@@ -324,6 +325,14 @@ def create_server(root: Path | None = None):
             package_file_id=package_file_id,
             dry_run=dry_run,
             confirm=confirm,
+        )
+
+    @server.tool(name="aiws.marketplaces.export_cowork_bridge")
+    def export_drive_cowork_bridge(marketplace_id: str, plugin_id: str, version: str) -> dict[str, Any]:
+        return runtime.export_drive_cowork_bridge(
+            marketplace_id=marketplace_id,
+            plugin_id=plugin_id,
+            version=version,
         )
 
     @server.tool(name="aiws.skills.search")

@@ -43,6 +43,15 @@ Backend-of-record is pinned per that key:
 
 No dual-write and no live mirroring between GitHub and Drive in v1.
 
+Until Cowork has a native Drive marketplace provider, AIWS may project a **released**
+Drive package into a Cowork-native Git marketplace distribution artifact. That
+projection is a delivery bridge only:
+
+- Drive remains the AIWS backend-of-record for the Drive marketplace variant
+- the Git artifact is not an AIWS authoring backend, review backend, or live mirror
+- AIWS catalog and resolver logic must not register the generated Git projection
+  as a peer backend for the Drive variant
+
 `marketplace_id` rules:
 
 - `marketplace_id` is a globally unique stable slug minted or validated by AIWS at marketplace registration time

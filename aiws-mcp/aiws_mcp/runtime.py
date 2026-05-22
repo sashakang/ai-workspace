@@ -2178,6 +2178,234 @@ class AiwsRuntime:
             "count": len(entries),
         }
 
+    def _released_drive_package(
+        self,
+        *,
+        marketplace_id: str,
+        plugin_id: str,
+        version: str,
+    ) -> dict[str, Any]:
+        registry = skill_manager.load_marketplace_registry(self.root)
+        marketplace = registry.get("marketplaces", {}).get(marketplace_id)
+        if not isinstance(marketplace, dict):
+            raise ValueError(f"Marketplace is not registered: {marketplace_id}")
+        if marketplace.get("backend_kind") != "google_drive":
+            raise ValueError(f"Marketplace {marketplace_id} is not google_drive.")
+        backend_ref = marketplace.get("backend_ref")
+        if not isinstance(backend_ref, str) or not backend_ref.strip():
+            raise ValueError(f"Marketplace {marketplace_id} does not define backend_ref.")
+
+        token = skill_manager.google_drive_api_token(self.root, env=self.env)
+        if token is None:
+            raise ValueError("Google Drive credentials are not configured for release export.")
+        client = skill_manager.GoogleDriveApiClient(token=token)
+        plugins_folder = client.find_child(
+            backend_ref.strip(),
+            "plugins",
+            mime_type="application/vnd.google-apps.folder",
+        )
+        if plugins_folder is None:
+            raise ValueError(f"Google Drive marketplace {marketplace_id} does not have plugins folder.")
+        plugin_folder = client.find_child(
+            str(plugins_folder["id"]),
+            plugin_id,
+            mime_type="application/vnd.google-apps.folder",
+        )
+        if plugin_folder is None:
+            raise ValueError(f"Google Drive marketplace {marketplace_id} does not have plugin {plugin_id}.")
+        packages_folder = client.find_child(
+            str(plugin_folder["id"]),
+            "packages",
+            mime_type="application/vnd.google-apps.folder",
+        )
+        if packages_folder is None:
+            raise ValueError(f"Google Drive plugin {marketplace_id}/{plugin_id} does not have packages folder.")
+        version_folder = client.find_child(
+            str(packages_folder["id"]),
+            version,
+            mime_type="application/vnd.google-apps.folder",
+        )
+        if version_folder is None:
+            raise ValueError(f"Google Drive plugin {marketplace_id}/{plugin_id} does not have version {version}.")
+        release_metadata = client.find_child(str(version_folder["id"]), "release.json")
+        release_payload = skill_manager.read_drive_json_file(client, str(version_folder["id"]), "release.json")
+        if release_metadata is None or release_payload is None:
+            raise ValueError(f"Google Drive release {marketplace_id}/{plugin_id}@{version} does not have release.json.")
+        if release_payload.get("marketplace_id") != marketplace_id:
+            raise ValueError(
+                f"Drive release marketplace_id {release_payload.get('marketplace_id')!r} "
+                f"does not match expected marketplace_id {marketplace_id!r}."
+            )
+        if release_payload.get("plugin_id") != plugin_id:
+            raise ValueError(
+                f"Drive release plugin_id {release_payload.get('plugin_id')!r} "
+                f"does not match expected plugin_id {plugin_id!r}."
+            )
+        if release_payload.get("version") != version:
+            raise ValueError(
+                f"Drive release version {release_payload.get('version')!r} "
+                f"does not match expected version {version!r}."
+            )
+        package_file_id = release_payload.get("package_file_id")
+        if not isinstance(package_file_id, str) or not package_file_id.strip():
+            raise ValueError(f"Drive release {marketplace_id}/{plugin_id}@{version} does not define package_file_id.")
+        package_metadata = client.get_file(package_file_id.strip())
+        parents = package_metadata.get("parents")
+        version_folder_id = str(version_folder["id"])
+        if not isinstance(parents, list) or version_folder_id not in [str(parent) for parent in parents]:
+            raise ValueError("Drive release package file is not under the requested version folder.")
+        package_bytes = client.download_file_bytes(package_file_id.strip())
+        return {
+            "release": release_payload,
+            "release_file_id": str(release_metadata["id"]),
+            "package_file_id": package_file_id.strip(),
+            "package_bytes": package_bytes,
+        }
+
+    def _extract_drive_bridge_package(self, package_bytes: bytes, plugin_root: Path) -> None:
+        ensure_dir(plugin_root)
+        with zipfile.ZipFile(io.BytesIO(package_bytes)) as package:
+            for info in package.infolist():
+                name = info.filename
+                if name.endswith("/"):
+                    continue
+                if not name or name.startswith("/") or ".." in Path(name).parts:
+                    raise ValueError(f"Unsafe Google Drive package entry: {name}")
+                destination = plugin_root / name
+                ensure_dir(destination.parent)
+                with package.open(info) as source, destination.open("wb") as handle:
+                    shutil.copyfileobj(source, handle)
+
+    def _bridge_export_component(self, value: str, *, label: str) -> str:
+        component = self._safe_cache_component(value)
+        if component in {"", ".", ".."}:
+            raise ValueError(f"Cowork bridge export {label} is not safe: {value!r}")
+        return component
+
+    def _assert_bridge_export_path_safe(self, export_root: Path) -> None:
+        if self.root.is_symlink():
+            raise ValueError("AIWS root must not be a symlink for Cowork bridge export.")
+        root_resolved = self.root.resolve()
+        try:
+            relative = export_root.relative_to(self.root)
+        except ValueError as exc:
+            raise ValueError(f"Cowork bridge export path escapes AIWS root: {export_root}") from exc
+        current = self.root
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError(f"Cowork bridge export path must not contain symlinks: {current}")
+            if current.exists() and not is_relative_to(current.resolve(), root_resolved):
+                raise ValueError(f"Cowork bridge export path escapes AIWS root: {current}")
+
+    def export_drive_cowork_bridge(
+        self,
+        *,
+        marketplace_id: str,
+        plugin_id: str,
+        version: str,
+    ) -> dict[str, Any]:
+        release = self._released_drive_package(
+            marketplace_id=marketplace_id,
+            plugin_id=plugin_id,
+            version=version,
+        )
+        package_bytes = release["package_bytes"]
+        export_root = (
+            self.root
+            / "bridge-exports"
+            / "cowork-git"
+            / self._bridge_export_component(marketplace_id, label="marketplace_id")
+            / self._bridge_export_component(plugin_id, label="plugin_id")
+            / self._bridge_export_component(version, label="version")
+        )
+        self._assert_bridge_export_path_safe(export_root)
+        if export_root.exists():
+            shutil.rmtree(export_root)
+        bridge_repo_root = export_root / "repo"
+        plugin_root = bridge_repo_root / self._bridge_export_component(plugin_id, label="plugin_id")
+        self._extract_drive_bridge_package(package_bytes, plugin_root)
+        plugin_validation = skill_manager.validate_plugin(
+            plugin_root,
+            expected_name=plugin_id,
+            expected_version=version,
+        )
+        manifest = load_json(plugin_root / ".claude-plugin" / "plugin.json", {})
+        description = manifest.get("description")
+        if not isinstance(description, str) or not description.strip():
+            description = f"Generated Cowork distribution projection for {plugin_id}."
+        author = manifest.get("author")
+        plugin_entry = {
+            "name": plugin_id,
+            "source": f"./{plugin_id}",
+            "description": description,
+            "version": version,
+        }
+        if isinstance(author, dict):
+            plugin_entry["author"] = author
+        write_json_atomic(
+            bridge_repo_root / ".claude-plugin" / "marketplace.json",
+            {
+                "name": "aiws-cowork-drive-bridge",
+                "owner": {"name": "Sasha Kang"},
+                "metadata": {
+                    "description": "Generated Cowork distribution projections from released AIWS Drive plugins.",
+                    "projection_kind": "cowork-git-marketplace",
+                },
+                "plugins": [plugin_entry],
+            },
+        )
+        provenance_path = bridge_repo_root / ".aiws-bridge" / "provenance.json"
+        write_json_atomic(
+            provenance_path,
+            {
+                "schema_version": 1,
+                "projection_kind": "cowork-git-marketplace",
+                "generated_at": utc_now_iso(),
+                "source": {
+                    "backend_kind": "google_drive",
+                    "marketplace_id": marketplace_id,
+                    "plugin_id": plugin_id,
+                    "version": version,
+                    "package_file_id": release["package_file_id"],
+                    "package_sha256": hashlib.sha256(package_bytes).hexdigest(),
+                    "release_file_id": release["release_file_id"],
+                    "release": release["release"],
+                },
+                "target": {
+                    "marketplace_name": "aiws-cowork-drive-bridge",
+                    "plugin_source": f"./{plugin_id}",
+                },
+            },
+        )
+        validation = skill_manager.validate_marketplace(bridge_repo_root)
+        return {
+            "status": "exported",
+            "source_marketplace_id": marketplace_id,
+            "source_plugin_id": plugin_id,
+            "source_version": version,
+            "bridge_repo_root": str(bridge_repo_root),
+            "plugin_root": str(plugin_root),
+            "provenance_path": str(provenance_path),
+            "publication_instructions": {
+                "target_repo": "sashakang/aiws-cowork-drive-bridge",
+                "source_tree": str(bridge_repo_root),
+                "boundary": (
+                    "Publishing this generated Git marketplace projection does not install, update, "
+                    "or activate the plugin in Cowork; Cowork native marketplace sync and install/update "
+                    "must confirm visibility."
+                ),
+                "steps": [
+                    "Sync the contents of bridge_repo_root to the root of the generated bridge repository.",
+                    "Commit the generated marketplace projection with maintainer or bot credentials.",
+                    "Push the bridge repository so Cowork can sync the native marketplace artifact.",
+                    "Verify Cowork Directory visibility, install, skill use, and update separately.",
+                ],
+            },
+            "plugin_validation": plugin_validation,
+            "validation": validation,
+        }
+
     def drive_marketplace_workflow(
         self,
         *,

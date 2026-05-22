@@ -71,6 +71,61 @@ class MixedRuntimeGoogleDriveClient(FakeRuntimeGoogleDriveClient):
         return super().find_child(parent_id, name, mime_type=mime_type)
 
 
+class FakeBridgeGoogleDriveClient(FakeRuntimeGoogleDriveClient):
+    def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None):
+        if parent_id == "plugins-folder" and name == "example-plugin":
+            return {
+                "id": "plugin-folder-1",
+                "name": "example-plugin",
+                "mimeType": "application/vnd.google-apps.folder",
+            }
+        if parent_id == "plugin-folder-1" and name == "packages":
+            return {"id": "packages-folder", "name": "packages", "mimeType": "application/vnd.google-apps.folder"}
+        if parent_id == "packages-folder" and name == self.current_version:
+            return {
+                "id": "version-folder",
+                "name": self.current_version,
+                "mimeType": "application/vnd.google-apps.folder",
+            }
+        if parent_id == "version-folder" and name == "release.json":
+            return {"id": "release-file-1", "name": "release.json", "mimeType": "application/json"}
+        return super().find_child(parent_id, name, mime_type=mime_type)
+
+    def read_text_file(self, file_id: str) -> str:
+        if file_id == "release-file-1":
+            return json.dumps(
+                {
+                    "plugin_id": "example-plugin",
+                    "marketplace_id": "checkout-main-real",
+                    "version": self.current_version,
+                    "proposal_id": "skillprop_release",
+                    "package_file_id": self.package_file_id,
+                    "published_at": "2026-05-22T12:00:00Z",
+                    "published_by": "demo@example.com",
+                }
+            )
+        return super().read_text_file(file_id)
+
+    def get_file(self, file_id: str) -> dict[str, object]:
+        if file_id == self.package_file_id:
+            return {"id": file_id, "name": "example-plugin-1.0.1.zip", "parents": ["version-folder"]}
+        raise AssertionError(f"Unexpected get_file: {file_id}")
+
+
+class FakeUnreleasedBridgeGoogleDriveClient(FakeBridgeGoogleDriveClient):
+    def find_child(self, parent_id: str, name: str, *, mime_type: str | None = None):
+        if parent_id == "version-folder" and name == "release.json":
+            return None
+        return super().find_child(parent_id, name, mime_type=mime_type)
+
+
+class FakeExternalPackageBridgeGoogleDriveClient(FakeBridgeGoogleDriveClient):
+    def get_file(self, file_id: str) -> dict[str, object]:
+        if file_id == self.package_file_id:
+            return {"id": file_id, "name": "example-plugin-1.0.1.zip", "parents": ["other-folder"]}
+        raise AssertionError(f"Unexpected get_file: {file_id}")
+
+
 class AiwsMcpSkillTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
@@ -879,6 +934,179 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(draft["origin_marketplace"], "checkout-main-real")
         with self.assertRaisesRegex(Exception, "expected plugin_id 'other-plugin'"):
             self.runtime.validate_draft(draft["record_id"], expected_plugin_id="other-plugin")
+
+    def test_export_drive_cowork_bridge_projects_released_package_with_provenance(self) -> None:
+        package_buffer = io.BytesIO()
+        with zipfile.ZipFile(package_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.writestr(
+                ".claude-plugin/plugin.json",
+                json.dumps(
+                    {
+                        "name": "example-plugin",
+                        "version": "1.0.1",
+                        "description": "Example Drive plugin.",
+                        "author": {"name": "Sasha Kang"},
+                    }
+                ),
+            )
+            package.writestr(
+                "skills/meeting-followup/SKILL.md",
+                "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n\n# Meeting Follow-Up\n",
+            )
+        self.runtime.register_marketplace(
+            marketplace_id="checkout-main-real",
+            scope_id="project:checkout",
+            backend_kind="google_drive",
+            backend_ref="drive-root-1",
+        )
+
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=FakeBridgeGoogleDriveClient(package_buffer.getvalue()),
+            ),
+        ):
+            result = self.runtime.export_drive_cowork_bridge(
+                marketplace_id="checkout-main-real",
+                plugin_id="example-plugin",
+                version="1.0.1",
+            )
+
+        self.assertEqual(result["status"], "exported")
+        self.assertEqual(result["source_marketplace_id"], "checkout-main-real")
+        self.assertEqual(result["source_plugin_id"], "example-plugin")
+        self.assertEqual(result["source_version"], "1.0.1")
+        bridge_root = Path(result["bridge_repo_root"])
+        plugin_root = bridge_root / "example-plugin"
+        self.assertTrue((plugin_root / ".claude-plugin" / "plugin.json").is_file())
+        self.assertTrue((plugin_root / "skills" / "meeting-followup" / "SKILL.md").is_file())
+        self.assertEqual(result["validation"]["marketplace"], "aiws-cowork-drive-bridge")
+        marketplace = json.loads((bridge_root / ".claude-plugin" / "marketplace.json").read_text())
+        self.assertEqual(marketplace["plugins"][0]["name"], "example-plugin")
+        self.assertEqual(marketplace["plugins"][0]["source"], "./example-plugin")
+        provenance = json.loads(Path(result["provenance_path"]).read_text())
+        self.assertEqual(provenance["source"]["backend_kind"], "google_drive")
+        self.assertEqual(provenance["source"]["marketplace_id"], "checkout-main-real")
+        self.assertEqual(provenance["source"]["plugin_id"], "example-plugin")
+        self.assertEqual(provenance["source"]["version"], "1.0.1")
+        self.assertEqual(provenance["source"]["package_file_id"], "package-file-1")
+        self.assertEqual(len(provenance["source"]["package_sha256"]), 64)
+        self.assertTrue(provenance["generated_at"].endswith("Z"))
+        instructions = result["publication_instructions"]
+        self.assertEqual(instructions["target_repo"], "sashakang/aiws-cowork-drive-bridge")
+        self.assertEqual(instructions["source_tree"], str(bridge_root))
+        self.assertIn("does not install", instructions["boundary"])
+        self.assertIn("Cowork Directory visibility", instructions["steps"][-1])
+        self.assert_no_memory_or_claude_writes()
+
+    def test_export_drive_cowork_bridge_requires_release_metadata(self) -> None:
+        package_buffer = io.BytesIO()
+        with zipfile.ZipFile(package_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.writestr(
+                ".claude-plugin/plugin.json",
+                json.dumps({"name": "example-plugin", "version": "1.0.1"}),
+            )
+            package.writestr(
+                "skills/meeting-followup/SKILL.md",
+                "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n",
+            )
+        self.runtime.register_marketplace(
+            marketplace_id="checkout-main-real",
+            scope_id="project:checkout",
+            backend_kind="google_drive",
+            backend_ref="drive-root-1",
+        )
+
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=FakeUnreleasedBridgeGoogleDriveClient(package_buffer.getvalue()),
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "release.json"):
+                self.runtime.export_drive_cowork_bridge(
+                    marketplace_id="checkout-main-real",
+                    plugin_id="example-plugin",
+                    version="1.0.1",
+                )
+
+    def test_export_drive_cowork_bridge_requires_package_in_release_folder(self) -> None:
+        package_buffer = io.BytesIO()
+        with zipfile.ZipFile(package_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.writestr(
+                ".claude-plugin/plugin.json",
+                json.dumps({"name": "example-plugin", "version": "1.0.1"}),
+            )
+            package.writestr(
+                "skills/meeting-followup/SKILL.md",
+                "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n",
+            )
+        self.runtime.register_marketplace(
+            marketplace_id="checkout-main-real",
+            scope_id="project:checkout",
+            backend_kind="google_drive",
+            backend_ref="drive-root-1",
+        )
+
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=FakeExternalPackageBridgeGoogleDriveClient(package_buffer.getvalue()),
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "package file is not under"):
+                self.runtime.export_drive_cowork_bridge(
+                    marketplace_id="checkout-main-real",
+                    plugin_id="example-plugin",
+                    version="1.0.1",
+                )
+
+    @unittest.skipIf(not hasattr(os, "symlink"), "symlink support required")
+    def test_export_drive_cowork_bridge_rejects_symlinked_export_parent(self) -> None:
+        package_buffer = io.BytesIO()
+        with zipfile.ZipFile(package_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.writestr(
+                ".claude-plugin/plugin.json",
+                json.dumps({"name": "example-plugin", "version": "1.0.1"}),
+            )
+            package.writestr(
+                "skills/meeting-followup/SKILL.md",
+                "---\nname: meeting-followup\ndescription: Follow up after meetings.\n---\n",
+            )
+        self.runtime.register_marketplace(
+            marketplace_id="checkout-main-real",
+            scope_id="project:checkout",
+            backend_kind="google_drive",
+            backend_ref="drive-root-1",
+        )
+        self.root.mkdir(parents=True, exist_ok=True)
+        outside = Path(self.tempdir.name) / "outside"
+        outside.mkdir()
+        os.symlink(outside, self.root / "bridge-exports")
+
+        with (
+            patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
+            patch.object(
+                runtime_module.skill_manager,
+                "GoogleDriveApiClient",
+                return_value=FakeBridgeGoogleDriveClient(package_buffer.getvalue()),
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "symlinks"):
+                self.runtime.export_drive_cowork_bridge(
+                    marketplace_id="checkout-main-real",
+                    plugin_id="example-plugin",
+                    version="1.0.1",
+                )
+
+        self.assertTrue(outside.is_dir())
+        self.assertFalse((outside / "cowork-git").exists())
 
     def test_resolve_google_drive_marketplace_prefers_current_published_over_stale_cache(self) -> None:
         package_buffer = io.BytesIO()
