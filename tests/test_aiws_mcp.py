@@ -1066,6 +1066,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(current_skill["skill_id"], "meeting-followup")
         self.assertEqual(current_skill["version"], "1.0.2")
         self.assertNotIn("scope", current_skill)
+        self.assertEqual(current_skill["next_action_detail"]["id"], "open_draft")
+        self.assertEqual(current_skill["next_action_detail"]["tool"], "aiws.skills.create_or_open_draft")
         self.assertEqual(
             filtered_workflow["filters"],
             {
@@ -1457,6 +1459,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertNotIn("debug", skill)
         self.assertEqual(skill["status_label"], "Available")
         self.assertEqual(skill["next_action"], "materialize_skill")
+        self.assertEqual(skill["next_action_detail"]["id"], "materialize_skill")
+        self.assertEqual(skill["next_action_detail"]["tool"], "aiws.skills.materialize")
         actions = {action["id"]: action for action in skill["actions"]}
         self.assertEqual(
             list(actions),

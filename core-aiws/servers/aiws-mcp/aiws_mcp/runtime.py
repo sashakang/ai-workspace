@@ -2236,6 +2236,25 @@ class AiwsRuntime:
                     if record.name == record.skill_id
                     else record.name
                 )
+                next_action = "open_draft" if record.materialized else "materialize_skill"
+                actions = self._drive_workflow_actions(
+                    record,
+                    host_kind=host_kind,
+                    skill_display_name=skill_display_name,
+                    is_current_version=(
+                        (
+                            record.marketplace_id or "",
+                            record.plugin_id or "",
+                            record.skill_id,
+                            record.scope,
+                            record.version,
+                        )
+                        in current_keys
+                    ),
+                    backend_ref=marketplace.get("backend_ref")
+                    if isinstance(marketplace.get("backend_ref"), str)
+                    else None,
+                )
                 skill_payload = {
                     "skill_id": record.skill_id,
                     "display_name": skill_display_name,
@@ -2245,25 +2264,12 @@ class AiwsRuntime:
                     "marketplace_id": record.marketplace_id,
                     "materialized": record.materialized,
                     "status_label": "Materialized" if record.materialized else "Available",
-                    "next_action": "open_draft" if record.materialized else "materialize_skill",
-                    "actions": self._drive_workflow_actions(
-                        record,
-                        host_kind=host_kind,
-                        skill_display_name=skill_display_name,
-                        is_current_version=(
-                            (
-                                record.marketplace_id or "",
-                                record.plugin_id or "",
-                                record.skill_id,
-                                record.scope,
-                                record.version,
-                            )
-                            in current_keys
-                        ),
-                        backend_ref=marketplace.get("backend_ref")
-                        if isinstance(marketplace.get("backend_ref"), str)
-                        else None,
+                    "next_action": next_action,
+                    "next_action_detail": next(
+                        (action for action in actions if action.get("id") == next_action),
+                        None,
                     ),
+                    "actions": actions,
                 }
                 if include_debug:
                     skill_payload["debug"] = {"legacy_scope_id": record.scope}
