@@ -891,6 +891,12 @@ class AiwsMcpSkillTests(unittest.TestCase):
 
         self.assertEqual(old["manifest"]["version"], "1.0.1")
         self.assertEqual(old["manifest"]["artifact_ref"], "google-drive:checkout-main-real:example-plugin:package-file-old")
+        old_materialized = [
+            record
+            for record in self.runtime.materialized_records()
+            if record.skill_id == "meeting-followup" and record.version == "1.0.1"
+        ]
+        self.assertEqual(old_materialized[0].scope, "project:checkout")
 
         with (
             patch.object(runtime_module.skill_manager, "google_drive_api_token", return_value="token"),
@@ -914,6 +920,15 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 host_kind="cowork",
                 marketplace_id="checkout-main-real",
             )
+            searched = self.runtime.search_skills(
+                query="meeting-followup",
+                marketplace_id="checkout-main-real",
+                host_kind="cowork",
+            )
+            workflow = self.runtime.drive_marketplace_workflow(
+                marketplace_id="checkout-main-real",
+                host_kind="cowork",
+            )
 
         self.assertEqual(resolved["status"], "ok")
         self.assertEqual(resolved["manifest"]["version"], "1.0.2")
@@ -927,6 +942,23 @@ class AiwsMcpSkillTests(unittest.TestCase):
             "google-drive:checkout-main-real:example-plugin:package-file-new",
         )
         self.assertTrue(str(materialized["plugin_cache_path"]).endswith("/checkout-main-real/example-plugin/1.0.2"))
+        current_search_results = [
+            result
+            for result in searched["results"]
+            if result["version"] == "1.0.2"
+        ]
+        self.assertEqual(len(current_search_results), 1)
+        self.assertEqual(current_search_results[0]["scope"], "project:checkout")
+        self.assertTrue(current_search_results[0]["materialized"])
+        workflow_skills = workflow["marketplaces"][0]["plugins"][0]["skills"]
+        current_workflow_skills = [
+            skill
+            for skill in workflow_skills
+            if skill["version"] == "1.0.2"
+        ]
+        self.assertEqual(len(current_workflow_skills), 1)
+        self.assertEqual(current_workflow_skills[0]["scope"], "project:checkout")
+        self.assertTrue(current_workflow_skills[0]["materialized"])
 
     def test_materialize_skill_from_google_drive_skips_stale_marketplace_entries(self) -> None:
         package_buffer = io.BytesIO()

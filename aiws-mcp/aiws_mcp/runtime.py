@@ -9,7 +9,7 @@ import shutil
 import tempfile
 import uuid
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -653,12 +653,18 @@ class AiwsRuntime:
             marketplace_id = manifest_payload.get("marketplace_id")
             plugin_id = manifest_payload.get("plugin_id")
             source = manifest_payload.get("artifact_ref")
+            canonical_scope = manifest_payload.get("scope")
+            scope = (
+                canonical_scope
+                if isinstance(canonical_scope, str) and canonical_scope.strip()
+                else skill_root.parent.parent.name
+            )
             records.append(
                 SkillRecord(
                     skill_id=skill_id,
                     name=metadata["name"],
                     description=metadata["description"],
-                    scope=skill_root.parent.parent.name,
+                    scope=scope,
                     version=skill_root.name,
                     source=source if isinstance(source, str) and source else str(skill_root),
                     root=skill_root,
@@ -687,6 +693,33 @@ class AiwsRuntime:
             *self.drive_published_records(),
         ]
 
+    def _dedupe_display_records(self, records: list[SkillRecord]) -> list[SkillRecord]:
+        deduped: dict[tuple[str, str, str, str, str], SkillRecord] = {}
+        for record in records:
+            key = (
+                record.marketplace_id or "",
+                record.plugin_id or "",
+                record.skill_id,
+                record.version,
+                record.scope,
+            )
+            existing = deduped.get(key)
+            if existing is None:
+                deduped[key] = record
+                continue
+            materialized = existing.materialized or record.materialized
+            preferred = existing
+            if (
+                not record.materialized
+                and record.source.startswith("google-drive:")
+                and existing.materialized
+            ):
+                preferred = record
+            if preferred.materialized != materialized:
+                preferred = replace(preferred, materialized=materialized)
+            deduped[key] = preferred
+        return list(deduped.values())
+
     def search_skills(
         self,
         *,
@@ -710,6 +743,7 @@ class AiwsRuntime:
             records = [record for record in records if record.marketplace_id == marketplace_id]
         if host_kind:
             records = [record for record in records if host_kind in record.supported_hosts]
+        records = self._dedupe_display_records(records)
         records = records[:limit] if limit is not None else records
         return {"results": [record.summary() for record in records]}
 
@@ -1975,6 +2009,7 @@ class AiwsRuntime:
                 if record.marketplace_id == current_marketplace_id
                 and (host_kind is None or host_kind in record.supported_hosts)
             ]
+            marketplace_records = self._dedupe_display_records(marketplace_records)
             plugins: dict[str, dict[str, Any]] = {}
             for record in marketplace_records:
                 plugin_id = record.plugin_id or "unknown"
