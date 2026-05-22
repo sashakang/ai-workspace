@@ -1,6 +1,6 @@
 # AIWS Cowork First-Class Drive Plugins Plan
 
-**Status:** User approved - Slice 1 in progress  
+**Status:** User approved - Slice 2 in progress
 **Date:** 2026-05-22  
 **Owner:** AIWS development
 
@@ -64,7 +64,7 @@ Use a **bridge-first Cowork distribution track**:
 3. Cowork consumes that derived artifact through a native path it already supports.
 4. Provenance in the derived artifact and AIWS state pins the source Drive marketplace, plugin id, release version, package identity, and publication target.
 
-The first bridge target is a **dedicated generated Cowork bridge Git marketplace repository**, provisionally `sashakang/aiws-cowork-drive-bridge`. Git marketplace shape is the only non-upload Cowork-native path currently available to AIWS development in this repository, and a dedicated generated repo keeps the Drive domain distribution from looking like authored source in the infrastructure `ai-workspace` repo. Organization-managed manual marketplaces remain a fallback/enterprise operator path. A direct Cowork-native Drive marketplace provider should be tracked as a later external integration request, not simulated locally.
+The first bridge target is a **generated Cowork bridge Git marketplace subtree** in the existing `sashakang/ai-workspace` repository at `generated/cowork-drive-bridge/`. Git marketplace shape is the only non-upload Cowork-native path currently available to AIWS development in this repository, and the generated subtree keeps the Drive domain distribution separate from the authored infrastructure marketplace at the repository root. Organization-managed manual marketplaces remain a fallback/enterprise operator path. A direct Cowork-native Drive marketplace provider should be tracked as a later external integration request, not simulated locally.
 
 AIWS may separately expose install-readiness state or a package-handoff action in Drive workflow payloads, but that is not the first-class proof. Existing Cowork host capability is `plugin-package`, `aiws.host.install` can prepare a guarded package handoff, and the current contract already says handoff is not activation. This can support diagnosis and bridge validation; it must not replace Cowork-native catalog/install/update acceptance.
 
@@ -117,7 +117,7 @@ Build the smallest AIWS projection path that can prove native Cowork visibility 
 
 - require explicit `marketplace_id`, `plugin_id`, and published Drive version/release identity
 - consume the existing published Drive package and release metadata as the bridge input
-- project that package into the dedicated generated Git marketplace shape for `sashakang/aiws-cowork-drive-bridge`
+- project that package into the generated Git marketplace subtree at `sashakang/ai-workspace:generated/cowork-drive-bridge`
 - write bridge provenance outside Cowork identity fields
 - reuse existing plugin/skill/marketplace validation where applicable
 - produce maintainer publication instructions for the generated bridge marketplace tree
@@ -132,14 +132,14 @@ The first projection path must not:
 
 The Slice 1 export response must include maintainer publication instructions:
 
-- sync the generated `bridge_repo_root` tree to `sashakang/aiws-cowork-drive-bridge`
+- sync the generated `bridge_repo_root` tree to `generated/cowork-drive-bridge/` in `sashakang/ai-workspace`
 - commit and push the generated projection with maintainer or bot credentials
 - treat that publication as Git marketplace artifact delivery only
 - verify Cowork Directory visibility, install, skill use, and update separately
 
 ### Slice 2: Publish And Prove The Dedicated Bridge
 
-Publish the generated bridge marketplace tree to `sashakang/aiws-cowork-drive-bridge` through an explicit maintainer/bot flow, then run the clean Cowork native proof:
+Publish the generated bridge marketplace tree to `generated/cowork-drive-bridge/` in `sashakang/ai-workspace` through an explicit maintainer/bot flow, then run the clean Cowork native proof:
 
 - write or update only the derived Cowork marketplace plugin folder/manifest for Cowork sync and runtime validation
 - keeps Drive source provenance inspectable

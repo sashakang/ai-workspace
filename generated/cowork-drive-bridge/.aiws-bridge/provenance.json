@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-05-22T18:54:10.317854Z",
+  "projection_kind": "cowork-git-marketplace",
+  "schema_version": 1,
+  "source": {
+    "backend_kind": "google_drive",
+    "marketplace_id": "checkout-main",
+    "package_file_id": "1kHkGVdTO0-_JCrxrg4vX-6Mi9BvwLkMT",
+    "package_sha256": "da767d4f204a9f6a510098ac28ee8c2f5f51e04eddbc1e944382085c946bbf04",
+    "plugin_id": "productivity",
+    "release": {
+      "marketplace_id": "checkout-main",
+      "package_file_id": "1kHkGVdTO0-_JCrxrg4vX-6Mi9BvwLkMT",
+      "package_file_url": "https://drive.google.com/file/d/1kHkGVdTO0-_JCrxrg4vX-6Mi9BvwLkMT/view?usp=drivesdk",
+      "plugin_id": "productivity",
+      "proposal_id": "skillprop_0bf4544349974a2a83b6a958b281122a",
+      "published_at": "2026-05-21T21:16:47Z",
+      "published_by": "default",
+      "validation_tree_digest": "951f9f112154d4927600378b781e304f97571b940def3ff460a382c3abb23d3d",
+      "version": "0.2.4"
+    },
+    "release_file_id": "1LsAdsP_Xbtfx06zP5UG_O9BDYtQNk6za",
+    "version": "0.2.4"
+  },
+  "target": {
+    "marketplace_name": "aiws-cowork-drive-bridge",
+    "plugin_source": "./productivity"
+  }
+}

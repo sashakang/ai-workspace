@@ -1,0 +1,18 @@
+{
+  "metadata": {
+    "description": "Generated Cowork distribution projections from released AIWS Drive plugins.",
+    "projection_kind": "cowork-git-marketplace"
+  },
+  "name": "aiws-cowork-drive-bridge",
+  "owner": {
+    "name": "Sasha Kang"
+  },
+  "plugins": [
+    {
+      "description": "Generated Cowork distribution projection for productivity.",
+      "name": "productivity",
+      "source": "./productivity",
+      "version": "0.2.4"
+    }
+  ]
+}

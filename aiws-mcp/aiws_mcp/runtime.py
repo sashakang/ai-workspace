@@ -2388,7 +2388,8 @@ class AiwsRuntime:
             "plugin_root": str(plugin_root),
             "provenance_path": str(provenance_path),
             "publication_instructions": {
-                "target_repo": "sashakang/aiws-cowork-drive-bridge",
+                "target_repo": "sashakang/ai-workspace",
+                "target_path": "generated/cowork-drive-bridge",
                 "source_tree": str(bridge_repo_root),
                 "boundary": (
                     "Publishing this generated Git marketplace projection does not install, update, "
@@ -2396,9 +2397,9 @@ class AiwsRuntime:
                     "must confirm visibility."
                 ),
                 "steps": [
-                    "Sync the contents of bridge_repo_root to the root of the generated bridge repository.",
+                    "Sync the contents of bridge_repo_root to generated/cowork-drive-bridge in sashakang/ai-workspace.",
                     "Commit the generated marketplace projection with maintainer or bot credentials.",
-                    "Push the bridge repository so Cowork can sync the native marketplace artifact.",
+                    "Push sashakang/ai-workspace so Cowork can sync the native marketplace artifact from that subdirectory.",
                     "Verify Cowork Directory visibility, install, skill use, and update separately.",
                 ],
             },

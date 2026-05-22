@@ -995,7 +995,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(len(provenance["source"]["package_sha256"]), 64)
         self.assertTrue(provenance["generated_at"].endswith("Z"))
         instructions = result["publication_instructions"]
-        self.assertEqual(instructions["target_repo"], "sashakang/aiws-cowork-drive-bridge")
+        self.assertEqual(instructions["target_repo"], "sashakang/ai-workspace")
+        self.assertEqual(instructions["target_path"], "generated/cowork-drive-bridge")
         self.assertEqual(instructions["source_tree"], str(bridge_root))
         self.assertIn("does not install", instructions["boundary"])
         self.assertIn("Cowork Directory visibility", instructions["steps"][-1])
