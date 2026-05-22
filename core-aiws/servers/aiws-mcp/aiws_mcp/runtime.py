@@ -2262,15 +2262,23 @@ class AiwsRuntime:
                 if include_debug:
                     skill_payload["debug"] = {"legacy_scope_id": record.scope}
                 plugin["skills"].append(skill_payload)
+            plugin_payloads = list(plugins.values())
             marketplace_payload = {
                 "marketplace_id": current_marketplace_id,
                 "backend_kind": marketplace.get("backend_kind"),
                 "display_name": self._display_label(str(current_marketplace_id)),
                 "cowork_native_visible": False,
-                "plugins": list(plugins.values()),
+                "plugins": plugin_payloads,
                 "plugin_count": len(plugins),
                 "skill_count": len(marketplace_records),
             }
+            if len(plugin_payloads) == 1 and len(plugin_payloads[0]["skills"]) == 1:
+                only_skill = plugin_payloads[0]["skills"][0]
+                marketplace_payload["current_skill"] = {
+                    "plugin_id": plugin_payloads[0]["plugin_id"],
+                    "plugin_display_name": plugin_payloads[0]["display_name"],
+                    **only_skill,
+                }
             if include_debug:
                 marketplace_payload["debug"] = {
                     "scope_id": marketplace.get("scope_id"),

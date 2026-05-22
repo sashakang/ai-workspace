@@ -1053,6 +1053,12 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertTrue(latest_workflow["latest_only"])
         self.assertFalse(latest_workflow["include_debug"])
         self.assertNotIn("scope_id", latest_workflow["marketplaces"][0])
+        current_skill = latest_workflow["marketplaces"][0]["current_skill"]
+        self.assertEqual(current_skill["plugin_id"], "example-plugin")
+        self.assertEqual(current_skill["plugin_display_name"], "Example Plugin")
+        self.assertEqual(current_skill["skill_id"], "meeting-followup")
+        self.assertEqual(current_skill["version"], "1.0.2")
+        self.assertNotIn("scope", current_skill)
         debug_skill = debug_workflow["marketplaces"][0]["plugins"][0]["skills"][0]
         self.assertEqual(debug_workflow["marketplaces"][0]["debug"]["scope_id"], "project:checkout")
         self.assertEqual(debug_skill["debug"]["legacy_scope_id"], "project:checkout")
@@ -1425,6 +1431,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertNotIn("scope_id", workflow["marketplaces"][0])
         self.assertFalse(workflow["marketplaces"][0]["cowork_native_visible"])
         self.assertEqual(workflow["marketplaces"][0]["plugins"][0]["plugin_id"], "example-plugin")
+        self.assertEqual(workflow["marketplaces"][0]["current_skill"]["skill_id"], "meeting-followup")
         skill = workflow["marketplaces"][0]["plugins"][0]["skills"][0]
         self.assertEqual(skill["skill_id"], "meeting-followup")
         self.assertEqual(skill["display_name"], "Meeting Follow-up")
