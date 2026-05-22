@@ -2334,11 +2334,13 @@ class AiwsRuntime:
             ],
         }
         if selection_filtered and selected_skill_count == 1:
-            workflow_payload["selected_skill"] = next(
+            selected_skill = next(
                 payload["current_skill"]
                 for payload in marketplace_payloads
                 if "current_skill" in payload
             )
+            workflow_payload["selected_skill"] = selected_skill
+            workflow_payload["selected_action"] = selected_skill["next_action_detail"]
         return workflow_payload
 
     def register_marketplace(
