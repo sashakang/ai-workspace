@@ -1,6 +1,6 @@
 # AIWS Cowork First-Class Drive Plugins Plan
 
-**Status:** User approved - Slice 2 in progress
+**Status:** Slice 2 bridge publication complete; Cowork native visibility blocked
 **Date:** 2026-05-22  
 **Owner:** AIWS development
 
@@ -45,6 +45,7 @@ The following do **not** satisfy first-class Cowork plugin status by themselves:
 - AIWS must not write into Cowork installed plugin directories or claim activation from package handoff alone.
 - Cowork's documented native distribution paths include plugin marketplaces, Git repository marketplaces, organization-managed manual marketplaces, and uploaded plugin files.
 - Google Drive is an AIWS marketplace backend today, not a Cowork-native marketplace backend.
+- Cowork's current native plugin MCP tools expose only fixed-backend installed/search/suggest flows; they do not expose custom marketplace register, browse, sync, repository, branch, path, or source parameters.
 
 ### Product constraints to preserve
 
@@ -149,6 +150,25 @@ Publish the generated bridge marketplace tree to `generated/cowork-drive-bridge/
 - use `Meeting Follow-up`
 - publish one later Drive release through the same bridge and prove Cowork update
 
+#### Slice 2 Result, 2026-05-23
+
+Bridge publication passed:
+
+- generated bridge artifact was published to `sashakang/ai-workspace@generated/cowork-drive-bridge`
+- bridge marketplace validates as `aiws-cowork-drive-bridge`
+- plugin `productivity` version `0.2.4` and skill `meeting-followup` are present in the generated artifact
+- provenance pins the Drive release `checkout-main/productivity@0.2.4`
+
+Cowork native visibility failed:
+
+- `mcp__plugins__list_plugins` can list installed plugins only
+- `mcp__plugins__search_plugins` searches a fixed Cowork marketplace backend only
+- `mcp__plugins__suggest_plugin_install` can suggest installs only from search results
+- none of the native Cowork plugin tools accepts `repository`, `branch`, `path`, `source`, `ref`, or custom marketplace registration parameters
+- `aiws-cowork-drive-bridge`, `productivity@0.2.4`, and `meeting-followup` are not visible through the native Cowork plugin tools
+
+Therefore Slice 2 is complete for AIWS publication but blocked for first-class Cowork proof. The next work item is a Cowork-side native marketplace source/sync capability, specified in `docs/cowork-native-custom-marketplace-source-request-2026-05-23.md`.
+
 ### Slice 3: Document The Contract And Statuses
 
 After the native bridge proof, correct and extend repository docs/contracts:
@@ -176,12 +196,14 @@ After the bridge proof is stable, decide which AIWS status and action surfaces r
 
 These surfaces must not make package handoff the normal Cowork user path or report installation before Cowork confirms native visibility.
 
-### Slice 5: External Cowork Native Drive Track
+### Slice 5: External Cowork Native Marketplace Source Track
 
-Open and maintain the external integration request for Cowork to support AIWS Drive marketplaces directly as native plugin marketplace providers or through an equivalent provider API.
+Open and maintain the external integration request for Cowork to support custom marketplace sources, including the current generated Git bridge subtree and eventually AIWS Drive marketplaces directly as native plugin marketplace providers or through an equivalent provider API.
 
 That request should include:
 
+- current native plugin MCP tool limitation: installed/search/suggest only, no custom source registration
+- generated Git bridge source: `sashakang/ai-workspace@generated/cowork-drive-bridge`
 - current Drive marketplace layout
 - release integrity/provenance model
 - expected native Cowork catalog/install/update behavior
