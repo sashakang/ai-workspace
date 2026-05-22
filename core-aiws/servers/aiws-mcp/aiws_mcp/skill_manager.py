@@ -4061,6 +4061,20 @@ class GoogleDriveApiClient:
             raise SkillManagerError("Google Drive file move returned invalid metadata.")
         return moved
 
+    def trash_file(self, file_id: str) -> dict[str, Any]:
+        trashed = self.request_json(
+            "PATCH",
+            f"/files/{quote(require_non_blank_string(file_id, 'file_id'), safe='')}",
+            payload={"trashed": True},
+            query={
+                "supportsAllDrives": "true",
+                "fields": "id,name,mimeType,webViewLink,parents,trashed",
+            },
+        )
+        if not isinstance(trashed, dict):
+            raise SkillManagerError("Google Drive file trash returned invalid metadata.")
+        return trashed
+
     def ensure_folder(self, parent_id: str, name: str) -> dict[str, Any]:
         existing = self.find_child(parent_id, name, mime_type="application/vnd.google-apps.folder")
         if existing is not None:
@@ -4524,6 +4538,226 @@ def read_drive_json_file(client: Any, parent_id: str, name: str) -> dict[str, An
     if not isinstance(payload, dict):
         raise SkillManagerError(f"Google Drive JSON file {name!r} did not contain a JSON object.")
     return payload
+
+
+def _drive_artifact_item(metadata: dict[str, Any], *, kind: str) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "file_id": require_non_blank_string(metadata.get("id"), "id"),
+        "name": require_non_blank_string(metadata.get("name"), "name"),
+        "mime_type": require_non_blank_string(metadata.get("mimeType"), "mimeType"),
+        "web_url": metadata.get("webViewLink"),
+    }
+
+
+def delete_drive_marketplace_artifact(
+    aiws_root: Path,
+    *,
+    marketplace_id: str,
+    plugin_id: str,
+    version: str,
+    package_file_id: str | None = None,
+    dry_run: bool = True,
+    confirm: bool = False,
+    drive_client: Any | None = None,
+) -> dict[str, Any]:
+    resolved_marketplace_id = require_marketplace_id(marketplace_id)
+    resolved_plugin_id = require_non_blank_string(plugin_id, "plugin_id")
+    resolved_version = require_non_blank_string(version, "version")
+    expected_package_file_id = (
+        require_non_blank_string(package_file_id, "package_file_id")
+        if package_file_id is not None
+        else None
+    )
+    if not dry_run and not confirm:
+        raise SkillManagerError("Deleting a Drive marketplace artifact requires confirm=true.")
+
+    registry = load_marketplace_registry(aiws_root)
+    marketplace = registry.get("marketplaces", {}).get(resolved_marketplace_id)
+    if not isinstance(marketplace, dict):
+        raise SkillManagerError(f"Marketplace is not registered: {resolved_marketplace_id}")
+    if marketplace.get("backend_kind") != "google_drive":
+        raise SkillManagerError(f"Marketplace {resolved_marketplace_id} is not google_drive.")
+    backend_ref = require_non_blank_string(marketplace.get("backend_ref"), "backend_ref")
+
+    client = drive_client
+    if client is None:
+        token = google_drive_api_token(aiws_root)
+        if token is None:
+            raise SkillManagerError(
+                "Google Drive artifact cleanup requires host token env or ~/.aiws Google Drive credentials."
+            )
+        client = GoogleDriveApiClient(token=token)
+
+    plugins_folder = client.find_child(
+        backend_ref,
+        "plugins",
+        mime_type="application/vnd.google-apps.folder",
+    )
+    if plugins_folder is None:
+        return {
+            "status": "not_found",
+            "reason": "plugins folder not found",
+            "marketplace_id": resolved_marketplace_id,
+            "plugin_id": resolved_plugin_id,
+            "version": resolved_version,
+            "dry_run": dry_run,
+            "deleted": [],
+            "would_delete": [],
+        }
+    plugin_folder = client.find_child(
+        require_non_blank_string(plugins_folder.get("id"), "id"),
+        resolved_plugin_id,
+        mime_type="application/vnd.google-apps.folder",
+    )
+    if plugin_folder is None:
+        return {
+            "status": "not_found",
+            "reason": "plugin folder not found",
+            "marketplace_id": resolved_marketplace_id,
+            "plugin_id": resolved_plugin_id,
+            "version": resolved_version,
+            "dry_run": dry_run,
+            "deleted": [],
+            "would_delete": [],
+        }
+    plugin_folder_id = require_non_blank_string(plugin_folder.get("id"), "id")
+    index_payload = read_drive_json_file(client, plugin_folder_id, "index.json")
+    if index_payload is None:
+        raise SkillManagerError(f"Plugin {resolved_plugin_id} does not have index.json.")
+    current_version = require_non_blank_string(index_payload.get("current_version"), "current_version")
+    if current_version == resolved_version:
+        raise SkillManagerError(
+            f"Refusing to delete current version {resolved_version} for {resolved_marketplace_id}/{resolved_plugin_id}."
+        )
+
+    packages_folder = client.find_child(
+        plugin_folder_id,
+        "packages",
+        mime_type="application/vnd.google-apps.folder",
+    )
+    if packages_folder is None:
+        return {
+            "status": "not_found",
+            "reason": "packages folder not found",
+            "marketplace_id": resolved_marketplace_id,
+            "plugin_id": resolved_plugin_id,
+            "version": resolved_version,
+            "current_version": current_version,
+            "dry_run": dry_run,
+            "deleted": [],
+            "would_delete": [],
+        }
+    version_folder = client.find_child(
+        require_non_blank_string(packages_folder.get("id"), "id"),
+        resolved_version,
+        mime_type="application/vnd.google-apps.folder",
+    )
+    if version_folder is None:
+        return {
+            "status": "not_found",
+            "reason": "version folder not found",
+            "marketplace_id": resolved_marketplace_id,
+            "plugin_id": resolved_plugin_id,
+            "version": resolved_version,
+            "current_version": current_version,
+            "dry_run": dry_run,
+            "deleted": [],
+            "would_delete": [],
+        }
+
+    version_folder_id = require_non_blank_string(version_folder.get("id"), "id")
+    release_metadata = client.find_child(version_folder_id, "release.json")
+    release_payload = read_drive_json_file(client, version_folder_id, "release.json") if release_metadata else None
+    package_metadata = None
+    release_package_file_id = None
+    if release_payload is not None:
+        release_package_file_id = require_non_blank_string(release_payload.get("package_file_id"), "package_file_id")
+        candidate = client.get_file(release_package_file_id)
+        parents = candidate.get("parents")
+        if not isinstance(parents, list) or version_folder_id not in [str(parent) for parent in parents]:
+            raise SkillManagerError("Release package file is not under the requested version folder.")
+        package_metadata = candidate
+    else:
+        package_metadata = client.find_child(version_folder_id, f"{resolved_plugin_id}-{resolved_version}.zip")
+
+    if expected_package_file_id is not None:
+        actual_package_file_id = (
+            require_non_blank_string(package_metadata.get("id"), "id")
+            if isinstance(package_metadata, dict)
+            else release_package_file_id
+        )
+        if actual_package_file_id != expected_package_file_id:
+            raise SkillManagerError(
+                f"Package file id mismatch: requested {expected_package_file_id!r}, found {actual_package_file_id!r}."
+            )
+
+    targets: list[dict[str, Any]] = []
+    if isinstance(package_metadata, dict):
+        targets.append(_drive_artifact_item(package_metadata, kind="package"))
+    if isinstance(release_metadata, dict):
+        targets.append(_drive_artifact_item(release_metadata, kind="release_metadata"))
+
+    target_ids = {item["file_id"] for item in targets}
+    children = client.list_children(version_folder_id)
+    extra_children = [
+        child
+        for child in children
+        if require_non_blank_string(child.get("id"), "id") not in target_ids
+    ]
+    remove_version_folder = not extra_children
+    if remove_version_folder:
+        targets.append(_drive_artifact_item(version_folder, kind="version_folder"))
+
+    if not targets:
+        return {
+            "status": "not_found",
+            "reason": "artifact files not found",
+            "marketplace_id": resolved_marketplace_id,
+            "plugin_id": resolved_plugin_id,
+            "version": resolved_version,
+            "current_version": current_version,
+            "dry_run": dry_run,
+            "deleted": [],
+            "would_delete": [],
+        }
+
+    if dry_run:
+        return {
+            "status": "planned",
+            "marketplace_id": resolved_marketplace_id,
+            "plugin_id": resolved_plugin_id,
+            "version": resolved_version,
+            "current_version": current_version,
+            "dry_run": True,
+            "requires_confirm": True,
+            "would_delete": targets,
+            "deleted": [],
+            "extra_children_kept": [
+                _drive_artifact_item(child, kind="extra_child")
+                for child in extra_children
+            ],
+        }
+
+    deleted = []
+    for item in targets:
+        deleted_metadata = client.trash_file(item["file_id"])
+        deleted.append({**item, "trashed": bool(deleted_metadata.get("trashed", True))})
+    return {
+        "status": "deleted",
+        "marketplace_id": resolved_marketplace_id,
+        "plugin_id": resolved_plugin_id,
+        "version": resolved_version,
+        "current_version": current_version,
+        "dry_run": False,
+        "requires_confirm": False,
+        "would_delete": [],
+        "deleted": deleted,
+        "extra_children_kept": [
+            _drive_artifact_item(child, kind="extra_child")
+            for child in extra_children
+        ],
+    }
 
 
 def prepare_drive_release_tree(

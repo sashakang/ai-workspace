@@ -28,6 +28,7 @@ LOCAL_TOOL_NAMES = (
     "aiws.marketplaces.drive_workflow",
     "aiws.marketplaces.register",
     "aiws.marketplaces.remove",
+    "aiws.marketplaces.delete_artifact",
     "aiws.skills.search",
     "aiws.skills.resolve",
     "aiws.skills.materialize",
@@ -236,6 +237,24 @@ def create_server(root: Path | None = None):
     @server.tool(name="aiws.marketplaces.remove")
     def remove_marketplace(marketplace_id: str) -> dict[str, Any]:
         return runtime.remove_marketplace(marketplace_id=marketplace_id)
+
+    @server.tool(name="aiws.marketplaces.delete_artifact")
+    def delete_marketplace_artifact(
+        marketplace_id: str,
+        plugin_id: str,
+        version: str,
+        package_file_id: str | None = None,
+        dry_run: bool = True,
+        confirm: bool = False,
+    ) -> dict[str, Any]:
+        return runtime.delete_marketplace_artifact(
+            marketplace_id=marketplace_id,
+            plugin_id=plugin_id,
+            version=version,
+            package_file_id=package_file_id,
+            dry_run=dry_run,
+            confirm=confirm,
+        )
 
     @server.tool(name="aiws.skills.search")
     def search(query: str | None = None, scopes: list[str] | None = None, marketplace_id: str | None = None, host_kind: str | None = None, limit: int | None = None) -> dict[str, Any]:

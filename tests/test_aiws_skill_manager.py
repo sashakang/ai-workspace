@@ -29,6 +29,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     draft_base_snapshot_path,
     deactivate_draft,
     delete_draft_file,
+    delete_drive_marketplace_artifact,
     discover_installed_plugins,
     draft_id,
     draft_record_path,
@@ -233,6 +234,7 @@ class FakeGoogleDriveClient:
         self.ensure_folder_calls: list[tuple[str, str]] = []
         self.upsert_text_file_calls: list[dict[str, str]] = []
         self.upsert_bytes_file_calls: list[dict[str, object]] = []
+        self.trash_file_calls: list[str] = []
         self._folder_counter = 0
         self._file_counter = 0
         self._time_counter = 0
@@ -340,6 +342,19 @@ class FakeGoogleDriveClient:
             return None
         return dict(metadata)
 
+    def list_children(self, parent_id: str, *, mime_type: str | None = None) -> list[dict[str, str | list[str]]]:
+        children = []
+        for (child_parent_id, _name), file_id in sorted(self.children.items()):
+            if child_parent_id != parent_id:
+                continue
+            metadata = self.files_by_id[file_id]
+            if metadata.get("trashed"):
+                continue
+            if mime_type is not None and metadata.get("mimeType") != mime_type:
+                continue
+            children.append(dict(metadata))
+        return children
+
     def move_file(self, file_id: str, new_parent_id: str) -> None:
         metadata = self.files_by_id[file_id]
         old_parents = metadata.get("parents")
@@ -348,6 +363,12 @@ class FakeGoogleDriveClient:
         metadata["parents"] = [new_parent_id]
         self.children[(new_parent_id, str(metadata["name"]))] = file_id
         return dict(metadata)
+
+    def trash_file(self, file_id: str) -> dict[str, str | list[str]]:
+        self.trash_file_calls.append(file_id)
+        metadata = self.files_by_id[file_id]
+        metadata["trashed"] = "true"
+        return {**dict(metadata), "trashed": True}
 
     def overwrite_text_file(self, file_id: str, content: str) -> None:
         metadata = self.files_by_id[file_id]
@@ -2060,6 +2081,99 @@ class AiwsSkillManagerTests(unittest.TestCase):
             self.assertIsNone(missing)
             registry = load_marketplace_registry(aiws_root)
             self.assertEqual(registry["marketplaces"], {})
+
+    def test_delete_drive_marketplace_artifact_dry_run_lists_non_current_version_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, drive_client, package_file_id = self.create_drive_marketplace_artifact(Path(temp))
+
+            result = delete_drive_marketplace_artifact(
+                aiws_root,
+                marketplace_id="checkout-main",
+                plugin_id="productivity",
+                version="0.2.3",
+                package_file_id=package_file_id,
+                drive_client=drive_client,
+            )
+
+            self.assertEqual(result["status"], "planned")
+            self.assertTrue(result["dry_run"])
+            self.assertTrue(result["requires_confirm"])
+            self.assertEqual(result["current_version"], "0.2.4")
+            self.assertEqual(
+                [item["kind"] for item in result["would_delete"]],
+                ["package", "release_metadata", "version_folder"],
+            )
+            self.assertEqual(drive_client.trash_file_calls, [])
+
+    def test_delete_drive_marketplace_artifact_requires_confirm_for_actual_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, drive_client, _package_file_id = self.create_drive_marketplace_artifact(Path(temp))
+
+            with self.assertRaisesRegex(SkillManagerError, "requires confirm=true"):
+                delete_drive_marketplace_artifact(
+                    aiws_root,
+                    marketplace_id="checkout-main",
+                    plugin_id="productivity",
+                    version="0.2.3",
+                    dry_run=False,
+                    drive_client=drive_client,
+                )
+
+            self.assertEqual(drive_client.trash_file_calls, [])
+
+    def test_delete_drive_marketplace_artifact_trashes_non_current_version_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, drive_client, package_file_id = self.create_drive_marketplace_artifact(Path(temp))
+
+            result = delete_drive_marketplace_artifact(
+                aiws_root,
+                marketplace_id="checkout-main",
+                plugin_id="productivity",
+                version="0.2.3",
+                package_file_id=package_file_id,
+                dry_run=False,
+                confirm=True,
+                drive_client=drive_client,
+            )
+
+            self.assertEqual(result["status"], "deleted")
+            self.assertFalse(result["dry_run"])
+            self.assertEqual(
+                [item["kind"] for item in result["deleted"]],
+                ["package", "release_metadata", "version_folder"],
+            )
+            self.assertEqual(len(drive_client.trash_file_calls), 3)
+
+    def test_delete_drive_marketplace_artifact_refuses_current_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, drive_client, _package_file_id = self.create_drive_marketplace_artifact(Path(temp))
+
+            with self.assertRaisesRegex(SkillManagerError, "Refusing to delete current version 0.2.4"):
+                delete_drive_marketplace_artifact(
+                    aiws_root,
+                    marketplace_id="checkout-main",
+                    plugin_id="productivity",
+                    version="0.2.4",
+                    drive_client=drive_client,
+                )
+
+            self.assertEqual(drive_client.trash_file_calls, [])
+
+    def test_delete_drive_marketplace_artifact_rejects_package_file_id_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aiws_root, drive_client, _package_file_id = self.create_drive_marketplace_artifact(Path(temp))
+
+            with self.assertRaisesRegex(SkillManagerError, "Package file id mismatch"):
+                delete_drive_marketplace_artifact(
+                    aiws_root,
+                    marketplace_id="checkout-main",
+                    plugin_id="productivity",
+                    version="0.2.3",
+                    package_file_id="wrong-file",
+                    drive_client=drive_client,
+                )
+
+            self.assertEqual(drive_client.trash_file_calls, [])
 
     def test_google_drive_api_token_prefers_env_over_credentials_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -3942,6 +4056,52 @@ class AiwsSkillManagerTests(unittest.TestCase):
         )
         record_id = draft_id("example-plugin", "meeting-followup", "checkout-main")
         return aiws_root, record_id, plugin_root, record
+
+    def create_drive_marketplace_artifact(self, temp_root: Path) -> tuple[Path, FakeGoogleDriveClient, str]:
+        aiws_root = temp_root / ".aiws"
+        register_marketplace(
+            aiws_root,
+            marketplace_id="checkout-main",
+            scope_id="project:checkout-main",
+            backend_kind="google_drive",
+            backend_ref="drive-root-1",
+        )
+        drive_client = FakeGoogleDriveClient()
+        plugins_folder = drive_client.ensure_folder("drive-root-1", "plugins")
+        plugin_folder = drive_client.ensure_folder(str(plugins_folder["id"]), "productivity")
+        packages_folder = drive_client.ensure_folder(str(plugin_folder["id"]), "packages")
+        version_folder = drive_client.ensure_folder(str(packages_folder["id"]), "0.2.3")
+        package = drive_client.upsert_bytes_file(
+            str(version_folder["id"]),
+            "productivity-0.2.3.zip",
+            b"old package",
+            "application/zip",
+        )
+        release_payload = {
+            "marketplace_id": "checkout-main",
+            "plugin_id": "productivity",
+            "version": "0.2.3",
+            "package_file_id": package["id"],
+        }
+        drive_client.upsert_text_file(
+            str(version_folder["id"]),
+            "release.json",
+            json.dumps(release_payload),
+            "application/json",
+        )
+        index_payload = {
+            "marketplace_id": "checkout-main",
+            "plugin_id": "productivity",
+            "current_version": "0.2.4",
+            "package_file_id": "current-package-file",
+        }
+        drive_client.upsert_text_file(
+            str(plugin_folder["id"]),
+            "index.json",
+            json.dumps(index_payload),
+            "application/json",
+        )
+        return aiws_root, drive_client, str(package["id"])
 
     def create_staged_meeting_followup_proposal(
         self, temp_root: Path

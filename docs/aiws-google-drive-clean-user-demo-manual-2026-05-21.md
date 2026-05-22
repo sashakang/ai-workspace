@@ -11,7 +11,7 @@
 | Infrastructure marketplace | `ai-workspace` |
 | Infrastructure source | `sashakang/ai-workspace@master` |
 | Required infrastructure plugin | `core-aiws` |
-| Verified infrastructure version | `0.3.35` |
+| Verified infrastructure version | `0.3.36` |
 | Drive marketplace display name | Checkout Main |
 | Drive marketplace_id | `checkout-main` |
 | Drive backend_ref | `1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z` |
@@ -40,7 +40,7 @@ Use `AIWS` only for the infrastructure/platform. The Google Drive demo domain pl
 
 The demo passes only if:
 
-1. `core-aiws` runs at `0.3.35` or newer.
+1. `core-aiws` runs at `0.3.36` or newer.
 2. `aiws.marketplaces.drive_workflow` shows `checkout-main`.
 3. `meeting-followup` resolves from `marketplace_id: checkout-main` with `plugin_id: productivity`.
 4. Materialization creates AIWS cache paths under `~/.aiws/.../shared-cache/...`, not Cowork hostloop temp paths.
@@ -68,7 +68,7 @@ Report plugin_version and declared_tools count.
 Expected:
 
 ```text
-plugin_version: 0.3.35
+plugin_version: 0.3.36
 declared_tools count: 37
 ```
 
@@ -352,15 +352,42 @@ This is the final pull-update PASS condition.
 - Drive MCP and AIWS Drive client may use different OAuth sessions. Prefer AIWS tools for marketplace state.
 - Old package versions may remain visible as materialized history. This is useful for rollback.
 
+## Optional Maintenance: Dry-Run Artifact Cleanup
+
+Use this only for maintenance cleanup, not during the normal demo path. The tool is constrained to a registered Drive marketplace artifact version and refuses to delete the current version.
+
+Dry run:
+
+```text
+Call aiws.marketplaces.delete_artifact with marketplace_id: checkout-main, plugin_id: productivity, version: 0.2.3, dry_run: true.
+Report status, current_version, would_delete, deleted.
+```
+
+Expected:
+
+```text
+status: planned
+current_version: 0.2.4
+would_delete: package, release_metadata, and possibly version_folder
+deleted: []
+```
+
+Actual cleanup requires explicit confirmation:
+
+```text
+Call aiws.marketplaces.delete_artifact with marketplace_id: checkout-main, plugin_id: productivity, version: 0.2.3, dry_run: false, confirm: true.
+```
+
+The tool refuses current-version deletion. This should fail:
+
+```text
+Call aiws.marketplaces.delete_artifact with marketplace_id: checkout-main, plugin_id: productivity, version: 0.2.4, dry_run: false, confirm: true.
+```
+
 ## Follow-Up Development Plan
 
 Do after the demo path is locked:
 
-- Add guarded `aiws.marketplaces.delete_artifact`:
-  - delete by `marketplace_id + plugin_id + version`, not arbitrary file ID
-  - `dry_run: true` by default
-  - refuse deleting the current version in `index.json`
-  - return all affected Drive file/folder IDs
 - Add a first-class Cowork native plugin update workflow or a clear runtime diagnostic that says `core-aiws` cannot update itself.
 - Render AIWS Drive marketplaces in the Cowork-visible marketplace workflow/UI.
 - Remove or retire user-facing scopes after explicit `marketplace_id` resolution remains stable.

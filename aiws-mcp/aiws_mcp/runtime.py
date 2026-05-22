@@ -2133,6 +2133,26 @@ class AiwsRuntime:
             "marketplace": removed,
         }
 
+    def delete_marketplace_artifact(
+        self,
+        *,
+        marketplace_id: str,
+        plugin_id: str,
+        version: str,
+        package_file_id: str | None = None,
+        dry_run: bool = True,
+        confirm: bool = False,
+    ) -> dict[str, Any]:
+        return skill_manager.delete_drive_marketplace_artifact(
+            self.root,
+            marketplace_id=marketplace_id,
+            plugin_id=plugin_id,
+            version=version,
+            package_file_id=package_file_id,
+            dry_run=dry_run,
+            confirm=confirm,
+        )
+
     def stage_change(
         self,
         *,
