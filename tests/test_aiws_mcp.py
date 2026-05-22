@@ -969,6 +969,10 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(len(old_workflow_skills), 1)
         self.assertEqual(len(current_workflow_skills), 1)
         self.assertEqual(current_workflow_skills[0]["scope"], "project:checkout")
+        self.assertEqual(
+            current_workflow_skills[0]["source"],
+            "google-drive:checkout-main-real:example-plugin:package-file-new",
+        )
         self.assertTrue(current_workflow_skills[0]["materialized"])
         old_actions = {action["id"]: action for action in old_workflow_skills[0]["actions"]}
         self.assertTrue(old_actions["delete_old_artifact_dry_run"]["enabled"])
@@ -989,7 +993,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 "origin_marketplace": "checkout-main-real",
                 "origin_ref": "checkout-main-real",
                 "base_version": "1.0.2",
-                "base_commit": "google-drive",
+                "base_commit": "google-drive:checkout-main-real:example-plugin:package-file-new",
             },
         )
         self.assertEqual(
@@ -1377,6 +1381,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         skill = workflow["marketplaces"][0]["plugins"][0]["skills"][0]
         self.assertEqual(skill["skill_id"], "meeting-followup")
         self.assertEqual(skill["display_name"], "Meeting Follow-up")
+        self.assertEqual(skill["source"], "google-drive:checkout-main-real:example-plugin:package-file-1")
         self.assertEqual(skill["status_label"], "Available")
         self.assertEqual(skill["next_action"], "materialize_skill")
         actions = {action["id"]: action for action in skill["actions"]}
