@@ -720,6 +720,31 @@ class AiwsRuntime:
             deduped[key] = preferred
         return list(deduped.values())
 
+    def _version_sort_key(self, version: str) -> tuple[tuple[int, Any], ...]:
+        parts: list[tuple[int, Any]] = []
+        for part in re.split(r"([0-9]+)", version):
+            if not part:
+                continue
+            parts.append((1, int(part)) if part.isdigit() else (0, part))
+        return tuple(parts)
+
+    def _latest_display_records(self, records: list[SkillRecord]) -> list[SkillRecord]:
+        latest: dict[tuple[str, str, str, str], SkillRecord] = {}
+        for record in records:
+            key = (
+                record.marketplace_id or "",
+                record.plugin_id or "",
+                record.skill_id,
+                record.scope,
+            )
+            existing = latest.get(key)
+            if existing is None or self._version_sort_key(record.version) > self._version_sort_key(existing.version):
+                latest[key] = record
+                continue
+            if record.version == existing.version and record.materialized and not existing.materialized:
+                latest[key] = record
+        return list(latest.values())
+
     def search_skills(
         self,
         *,
@@ -1994,7 +2019,14 @@ class AiwsRuntime:
             "count": len(entries),
         }
 
-    def drive_marketplace_workflow(self, *, marketplace_id: str | None = None, host_kind: str = "cowork") -> dict[str, Any]:
+    def drive_marketplace_workflow(
+        self,
+        *,
+        marketplace_id: str | None = None,
+        host_kind: str = "cowork",
+        latest_only: bool = False,
+        include_history: bool = True,
+    ) -> dict[str, Any]:
         listed = self.list_marketplaces(backend_kind="google_drive")
         marketplaces = listed["marketplaces"]
         if marketplace_id is not None:
@@ -2010,6 +2042,8 @@ class AiwsRuntime:
                 and (host_kind is None or host_kind in record.supported_hosts)
             ]
             marketplace_records = self._dedupe_display_records(marketplace_records)
+            if latest_only or not include_history:
+                marketplace_records = self._latest_display_records(marketplace_records)
             plugins: dict[str, dict[str, Any]] = {}
             for record in marketplace_records:
                 plugin_id = record.plugin_id or "unknown"
@@ -2048,6 +2082,8 @@ class AiwsRuntime:
         return {
             "status": "ok",
             "host_kind": host_kind,
+            "latest_only": latest_only,
+            "include_history": include_history,
             "note": "AIWS Google Drive marketplace skills are managed through AIWS tools and do not appear in Cowork's native plugin sidebar yet.",
             "marketplaces": marketplace_payloads,
             "workflow": [

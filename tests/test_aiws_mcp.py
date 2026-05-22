@@ -929,6 +929,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 marketplace_id="checkout-main-real",
                 host_kind="cowork",
             )
+            latest_workflow = self.runtime.drive_marketplace_workflow(
+                marketplace_id="checkout-main-real",
+                host_kind="cowork",
+                latest_only=True,
+            )
 
         self.assertEqual(resolved["status"], "ok")
         self.assertEqual(resolved["manifest"]["version"], "1.0.2")
@@ -956,9 +961,19 @@ class AiwsMcpSkillTests(unittest.TestCase):
             for skill in workflow_skills
             if skill["version"] == "1.0.2"
         ]
+        old_workflow_skills = [
+            skill
+            for skill in workflow_skills
+            if skill["version"] == "1.0.1"
+        ]
+        self.assertEqual(len(old_workflow_skills), 1)
         self.assertEqual(len(current_workflow_skills), 1)
         self.assertEqual(current_workflow_skills[0]["scope"], "project:checkout")
         self.assertTrue(current_workflow_skills[0]["materialized"])
+        latest_skills = latest_workflow["marketplaces"][0]["plugins"][0]["skills"]
+        self.assertEqual([skill["version"] for skill in latest_skills], ["1.0.2"])
+        self.assertTrue(latest_skills[0]["materialized"])
+        self.assertTrue(latest_workflow["latest_only"])
 
     def test_materialize_skill_from_google_drive_skips_stale_marketplace_entries(self) -> None:
         package_buffer = io.BytesIO()
@@ -1319,6 +1334,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
             )
 
         self.assertEqual(workflow["status"], "ok")
+        self.assertFalse(workflow["latest_only"])
+        self.assertTrue(workflow["include_history"])
         self.assertIn("do not appear in Cowork's native plugin sidebar yet", workflow["note"])
         self.assertEqual(workflow["marketplaces"][0]["marketplace_id"], "checkout-main-real")
         self.assertEqual(workflow["marketplaces"][0]["display_name"], "Checkout Main Real")

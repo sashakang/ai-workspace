@@ -11,7 +11,7 @@
 | Infrastructure marketplace | `ai-workspace` |
 | Infrastructure source | `sashakang/ai-workspace@master` |
 | Required infrastructure plugin | `core-aiws` |
-| Verified infrastructure version | `0.3.34` |
+| Verified infrastructure version | `0.3.35` |
 | Drive marketplace display name | Checkout Main |
 | Drive marketplace_id | `checkout-main` |
 | Drive backend_ref | `1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z` |
@@ -40,7 +40,7 @@ Use `AIWS` only for the infrastructure/platform. The Google Drive demo domain pl
 
 The demo passes only if:
 
-1. `core-aiws` runs at `0.3.34` or newer.
+1. `core-aiws` runs at `0.3.35` or newer.
 2. `aiws.marketplaces.drive_workflow` shows `checkout-main`.
 3. `meeting-followup` resolves from `marketplace_id: checkout-main` with `plugin_id: productivity`.
 4. Materialization creates AIWS cache paths under `~/.aiws/.../shared-cache/...`, not Cowork hostloop temp paths.
@@ -68,7 +68,7 @@ Report plugin_version and declared_tools count.
 Expected:
 
 ```text
-plugin_version: 0.3.34
+plugin_version: 0.3.35
 declared_tools count: 37
 ```
 
@@ -91,6 +91,20 @@ scope: project:checkout-main
 ```
 
 One row for `0.2.4` with `materialized: true` is expected after the full demo. Older versions such as `0.2.3` may also be visible as materialized history.
+
+For a clean demo view, hide version history:
+
+```text
+Call aiws.marketplaces.drive_workflow with marketplace_id: checkout-main, host_kind: cowork, latest_only: true.
+Report the Productivity / Meeting Follow-up rows only.
+```
+
+Expected after the full demo:
+
+```text
+Meeting Follow-up 0.2.4 materialized true
+scope: project:checkout-main
+```
 
 ## Phase 2: Resolve And Materialize
 
@@ -342,7 +356,6 @@ This is the final pull-update PASS condition.
 
 Do after the demo path is locked:
 
-- Add `latest_only` or `include_history` filtering for `aiws.marketplaces.drive_workflow`.
 - Add guarded `aiws.marketplaces.delete_artifact`:
   - delete by `marketplace_id + plugin_id + version`, not arbitrary file ID
   - `dry_run: true` by default
