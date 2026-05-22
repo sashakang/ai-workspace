@@ -976,6 +976,10 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 host_kind="cowork",
                 latest_only=True,
             )
+            browse_workflow = self.runtime.drive_marketplace_workflow(
+                host_kind="cowork",
+                latest_only=True,
+            )
             missing_workflow = self.runtime.drive_marketplace_workflow(
                 marketplace_id="checkout-main-real",
                 plugin_id="example-plugin",
@@ -1029,6 +1033,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
             "google-drive:checkout-main-real:example-plugin:package-file-new",
         )
         self.assertTrue(current_workflow_skills[0]["materialized"])
+        self.assertNotIn("selected_skill", workflow)
         old_actions = {action["id"]: action for action in old_workflow_skills[0]["actions"]}
         self.assertTrue(old_actions["delete_old_artifact_dry_run"]["enabled"])
         latest_skills = latest_workflow["marketplaces"][0]["plugins"][0]["skills"]
@@ -1087,10 +1092,17 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(filtered_workflow["marketplaces"][0]["skill_count"], 1)
         self.assertEqual(filtered_workflow["selection_status"], "matched")
         self.assertEqual(filtered_workflow["selected_skill_count"], 1)
+        self.assertEqual(filtered_workflow["selected_skill"], filtered_workflow["marketplaces"][0]["current_skill"])
+        self.assertEqual(filtered_workflow["selected_skill"]["plugin_id"], "example-plugin")
+        self.assertEqual(filtered_workflow["selected_skill"]["skill_id"], "meeting-followup")
+        self.assertEqual(browse_workflow["selection_status"], "browse")
+        self.assertEqual(browse_workflow["selected_skill_count"], 1)
+        self.assertNotIn("selected_skill", browse_workflow)
         self.assertEqual(missing_workflow["selection_status"], "not_found")
         self.assertEqual(missing_workflow["selected_skill_count"], 0)
         self.assertEqual(missing_workflow["marketplaces"][0]["skill_count"], 0)
         self.assertNotIn("current_skill", missing_workflow["marketplaces"][0])
+        self.assertNotIn("selected_skill", missing_workflow)
         debug_skill = debug_workflow["marketplaces"][0]["plugins"][0]["skills"][0]
         self.assertEqual(debug_workflow["marketplaces"][0]["debug"]["scope_id"], "project:checkout")
         self.assertEqual(debug_skill["debug"]["legacy_scope_id"], "project:checkout")

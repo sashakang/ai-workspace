@@ -2193,6 +2193,7 @@ class AiwsRuntime:
         marketplaces = listed["marketplaces"]
         if marketplace_id is not None:
             marketplaces = [entry for entry in marketplaces if entry.get("marketplace_id") == marketplace_id]
+        selection_filtered = any((marketplace_id, plugin_id, skill_id))
         records = self.catalog_records()
         marketplace_payloads: list[dict[str, Any]] = []
         for marketplace in marketplaces:
@@ -2222,12 +2223,12 @@ class AiwsRuntime:
                 marketplace_records = self._latest_display_records(marketplace_records)
             plugins: dict[str, dict[str, Any]] = {}
             for record in marketplace_records:
-                plugin_id = record.plugin_id or "unknown"
+                record_plugin_id = record.plugin_id or "unknown"
                 plugin = plugins.setdefault(
-                    plugin_id,
+                    record_plugin_id,
                     {
-                        "plugin_id": plugin_id,
-                        "display_name": self._display_label(plugin_id),
+                        "plugin_id": record_plugin_id,
+                        "display_name": self._display_label(record_plugin_id),
                         "skills": [],
                     },
                 )
@@ -2300,12 +2301,12 @@ class AiwsRuntime:
         selected_skill_count = sum(payload["skill_count"] for payload in marketplace_payloads)
         selection_status = (
             "browse"
-            if not any((marketplace_id, plugin_id, skill_id))
+            if not selection_filtered
             else "matched"
             if selected_skill_count
             else "not_found"
         )
-        return {
+        workflow_payload = {
             "status": "ok",
             "host_kind": host_kind,
             "filters": {
@@ -2332,6 +2333,13 @@ class AiwsRuntime:
                 "aiws.skills.submit_for_review / aiws.skills.refresh_proposal_state / aiws.skills.publish_approved_proposal: review, approve, publish, then materialize again from a fresh task.",
             ],
         }
+        if selection_filtered and selected_skill_count == 1:
+            workflow_payload["selected_skill"] = next(
+                payload["current_skill"]
+                for payload in marketplace_payloads
+                if "current_skill" in payload
+            )
+        return workflow_payload
 
     def register_marketplace(
         self,
