@@ -11,7 +11,7 @@
 | Infrastructure marketplace | `ai-workspace` |
 | Infrastructure source | `sashakang/ai-workspace@master` |
 | Required infrastructure plugin | `core-aiws` |
-| Verified infrastructure version | `0.3.36` |
+| Verified infrastructure version | `0.3.37` |
 | Drive marketplace display name | Checkout Main |
 | Drive marketplace_id | `checkout-main` |
 | Drive backend_ref | `1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z` |
@@ -40,7 +40,7 @@ Use `AIWS` only for the infrastructure/platform. The Google Drive demo domain pl
 
 The demo passes only if:
 
-1. `core-aiws` runs at `0.3.36` or newer.
+1. `core-aiws` runs at `0.3.37` or newer.
 2. `aiws.marketplaces.drive_workflow` shows `checkout-main`.
 3. `meeting-followup` resolves from `marketplace_id: checkout-main` with `plugin_id: productivity`.
 4. Materialization creates AIWS cache paths under `~/.aiws/.../shared-cache/...`, not Cowork hostloop temp paths.
@@ -68,11 +68,25 @@ Report plugin_version and declared_tools count.
 Expected:
 
 ```text
-plugin_version: 0.3.36
-declared_tools count: 37
+plugin_version: 0.3.37
+declared_tools count: 39
 ```
 
 If `plugin_version` is older, stop. The current session is still running old MCP code.
+
+If there is confusion about how to update infrastructure, run:
+
+```text
+Call aiws.runtime.update_status. Report installed_version, marketplace_latest_version, update_available, can_self_update, not_an_update_method, and required_action.
+```
+
+Expected:
+
+```text
+can_self_update: false
+not_an_update_method: aiws.host.install only packages generated adapter skills; it does not update core-aiws.
+required_action: Update or reinstall core-aiws@ai-workspace in Cowork's native Directory, then start a new Cowork task/session.
+```
 
 ## Phase 1: Browse The Drive Marketplace
 
@@ -346,7 +360,7 @@ This is the final pull-update PASS condition.
 
 ## Known Current Limitations
 
-- Cowork cannot reliably update `core-aiws` from inside the currently running `core-aiws` MCP runtime.
+- Cowork cannot update `core-aiws` from inside the currently running `core-aiws` MCP runtime; use `aiws.runtime.update_status` for the exact native update instruction.
 - `aiws.host.install` packages generated adapters only; it is not an infrastructure plugin updater.
 - Cowork native UI does not yet render AIWS Drive marketplaces as first-class marketplace entries.
 - Drive MCP and AIWS Drive client may use different OAuth sessions. Prefer AIWS tools for marketplace state.
@@ -388,6 +402,6 @@ Call aiws.marketplaces.delete_artifact with marketplace_id: checkout-main, plugi
 
 Do after the demo path is locked:
 
-- Add a first-class Cowork native plugin update workflow or a clear runtime diagnostic that says `core-aiws` cannot update itself.
+- Add a first-class Cowork native plugin update workflow.
 - Render AIWS Drive marketplaces in the Cowork-visible marketplace workflow/UI.
 - Remove or retire user-facing scopes after explicit `marketplace_id` resolution remains stable.

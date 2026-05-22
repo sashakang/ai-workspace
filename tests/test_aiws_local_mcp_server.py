@@ -120,6 +120,75 @@ class AiwsLocalMcpServerTests(unittest.TestCase):
         self.assertTrue(payload["plugin_root_present"])
         self.assertTrue(payload["plugin_data_present"])
 
+    def test_runtime_update_status_explains_native_core_update_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo_root = Path(temp) / "repo"
+            plugin_root = repo_root / "core-aiws"
+            manifest_dir = plugin_root / ".claude-plugin"
+            manifest_dir.mkdir(parents=True)
+            (manifest_dir / "plugin.json").write_text(
+                json.dumps({"name": "core-aiws", "version": "1.0.0"}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            marketplace_dir = repo_root / ".claude-plugin"
+            marketplace_dir.mkdir(parents=True)
+            (marketplace_dir / "marketplace.json").write_text(
+                json.dumps(
+                    {
+                        "plugins": [
+                            {
+                                "name": "core-aiws",
+                                "source": "./core-aiws",
+                                "version": "1.0.1",
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            env = {
+                "CLAUDE_PLUGIN_ROOT": str(plugin_root),
+                "AIWS_MCP_LAUNCH_MODE": "uvx-bundled-source",
+            }
+            with FakeMcpSdk(), mock.patch.dict(os.environ, env, clear=False):
+                server = aiws_server.create_server()
+                payload = server.tools["aiws.runtime.update_status"]()
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["plugin_id"], "core-aiws")
+        self.assertEqual(payload["installed_version"], "1.0.0")
+        self.assertEqual(payload["marketplace_latest_version"], "1.0.1")
+        self.assertTrue(payload["latest_version_known"])
+        self.assertTrue(payload["update_available"])
+        self.assertFalse(payload["self_update_supported"])
+        self.assertFalse(payload["can_self_update"])
+        self.assertEqual(payload["update_method"], "cowork_native_directory")
+        self.assertIn("aiws.host.install", payload["not_an_update_method"])
+        self.assertIn("start a new Cowork task", payload["required_action"])
+
+    def test_runtime_update_status_handles_unknown_latest_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            plugin_root = Path(temp) / "core-aiws"
+            manifest_dir = plugin_root / ".claude-plugin"
+            manifest_dir.mkdir(parents=True)
+            (manifest_dir / "plugin.json").write_text(
+                json.dumps({"name": "core-aiws", "version": "1.0.0"}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            env = {
+                "CLAUDE_PLUGIN_ROOT": str(plugin_root),
+                "AIWS_MCP_LAUNCH_MODE": "uvx-bundled-source",
+            }
+            payload = aiws_server.runtime_update_status_payload(env)
+
+        self.assertEqual(payload["installed_version"], "1.0.0")
+        self.assertIsNone(payload["marketplace_latest_version"])
+        self.assertFalse(payload["latest_version_known"])
+        self.assertFalse(payload["update_available"])
+        self.assertFalse(payload["can_self_update"])
+
     def test_record_server_started_writes_status_when_configured(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             status_path = Path(temp) / "runtime" / "aiws-mcp-status.json"

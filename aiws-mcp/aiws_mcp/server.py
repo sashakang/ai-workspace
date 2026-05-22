@@ -21,6 +21,7 @@ LOCAL_PROPOSAL_TOOL_NAMES = (
 LOCAL_TOOL_NAMES = (
     "aiws.health.ping",
     "aiws.runtime.info",
+    "aiws.runtime.update_status",
     "aiws.google_drive.start_oauth",
     "aiws.google_drive.configure_oauth_client",
     "aiws.google_drive.finish_oauth",
@@ -82,6 +83,33 @@ def _plugin_version(env: dict[str, str]) -> str | None:
     return raw_version if isinstance(raw_version, str) and raw_version else None
 
 
+def _core_marketplace_latest_version(env: dict[str, str]) -> str | None:
+    plugin_root = env.get("CLAUDE_PLUGIN_ROOT")
+    if not plugin_root:
+        return None
+    root = Path(plugin_root).expanduser()
+    candidate_paths = [
+        root.parent / ".claude-plugin" / "marketplace.json",
+        root.parent.parent / ".claude-plugin" / "marketplace.json",
+    ]
+    for marketplace_path in candidate_paths:
+        if not marketplace_path.is_file():
+            continue
+        try:
+            marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        plugins = marketplace.get("plugins")
+        if not isinstance(plugins, list):
+            continue
+        for plugin in plugins:
+            if not isinstance(plugin, dict) or plugin.get("name") != "core-aiws":
+                continue
+            version = plugin.get("version")
+            return version if isinstance(version, str) and version else None
+    return None
+
+
 def runtime_info_payload(env: dict[str, str] | None = None) -> dict[str, Any]:
     resolved_env = dict(os.environ if env is None else env)
     plugin_root = resolved_env.get("CLAUDE_PLUGIN_ROOT")
@@ -99,6 +127,38 @@ def runtime_info_payload(env: dict[str, str] | None = None) -> dict[str, Any]:
         "diagnostics_enabled": bool(resolved_env.get("AIWS_MCP_STATUS_PATH") or resolved_env.get("AIWS_MCP_LOG_PATH")),
         "plugin_root_present": bool(plugin_root),
         "plugin_data_present": bool(plugin_data),
+    }
+
+
+def runtime_update_status_payload(env: dict[str, str] | None = None) -> dict[str, Any]:
+    resolved_env = dict(os.environ if env is None else env)
+    installed_version = _plugin_version(resolved_env)
+    latest_version = _core_marketplace_latest_version(resolved_env)
+    return {
+        "status": "ok",
+        "service": "aiws",
+        "plugin_id": "core-aiws",
+        "installed_version": installed_version,
+        "marketplace_id": "ai-workspace",
+        "marketplace_latest_version": latest_version,
+        "latest_version_known": latest_version is not None,
+        "update_available": (
+            latest_version is not None
+            and installed_version is not None
+            and latest_version != installed_version
+        ),
+        "self_update_supported": False,
+        "can_self_update": False,
+        "update_method": "cowork_native_directory",
+        "not_an_update_method": "aiws.host.install only packages generated adapter skills; it does not update core-aiws.",
+        "required_action": "Update or reinstall core-aiws@ai-workspace in Cowork's native Directory, then start a new Cowork task/session.",
+        "next_steps": [
+            "Open Cowork native Directory.",
+            "Find core-aiws@ai-workspace.",
+            "Update or reinstall the native plugin.",
+            "Start a new Cowork task/session so the MCP process reloads.",
+            "Call aiws.runtime.info and confirm plugin_version.",
+        ],
     }
 
 
@@ -155,6 +215,10 @@ def create_server(root: Path | None = None):
     @server.tool(name="aiws.runtime.info")
     def runtime_info() -> dict[str, Any]:
         return runtime_info_payload()
+
+    @server.tool(name="aiws.runtime.update_status")
+    def runtime_update_status() -> dict[str, Any]:
+        return runtime_update_status_payload()
 
     @server.tool(name="aiws.google_drive.start_oauth")
     def start_google_drive_oauth(
