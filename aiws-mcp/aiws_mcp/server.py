@@ -467,9 +467,9 @@ def create_server(root: Path | None = None):
     @server.tool(name="aiws.skills.stage_proposal")
     def stage_proposal(
         draft_id: str,
-        target_scope: str,
         summary: str,
         rationale: str,
+        target_scope: str | None = None,
         target_repo: str | None = None,
         backend_kind: str = "github",
         backend_ref: str | None = None,

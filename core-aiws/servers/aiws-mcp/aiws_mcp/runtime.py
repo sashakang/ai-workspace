@@ -1635,7 +1635,6 @@ class AiwsRuntime:
                 "tool": "aiws.skills.stage_proposal",
                 "args_template": {
                     "draft_id": draft_id_template,
-                    "target_scope": record.scope,
                     "target_repo": marketplace_id,
                     "summary": f"Update {skill_display_name}.",
                     "rationale": "Proposed through the AIWS Google Drive marketplace workflow.",
@@ -2028,23 +2027,40 @@ class AiwsRuntime:
         self,
         draft_id: str,
         *,
-        target_scope: str,
-        target_repo: str | None,
         summary: str,
         rationale: str,
+        target_scope: str | None = None,
+        target_repo: str | None = None,
         backend_kind: str = "github",
         backend_ref: str | None = None,
         marketplace_id: str | None = None,
     ) -> dict[str, Any]:
+        resolved_target_scope = target_scope
+        resolved_backend_ref = backend_ref
+        if resolved_target_scope is None and backend_kind == "google_drive" and marketplace_id:
+            registry = skill_manager.load_marketplace_registry(self.root)
+            marketplace = registry.get("marketplaces", {}).get(marketplace_id)
+            if isinstance(marketplace, dict):
+                scope_id = marketplace.get("scope_id")
+                if isinstance(scope_id, str) and scope_id.strip():
+                    resolved_target_scope = scope_id.strip()
+                if resolved_backend_ref is None:
+                    registered_backend_ref = marketplace.get("backend_ref")
+                    if isinstance(registered_backend_ref, str) and registered_backend_ref.strip():
+                        resolved_backend_ref = registered_backend_ref.strip()
+        if resolved_target_scope is None:
+            raise ValueError(
+                "target_scope is required unless backend_kind is google_drive and marketplace_id resolves to a registered marketplace."
+            )
         return skill_manager.stage_proposal(
             self.root,
             draft_id,
-            target_scope,
+            resolved_target_scope,
             target_repo,
             summary,
             rationale,
             backend_kind=backend_kind,
-            backend_ref=backend_ref,
+            backend_ref=resolved_backend_ref,
             marketplace_id=marketplace_id,
         )
 

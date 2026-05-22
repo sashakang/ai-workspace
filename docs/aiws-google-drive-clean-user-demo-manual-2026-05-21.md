@@ -11,7 +11,7 @@
 | Infrastructure marketplace | `ai-workspace` |
 | Infrastructure source | `sashakang/ai-workspace@master` |
 | Required infrastructure plugin | `core-aiws` |
-| Verified infrastructure version | `0.3.40` |
+| Verified infrastructure version | `0.3.41` |
 | Drive marketplace display name | Checkout Main |
 | Drive marketplace_id | `checkout-main` |
 | Drive backend_ref | `1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z` |
@@ -40,7 +40,7 @@ Use `AIWS` only for the infrastructure/platform. The Google Drive demo domain pl
 
 The demo passes only if:
 
-1. `core-aiws` runs at `0.3.40` or newer.
+1. `core-aiws` runs at `0.3.41` or newer.
 2. `aiws.marketplaces.drive_workflow` shows `checkout-main`.
 3. `meeting-followup` resolves from `marketplace_id: checkout-main` with `plugin_id: productivity`.
 4. Materialization creates AIWS cache paths under `~/.aiws/.../shared-cache/...`, not Cowork hostloop temp paths.
@@ -68,7 +68,7 @@ Report plugin_version and declared_tools count.
 Expected:
 
 ```text
-plugin_version: 0.3.40
+plugin_version: 0.3.41
 declared_tools count: 39
 ```
 
@@ -238,7 +238,7 @@ Draft plugin_id 'productivity' does not match expected plugin_id 'aiws-productiv
 Positive staging:
 
 ```text
-Stage draft productivity--meeting-followup--a345febbc8 as a Google Drive proposal with target_scope: project:checkout-main, target_repo: null, title: Drive clean path validation, rationale: Verify clean Google Drive marketplace staging for productivity meeting-followup, backend_kind: google_drive, backend_ref: 1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z, marketplace_id: checkout-main.
+Stage draft productivity--meeting-followup--a345febbc8 as a Google Drive proposal with target_repo: null, title: Drive clean path validation, rationale: Verify clean Google Drive marketplace staging for productivity meeting-followup, backend_kind: google_drive, backend_ref: 1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z, marketplace_id: checkout-main.
 
 Report status, proposal_id, draft_id, marketplace_id, backend_kind, backend_ref.
 ```
@@ -257,7 +257,7 @@ backend_ref: 1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z
 Negative staging guard:
 
 ```text
-Stage draft productivity--meeting-followup--a345febbc8 as a Google Drive proposal with target_scope: project:checkout-main-real, target_repo: null, title: Wrong marketplace validation, rationale: Verify staging rejects mismatched Google Drive marketplace, backend_kind: google_drive, backend_ref: 1hfJ3qv2p7EAnwbdVOVjnftMyshN4K1Rh, marketplace_id: checkout-main-real.
+Stage draft productivity--meeting-followup--a345febbc8 as a Google Drive proposal with target_repo: null, title: Wrong marketplace validation, rationale: Verify staging rejects mismatched Google Drive marketplace, backend_kind: google_drive, backend_ref: 1hfJ3qv2p7EAnwbdVOVjnftMyshN4K1Rh, marketplace_id: checkout-main-real.
 
 Report the full error exactly.
 ```

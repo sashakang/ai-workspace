@@ -728,6 +728,41 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(captured["kwargs"], {"allowed_target_repos": ["example/review"]})
         self.assert_no_memory_or_claude_writes()
 
+    def test_stage_proposal_infers_drive_scope_from_marketplace_id(self) -> None:
+        self.runtime.register_marketplace(
+            marketplace_id="checkout-main",
+            scope_id="project:checkout-main",
+            backend_kind="google_drive",
+            backend_ref="drive-root-1",
+        )
+
+        with patch.object(
+            runtime_module.skill_manager,
+            "stage_proposal",
+            return_value={"status": "staged", "proposal_id": "skillprop_123"},
+        ) as mocked:
+            result = self.runtime.stage_proposal(
+                "productivity--meeting-followup--abc",
+                summary="Update Meeting Follow-up.",
+                rationale="Proposed through Drive workflow.",
+                backend_kind="google_drive",
+                marketplace_id="checkout-main",
+            )
+
+        self.assertEqual(result["status"], "staged")
+        mocked.assert_called_once_with(
+            self.root.resolve(),
+            "productivity--meeting-followup--abc",
+            "project:checkout-main",
+            None,
+            "Update Meeting Follow-up.",
+            "Proposed through Drive workflow.",
+            backend_kind="google_drive",
+            backend_ref="drive-root-1",
+            marketplace_id="checkout-main",
+        )
+        self.assert_no_memory_or_claude_writes()
+
     def test_cowork_runtime_refresh_proposal_state_delegates_to_skill_manager(self) -> None:
         with patch.object(
             runtime_module.skill_manager,
@@ -1416,7 +1451,6 @@ class AiwsMcpSkillTests(unittest.TestCase):
             actions["stage_proposal"]["args_template"],
             {
                 "draft_id": "example-plugin--meeting-followup--<hash>",
-                "target_scope": "project:checkout",
                 "target_repo": "checkout-main-real",
                 "summary": "Update Meeting Follow-up.",
                 "rationale": "Proposed through the AIWS Google Drive marketplace workflow.",
