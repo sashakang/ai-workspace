@@ -13,7 +13,7 @@ This report captures what was actually proven in Cowork for the clean Google Dri
 | Infrastructure repo | `sashakang/ai-workspace` |
 | Infrastructure marketplace | `ai-workspace` |
 | Infrastructure plugin | `core-aiws` |
-| Verified infrastructure version | `0.3.43` |
+| Verified infrastructure version | `0.3.44` |
 | Drive marketplace display name | Checkout Main |
 | Drive marketplace_id | `checkout-main` |
 | Drive folder id | `1P3Cd5DBaz_bxhxh3MQnb_sBEx6eKQi3Z` |
@@ -35,6 +35,7 @@ Use `AIWS` only for infrastructure. The Drive demo domain plugin is `Productivit
    - `workflow_schema_version: 1`
    - `cowork_native_visible: false`
    - `current_skill` points directly to Productivity / Meeting Follow-up when the filtered view has one skill.
+   - `plugin_id` and `skill_id` filters can target Productivity / Meeting Follow-up directly.
    - per-skill `actions` include materialize, draft, validate, stage, submit, refresh, publish, cleanup preview, and core update status checks.
 5. Resolved and materialized `meeting-followup` from `marketplace_id: checkout-main`.
 6. Opened a draft without supplying `source_plugin_root`.

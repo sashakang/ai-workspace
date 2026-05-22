@@ -2182,6 +2182,8 @@ class AiwsRuntime:
         self,
         *,
         marketplace_id: str | None = None,
+        plugin_id: str | None = None,
+        skill_id: str | None = None,
         host_kind: str = "cowork",
         latest_only: bool = False,
         include_history: bool = True,
@@ -2201,6 +2203,10 @@ class AiwsRuntime:
                 if record.marketplace_id == current_marketplace_id
                 and (host_kind is None or host_kind in record.supported_hosts)
             ]
+            if plugin_id is not None:
+                marketplace_records = [record for record in marketplace_records if record.plugin_id == plugin_id]
+            if skill_id is not None:
+                marketplace_records = [record for record in marketplace_records if record.skill_id == skill_id]
             marketplace_records = self._dedupe_display_records(marketplace_records)
             current_keys = {
                 (
@@ -2288,6 +2294,11 @@ class AiwsRuntime:
         return {
             "status": "ok",
             "host_kind": host_kind,
+            "filters": {
+                "marketplace_id": marketplace_id,
+                "plugin_id": plugin_id,
+                "skill_id": skill_id,
+            },
             "workflow_schema_version": 1,
             "latest_only": latest_only,
             "include_history": include_history,

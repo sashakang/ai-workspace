@@ -271,6 +271,8 @@ def create_server(root: Path | None = None):
     @server.tool(name="aiws.marketplaces.drive_workflow")
     def drive_marketplace_workflow(
         marketplace_id: str | None = None,
+        plugin_id: str | None = None,
+        skill_id: str | None = None,
         host_kind: str = "cowork",
         latest_only: bool = False,
         include_history: bool = True,
@@ -278,6 +280,8 @@ def create_server(root: Path | None = None):
     ) -> dict[str, Any]:
         return runtime.drive_marketplace_workflow(
             marketplace_id=marketplace_id,
+            plugin_id=plugin_id,
+            skill_id=skill_id,
             host_kind=host_kind,
             latest_only=latest_only,
             include_history=include_history,
