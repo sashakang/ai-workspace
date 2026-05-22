@@ -970,9 +970,38 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(len(current_workflow_skills), 1)
         self.assertEqual(current_workflow_skills[0]["scope"], "project:checkout")
         self.assertTrue(current_workflow_skills[0]["materialized"])
+        old_actions = {action["id"]: action for action in old_workflow_skills[0]["actions"]}
+        self.assertTrue(old_actions["delete_old_artifact_dry_run"]["enabled"])
         latest_skills = latest_workflow["marketplaces"][0]["plugins"][0]["skills"]
         self.assertEqual([skill["version"] for skill in latest_skills], ["1.0.2"])
         self.assertTrue(latest_skills[0]["materialized"])
+        self.assertEqual(latest_skills[0]["status_label"], "Materialized")
+        self.assertEqual(latest_skills[0]["next_action"], "open_draft")
+        latest_actions = {action["id"]: action for action in latest_skills[0]["actions"]}
+        self.assertTrue(latest_actions["open_draft"]["enabled"])
+        self.assertEqual(
+            latest_actions["open_draft"]["args"],
+            {
+                "marketplace_id": "checkout-main-real",
+                "plugin_id": "example-plugin",
+                "skill_id": "meeting-followup",
+                "target_repo": "checkout-main-real",
+                "origin_marketplace": "checkout-main-real",
+            },
+        )
+        self.assertEqual(
+            latest_actions["validate_draft"]["args_template"],
+            {
+                "draft_id": "example-plugin--meeting-followup--<hash>",
+                "expected_plugin_id": "example-plugin",
+                "expected_marketplace_id": "checkout-main-real",
+            },
+        )
+        self.assertFalse(latest_actions["delete_old_artifact_dry_run"]["enabled"])
+        self.assertEqual(
+            latest_actions["delete_old_artifact_dry_run"]["disabled_reason"],
+            "Current marketplace version cannot be deleted.",
+        )
         self.assertTrue(latest_workflow["latest_only"])
 
     def test_materialize_skill_from_google_drive_skips_stale_marketplace_entries(self) -> None:
@@ -1334,20 +1363,61 @@ class AiwsMcpSkillTests(unittest.TestCase):
             )
 
         self.assertEqual(workflow["status"], "ok")
+        self.assertEqual(workflow["workflow_schema_version"], 1)
         self.assertFalse(workflow["latest_only"])
         self.assertTrue(workflow["include_history"])
         self.assertIn("do not appear in Cowork's native plugin sidebar yet", workflow["note"])
         self.assertEqual(workflow["marketplaces"][0]["marketplace_id"], "checkout-main-real")
         self.assertEqual(workflow["marketplaces"][0]["display_name"], "Checkout Main Real")
+        self.assertFalse(workflow["marketplaces"][0]["cowork_native_visible"])
         self.assertEqual(workflow["marketplaces"][0]["plugins"][0]["plugin_id"], "example-plugin")
+        skill = workflow["marketplaces"][0]["plugins"][0]["skills"][0]
+        self.assertEqual(skill["skill_id"], "meeting-followup")
+        self.assertEqual(skill["display_name"], "Meeting Follow-up")
+        self.assertEqual(skill["status_label"], "Available")
+        self.assertEqual(skill["next_action"], "materialize_skill")
+        actions = {action["id"]: action for action in skill["actions"]}
         self.assertEqual(
-            workflow["marketplaces"][0]["plugins"][0]["skills"][0]["skill_id"],
-            "meeting-followup",
+            list(actions),
+            [
+                "materialize_skill",
+                "open_draft",
+                "validate_draft",
+                "stage_proposal",
+                "submit_for_review",
+                "refresh_proposal_state",
+                "publish_approved_proposal",
+                "delete_old_artifact_dry_run",
+                "check_core_update_status",
+            ],
         )
+        self.assertEqual(actions["materialize_skill"]["tool"], "aiws.skills.materialize")
         self.assertEqual(
-            workflow["marketplaces"][0]["plugins"][0]["skills"][0]["display_name"],
-            "Meeting Follow-up",
+            actions["materialize_skill"]["args"],
+            {
+                "marketplace_id": "checkout-main-real",
+                "skill_id": "meeting-followup",
+                "host_kind": "cowork",
+                "version": "1.0.1",
+            },
         )
+        self.assertFalse(actions["open_draft"]["enabled"])
+        self.assertEqual(actions["open_draft"]["requires"], ["materialize_skill"])
+        self.assertEqual(actions["stage_proposal"]["tool"], "aiws.skills.stage_proposal")
+        self.assertEqual(
+            actions["stage_proposal"]["args_template"],
+            {
+                "draft_id": "example-plugin--meeting-followup--<hash>",
+                "marketplace_id": "checkout-main-real",
+            },
+        )
+        self.assertEqual(actions["delete_old_artifact_dry_run"]["tool"], "aiws.marketplaces.delete_artifact")
+        self.assertFalse(actions["delete_old_artifact_dry_run"]["enabled"])
+        self.assertEqual(
+            actions["delete_old_artifact_dry_run"]["disabled_reason"],
+            "Current marketplace version cannot be deleted.",
+        )
+        self.assertEqual(actions["check_core_update_status"]["tool"], "aiws.runtime.update_status")
         self.assertIn("aiws.skills.materialize", "\n".join(workflow["workflow"]))
 
     def test_install_host_cowork_prepares_package_handoff_from_materialized_adapter(self) -> None:

@@ -1566,6 +1566,139 @@ class AiwsRuntime:
             return overrides[value]
         return value.replace("-", " ").title()
 
+    def _drive_workflow_actions(
+        self,
+        record: SkillRecord,
+        *,
+        host_kind: str,
+        skill_display_name: str,
+        is_current_version: bool,
+    ) -> list[dict[str, Any]]:
+        marketplace_id = record.marketplace_id
+        plugin_id = record.plugin_id
+        if marketplace_id is None or plugin_id is None:
+            return []
+        draft_id_template = f"{plugin_id}--{record.skill_id}--<hash>"
+        proposal_id_template = "skillprop_<id>"
+        base_identity = {
+            "marketplace_id": marketplace_id,
+            "plugin_id": plugin_id,
+            "skill_id": record.skill_id,
+        }
+        return [
+            {
+                "id": "materialize_skill",
+                "label": f"Materialize {skill_display_name}",
+                "tool": "aiws.skills.materialize",
+                "args": {
+                    "marketplace_id": marketplace_id,
+                    "skill_id": record.skill_id,
+                    "host_kind": host_kind,
+                    "version": record.version,
+                },
+                "mutates_state": True,
+                "enabled": True,
+            },
+            {
+                "id": "open_draft",
+                "label": f"Open draft for {skill_display_name}",
+                "tool": "aiws.skills.create_or_open_draft",
+                "args": {
+                    **base_identity,
+                    "target_repo": marketplace_id,
+                    "origin_marketplace": marketplace_id,
+                },
+                "mutates_state": True,
+                "enabled": record.materialized,
+                "requires": [] if record.materialized else ["materialize_skill"],
+            },
+            {
+                "id": "validate_draft",
+                "label": "Validate draft identity",
+                "tool": "aiws.skills.validate_draft",
+                "args_template": {
+                    "draft_id": draft_id_template,
+                    "expected_plugin_id": plugin_id,
+                    "expected_marketplace_id": marketplace_id,
+                },
+                "mutates_state": False,
+                "enabled": True,
+                "requires": ["open_draft"],
+            },
+            {
+                "id": "stage_proposal",
+                "label": "Stage Google Drive proposal",
+                "tool": "aiws.skills.stage_proposal",
+                "args_template": {
+                    "draft_id": draft_id_template,
+                    "marketplace_id": marketplace_id,
+                },
+                "mutates_state": True,
+                "enabled": True,
+                "requires": ["validate_draft"],
+            },
+            {
+                "id": "submit_for_review",
+                "label": "Submit proposal for review",
+                "tool": "aiws.skills.submit_for_review",
+                "args_template": {
+                    "proposal_id": proposal_id_template,
+                },
+                "mutates_state": True,
+                "enabled": True,
+                "requires": ["stage_proposal"],
+            },
+            {
+                "id": "refresh_proposal_state",
+                "label": "Refresh review state",
+                "tool": "aiws.skills.refresh_proposal_state",
+                "args_template": {
+                    "proposal_id": proposal_id_template,
+                },
+                "mutates_state": False,
+                "enabled": True,
+                "requires": ["submit_for_review"],
+            },
+            {
+                "id": "publish_approved_proposal",
+                "label": "Publish approved proposal",
+                "tool": "aiws.skills.publish_approved_proposal",
+                "args_template": {
+                    "proposal_id": proposal_id_template,
+                },
+                "mutates_state": True,
+                "enabled": True,
+                "requires": ["refresh_proposal_state"],
+            },
+            {
+                "id": "delete_old_artifact_dry_run",
+                "label": "Preview old Drive artifact cleanup",
+                "tool": "aiws.marketplaces.delete_artifact",
+                "args": {
+                    "marketplace_id": marketplace_id,
+                    "plugin_id": plugin_id,
+                    "version": record.version,
+                    "dry_run": True,
+                    "confirm": False,
+                },
+                "mutates_state": False,
+                "enabled": not is_current_version,
+                "disabled_reason": (
+                    "Current marketplace version cannot be deleted."
+                    if is_current_version
+                    else None
+                ),
+            },
+            {
+                "id": "check_core_update_status",
+                "label": "Check AIWS infrastructure update status",
+                "tool": "aiws.runtime.update_status",
+                "args": {},
+                "mutates_state": False,
+                "enabled": True,
+            },
+        ]
+
     def _drive_plugin_cache_root(self, host: HostIdentity, record: SkillRecord) -> Path | None:
         if record.marketplace_id is None or record.plugin_id is None:
             return None
@@ -2042,6 +2175,16 @@ class AiwsRuntime:
                 and (host_kind is None or host_kind in record.supported_hosts)
             ]
             marketplace_records = self._dedupe_display_records(marketplace_records)
+            current_keys = {
+                (
+                    record.marketplace_id or "",
+                    record.plugin_id or "",
+                    record.skill_id,
+                    record.scope,
+                    record.version,
+                )
+                for record in self._latest_display_records(marketplace_records)
+            }
             if latest_only or not include_history:
                 marketplace_records = self._latest_display_records(marketplace_records)
             plugins: dict[str, dict[str, Any]] = {}
@@ -2055,25 +2198,44 @@ class AiwsRuntime:
                         "skills": [],
                     },
                 )
+                skill_display_name = (
+                    self._display_label(record.skill_id)
+                    if record.name == record.skill_id
+                    else record.name
+                )
                 plugin["skills"].append(
                     {
                         "skill_id": record.skill_id,
-                        "display_name": (
-                            self._display_label(record.skill_id)
-                            if record.name == record.skill_id
-                            else record.name
-                        ),
+                        "display_name": skill_display_name,
                         "description": record.description,
                         "version": record.version,
                         "marketplace_id": record.marketplace_id,
                         "scope": record.scope,
                         "materialized": record.materialized,
+                        "status_label": "Materialized" if record.materialized else "Available",
+                        "next_action": "open_draft" if record.materialized else "materialize_skill",
+                        "actions": self._drive_workflow_actions(
+                            record,
+                            host_kind=host_kind,
+                            skill_display_name=skill_display_name,
+                            is_current_version=(
+                                (
+                                    record.marketplace_id or "",
+                                    record.plugin_id or "",
+                                    record.skill_id,
+                                    record.scope,
+                                    record.version,
+                                )
+                                in current_keys
+                            ),
+                        ),
                     }
                 )
             marketplace_payloads.append(
                 {
                     **marketplace,
                     "display_name": self._display_label(str(current_marketplace_id)),
+                    "cowork_native_visible": False,
                     "plugins": list(plugins.values()),
                     "plugin_count": len(plugins),
                     "skill_count": len(marketplace_records),
@@ -2082,6 +2244,7 @@ class AiwsRuntime:
         return {
             "status": "ok",
             "host_kind": host_kind,
+            "workflow_schema_version": 1,
             "latest_only": latest_only,
             "include_history": include_history,
             "note": "AIWS Google Drive marketplace skills are managed through AIWS tools and do not appear in Cowork's native plugin sidebar yet.",
