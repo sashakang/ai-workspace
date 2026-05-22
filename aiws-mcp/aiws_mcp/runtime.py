@@ -1573,6 +1573,7 @@ class AiwsRuntime:
         host_kind: str,
         skill_display_name: str,
         is_current_version: bool,
+        backend_ref: str | None,
     ) -> list[dict[str, Any]]:
         marketplace_id = record.marketplace_id
         plugin_id = record.plugin_id
@@ -1607,6 +1608,9 @@ class AiwsRuntime:
                     **base_identity,
                     "target_repo": marketplace_id,
                     "origin_marketplace": marketplace_id,
+                    "origin_ref": marketplace_id,
+                    "base_version": record.version,
+                    "base_commit": "google-drive",
                 },
                 "mutates_state": True,
                 "enabled": record.materialized,
@@ -1631,6 +1635,12 @@ class AiwsRuntime:
                 "tool": "aiws.skills.stage_proposal",
                 "args_template": {
                     "draft_id": draft_id_template,
+                    "target_scope": record.scope,
+                    "target_repo": marketplace_id,
+                    "summary": f"Update {skill_display_name}.",
+                    "rationale": "Proposed through the AIWS Google Drive marketplace workflow.",
+                    "backend_kind": "google_drive",
+                    "backend_ref": backend_ref,
                     "marketplace_id": marketplace_id,
                 },
                 "mutates_state": True,
@@ -2228,6 +2238,9 @@ class AiwsRuntime:
                                 )
                                 in current_keys
                             ),
+                            backend_ref=marketplace.get("backend_ref")
+                            if isinstance(marketplace.get("backend_ref"), str)
+                            else None,
                         ),
                     }
                 )
@@ -2257,7 +2270,7 @@ class AiwsRuntime:
                 "aiws.skills.read_draft_file / aiws.skills.write_draft_file: inspect and edit the draft.",
                 "aiws.skills.validate_draft: validate with expected_plugin_id and expected_marketplace_id.",
                 "aiws.skills.stage_proposal: stage to backend_kind=google_drive with the same marketplace_id.",
-                "aiws.skills.submit_pr / aiws.skills.refresh_proposal_state / aiws.skills.publish_approved_proposal: review, approve, publish, then materialize again from a fresh task.",
+                "aiws.skills.submit_for_review / aiws.skills.refresh_proposal_state / aiws.skills.publish_approved_proposal: review, approve, publish, then materialize again from a fresh task.",
             ],
         }
 

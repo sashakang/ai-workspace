@@ -987,6 +987,9 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 "skill_id": "meeting-followup",
                 "target_repo": "checkout-main-real",
                 "origin_marketplace": "checkout-main-real",
+                "origin_ref": "checkout-main-real",
+                "base_version": "1.0.2",
+                "base_commit": "google-drive",
             },
         )
         self.assertEqual(
@@ -1408,6 +1411,12 @@ class AiwsMcpSkillTests(unittest.TestCase):
             actions["stage_proposal"]["args_template"],
             {
                 "draft_id": "example-plugin--meeting-followup--<hash>",
+                "target_scope": "project:checkout",
+                "target_repo": "checkout-main-real",
+                "summary": "Update Meeting Follow-up.",
+                "rationale": "Proposed through the AIWS Google Drive marketplace workflow.",
+                "backend_kind": "google_drive",
+                "backend_ref": "drive-root-1",
                 "marketplace_id": "checkout-main-real",
             },
         )
