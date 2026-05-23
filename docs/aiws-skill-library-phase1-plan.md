@@ -106,6 +106,7 @@ Stable AIWS identity should come from the Drive folder ID or explicit AIWS metad
 - Canonical update test: maintainer applies accepted changes directly to `skills/<skill-id>/SKILL.md`.
 - Optional archive test: maintainer may move or copy the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` in Google Drive UI for recordkeeping.
 - Refresh test prompt: `Refresh Test Plugin` or `Refresh meeting-followup in Test Plugin`. This should verify the canonical update, validate the library, and verify Cowork refresh/import sees the update without asking what content change to make.
+- Refresh must rebuild the whole Cowork plugin artifact from the Drive root while preserving plugin id `test-plugin` for `Test Plugin`. It must not create drafts, activate draft packages, patch runtime plugin files, use marketplace/export tooling, require a `plugins/` folder, or create per-skill plugin ids such as `test-plugin--meeting-followup`.
 - Compatibility test: Cowork, Claude Code, and Codex consume plain skill folders.
 - Boundary test: existing plugin-backed flows still require manifests/contracts and are not treated as Skill Library mode.
 

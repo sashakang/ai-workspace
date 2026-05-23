@@ -204,9 +204,11 @@ Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer expli
 
 If an Approved proposal is present and canonical already matches it, report that canonical is already in sync and continue. `Proposals/Approved/` and `Proposals/Rejected/` are optional archive/status folders, not mandatory gates.
 
-Do not call AIWS marketplace tools, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations.
+Do not call AIWS marketplace tools, create or open drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations.
 
-Workflow: identify the Drive Skill Library, verify named skill or all skills in `skills/`, confirm canonical `SKILL.md` exists and validates, compare Submitted or Approved proposals only as evidence when present, use `aiws-validate-skill-library`, rebuild or guide reinstall of the Cowork plugin artifact from the Drive library, and verify installed plugin/container and skill invocation show refreshed content.
+Refresh always rebuilds the installed Cowork plugin artifact from the Drive Skill Library root. For `Test Plugin`, preserve plugin id `test-plugin` and display name `Test Plugin`. Do not generate per-skill plugin identities such as `test-plugin--meeting-followup`. Do not report that a missing `plugins/` folder blocks refresh; a flat `skills/<skill-id>/SKILL.md` Drive folder is the expected Phase 1 source shape.
+
+Workflow: identify the Drive Skill Library, verify named skill or all skills in `skills/`, confirm canonical `SKILL.md` exists and validates, compare Submitted or Approved proposals only as evidence when present, use `aiws-validate-skill-library`, rebuild or guide reinstall of the whole Cowork plugin artifact from the Drive library root, preserving the plugin id `test-plugin` for `Test Plugin`, and verify installed plugin/container and skill invocation show refreshed content.
 
 Report `AIWS Skill Library Refresh: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skills, canonical verification, proposal sync evidence, library validation, Cowork refresh/reinstall, and skill invocation.
 """

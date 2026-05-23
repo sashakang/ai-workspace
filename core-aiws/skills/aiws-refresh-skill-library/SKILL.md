@@ -27,7 +27,16 @@ Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer expli
 
 If an Approved proposal is present and canonical already matches it, report that canonical is already in sync and continue. `Proposals/Approved/` and `Proposals/Rejected/` are optional archive/status folders, not mandatory gates.
 
-Do not call AIWS marketplace tools, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations.
+Do not call AIWS marketplace tools, create or open drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations.
+
+Refresh always rebuilds the installed Cowork plugin artifact from the Drive Skill Library root. For `Test Plugin`, the refreshed artifact identity is still:
+
+```text
+plugin id: test-plugin
+plugin display name: Test Plugin
+```
+
+Do not generate per-skill plugin identities such as `test-plugin--meeting-followup`. Do not report that a missing `plugins/` folder blocks refresh; a flat `skills/<skill-id>/SKILL.md` Drive folder is the expected Phase 1 source shape.
 
 ## Workflow
 
@@ -36,7 +45,7 @@ Do not call AIWS marketplace tools, create GitHub pull requests, export bridge r
 3. Confirm canonical `skills/<skill-id>/SKILL.md` exists and validates.
 4. If Submitted or Approved proposal folders are present, compare them only as evidence; do not require them.
 5. Use `aiws-validate-skill-library` to validate the library and proposal structure.
-6. Rebuild or guide reinstall of the Cowork plugin artifact from the Drive library.
+6. Rebuild or guide reinstall of the whole Cowork plugin artifact from the Drive library root, preserving the plugin id `test-plugin` for `Test Plugin`.
 7. Verify the installed plugin/container and skill invocation show the refreshed content.
 
 ## Output
