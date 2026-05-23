@@ -67,7 +67,7 @@ Do not edit:
 skills/<skill-id>/SKILL.md
 ```
 
-Only a maintainer approves a proposal by moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
+Only a maintainer changes the canonical file at `skills/<skill-id>/SKILL.md`. The maintainer may optionally move or copy the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` for recordkeeping, but those archive folders are not required for the normal update path.
 
 ## Maintainer Review Handoff
 
@@ -84,11 +84,13 @@ Recommended free tools:
   meld skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
   ```
 
-If the files are only in Google Drive, tell the maintainer to open or sync local copies of the canonical `SKILL.md` and proposed `SKILL.md`, then compare those two files. Approval is still represented only by moving or copying the final proposal folder to:
+If the files are only in Google Drive, tell the maintainer to open or sync local copies of the canonical `SKILL.md` and proposed `SKILL.md`, then compare those two files. After review, the maintainer applies accepted changes directly to:
 
 ```text
-Proposals/Approved/<skill-id>/<proposal-id>/
+skills/<skill-id>/SKILL.md
 ```
+
+The maintainer may then optionally move or copy the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` for recordkeeping.
 
 ## Proposal Metadata
 
@@ -121,7 +123,8 @@ Report:
 - files written or files prepared
 - maintainer review path under `Proposals/Submitted/`
 - local diff command for VS Code/VSCodium or Meld
-- approval path under `Proposals/Approved/`
+- canonical update path under `skills/<skill-id>/SKILL.md`
+- optional archive paths under `Proposals/Approved/` and `Proposals/Rejected/`
 - explicit note that the canonical skill was not changed
 
 If direct Drive write access is unavailable, provide the exact folder path and file contents for the user or host to save. Do not claim the proposal landed in Drive unless the files were actually written there.

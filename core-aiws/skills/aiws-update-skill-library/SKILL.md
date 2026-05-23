@@ -1,35 +1,31 @@
 ---
 name: aiws-update-skill-library
-description: Apply an approved Drive Skill Library proposal and verify the refreshed skill.
+description: Verify and refresh a Drive Skill Library after maintainer-applied changes.
 ---
 
 # AIWS Skill Library Update
 
-Use this skill when a maintainer has approved a Drive Skill Library proposal by moving or copying the final proposal folder to:
-
-```text
-Proposals/Approved/<skill-id>/<proposal-id>/
-```
-
-This skill applies an already-approved proposal. It is not a review workflow.
-
-## Boundaries
-
-Do not judge content quality, approve proposals, or resolve disagreements. Maintainer review happens before this skill runs, normally by comparing local Markdown copies of the canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld. Approval is represented by the maintainer moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
-
-Only apply:
-
-```text
-Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md
-```
-
-to:
+Use this skill after a maintainer has reviewed a submitted Drive Skill Library proposal and directly applied the accepted changes to canonical:
 
 ```text
 skills/<skill-id>/SKILL.md
 ```
 
-Refuse to apply proposals from:
+This skill verifies the maintainer-applied update and guides Cowork refresh/reinstall. It is not a review workflow and does not approve proposals.
+
+## Boundaries
+
+Do not judge content quality, approve proposals, or resolve disagreements. Maintainer review happens before this skill runs, normally by comparing local Markdown copies of the canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld.
+
+Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer explicitly asks for apply mode. The normal path is verification after the maintainer has already edited the canonical file.
+
+If the maintainer explicitly asks this skill to apply a proposal automatically, apply mode is allowed only from:
+
+```text
+Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md
+```
+
+Apply mode must refuse:
 
 ```text
 Proposals/Submitted/
@@ -41,14 +37,11 @@ Do not apply runtime artifacts, metadata rewrites, plugin manifests, scripts, pa
 
 ## Workflow
 
-1. Confirm the selected proposal path is under `Proposals/Approved/<skill-id>/<proposal-id>/`.
-2. Confirm the approved proposal contains `SKILL.md`.
+1. Confirm canonical `skills/<skill-id>/SKILL.md` exists.
+2. If a Submitted proposal path is provided, compare canonical `SKILL.md` against `Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md` and report whether the accepted changes appear in canonical.
 3. Use `aiws-validate-skill-library` to validate the library and proposal structure.
-4. Replace canonical `skills/<skill-id>/SKILL.md` with the approved proposal `SKILL.md`.
-5. Verify the canonical file now matches the approved proposal content.
-6. Use `aiws-validate-skill-library` again after replacement.
-7. Refresh or guide Cowork reimport of the Drive skill library.
-8. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
+4. Refresh or guide Cowork reimport of the Drive skill library.
+5. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
 
 If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
 
@@ -62,8 +55,8 @@ AIWS Skill Library Update: PASS|FAIL|NEEDS MANUAL ACTION
 Library:
 Skill:
 Proposal:
-Approved proposal path:
-Canonical SKILL.md updated: PASS|FAIL|NEEDS MANUAL ACTION
+Submitted proposal path:
+Canonical SKILL.md verified: PASS|FAIL|NEEDS MANUAL ACTION
 Library validation: PASS|FAIL
 Cowork refresh/import: PASS|FAIL|NEEDS MANUAL ACTION
 Skill invocation: PASS|FAIL|NEEDS MANUAL ACTION

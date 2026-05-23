@@ -113,9 +113,9 @@ Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
 Proposals/Submitted/<skill-id>/<proposal-id>/aiws.proposal.json
 ```
 
-Do not edit the canonical file at `skills/<skill-id>/SKILL.md`; only a maintainer promotes an approved proposal.
+Do not edit the canonical file at `skills/<skill-id>/SKILL.md`; only a maintainer changes canonical skill content.
 
-After writing the proposal, give the maintainer a simple local Markdown diff path. Do not rely on Google Docs compare. Recommend VS Code/VSCodium (`code --diff skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`) or Meld (`meld skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`). If the files are only in Google Drive, tell the maintainer to open or sync local copies first. Approval is still represented only by moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
+After writing the proposal, give the maintainer a simple local Markdown diff path. Do not rely on Google Docs compare. Recommend VS Code/VSCodium (`code --diff skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`) or Meld (`meld skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`). If the files are only in Google Drive, tell the maintainer to open or sync local copies first. After review, the maintainer applies accepted changes directly to `skills/<skill-id>/SKILL.md`. Moving or copying the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` is optional recordkeeping, not a required gate.
 
 ## Validate First
 
@@ -147,38 +147,34 @@ If direct Drive write access is unavailable, provide the exact folder path and f
 
 AIWS_UPDATE_SKILL_LIBRARY_SKILL = """---
 name: aiws-update-skill-library
-description: Apply an approved Drive Skill Library proposal and verify the refreshed skill.
+description: Verify and refresh a Drive Skill Library after maintainer-applied changes.
 ---
 
 # AIWS Skill Library Update
 
-Use this skill when a maintainer has approved a Drive Skill Library proposal by moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
+Use this skill after a maintainer has reviewed a submitted Drive Skill Library proposal and directly applied the accepted changes to canonical `skills/<skill-id>/SKILL.md`.
 
-This skill applies an already-approved proposal. It is not a review workflow.
+This skill verifies the maintainer-applied update and guides Cowork refresh/reinstall. It is not a review workflow and does not approve proposals.
 
 ## Boundaries
 
-Only copy `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` over `skills/<skill-id>/SKILL.md`.
+Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer explicitly asks for apply mode. If apply mode is explicitly requested, it is allowed only from `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` and must refuse `Proposals/Submitted/`, `Proposals/Rejected/`, and flat legacy `Proposals/<skill-id>/<proposal-id>/` paths.
 
-Refuse `Proposals/Submitted/`, `Proposals/Rejected/`, and flat legacy `Proposals/<skill-id>/<proposal-id>/` paths.
-
-Do not judge content quality, approve proposals, resolve disagreements, apply runtime artifacts, rewrite metadata, create plugin manifests, run scripts, build packages, upload ZIPs, export bridges, create GitHub pull requests, or change marketplaces. Maintainer review happens before this skill runs, normally by comparing local Markdown copies of the canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld. Approval is represented by the maintainer moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
+Do not judge content quality, approve proposals, resolve disagreements, apply runtime artifacts, rewrite metadata, create plugin manifests, run scripts, build packages, upload ZIPs, export bridges, create GitHub pull requests, or change marketplaces. Maintainer review happens before this skill runs, normally by comparing local Markdown copies of the canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld.
 
 ## Workflow
 
-1. Confirm the proposal path is under `Proposals/Approved/<skill-id>/<proposal-id>/`.
-2. Use `aiws-validate-skill-library` to validate the library and proposal structure.
-3. Replace canonical `skills/<skill-id>/SKILL.md` with the approved proposal `SKILL.md`.
-4. Verify the canonical file matches the approved proposal content.
-5. Use `aiws-validate-skill-library` again after replacement.
-6. Refresh or guide Cowork reimport of the Drive skill library.
-7. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
+1. Confirm canonical `skills/<skill-id>/SKILL.md` exists.
+2. If a Submitted proposal path is provided, compare canonical `SKILL.md` against `Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md` and report whether the accepted changes appear in canonical.
+3. Use `aiws-validate-skill-library` to validate the library and proposal structure.
+4. Refresh or guide Cowork reimport of the Drive skill library.
+5. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
 
 If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
 
 ## Output
 
-Report `AIWS Skill Library Update: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skill, proposal, approved proposal path, canonical update status, library validation status, Cowork refresh/import status, and skill invocation status.
+Report `AIWS Skill Library Update: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skill, submitted proposal path if provided, canonical verification status, library validation status, Cowork refresh/import status, and skill invocation status.
 """
 
 
