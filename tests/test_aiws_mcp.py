@@ -1479,6 +1479,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("Standard Operating Procedure", sop)
         self.assertIn("Self-Improvement", improve)
         self.assertIn("Install this Google Drive folder as a plugin:", install)
+        self.assertIn("attempt the install now", install)
+        self.assertIn("Do not tell the user to run another prompt in the same Cowork session", install)
         self.assertIn("Skill Library Proposal", proposal)
         self.assertIn("Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md", proposal)
         self.assertIn("Skill Library Update", update)

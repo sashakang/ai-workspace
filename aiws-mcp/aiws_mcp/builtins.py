@@ -42,14 +42,16 @@ Present a concise evidence summary, proposed target, rationale, and the smallest
 
 AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL = """---
 name: aiws-install-drive-skill-library
-description: Prepare and verify the Cowork prompt for installing a Google Drive Skill Library as a plugin.
+description: Install or prepare the Cowork install prompt for a Google Drive Skill Library plugin.
 ---
 
 # AIWS Drive Skill Library Install
 
 Use this skill when a user wants to install a Google Drive Skill Library in Cowork as a plugin-like container.
 
-Give the user exactly this prompt to run in Cowork:
+If already running inside Cowork, treat the current user request as the install request and attempt the install now. Do not tell the user to run another prompt in the same Cowork session.
+
+The install instruction is exactly:
 
 ```text
 Install this Google Drive folder as a plugin:
@@ -58,7 +60,9 @@ Install this Google Drive folder as a plugin:
 
 Do not ask the user to type longer instructions. Do not say "install as standalone skills" or "install individual skills".
 
-After the user runs the prompt, verify that the Drive folder appears as a plugin/container, skills appear under that plugin/container, and proposal folders are not installed as runnable skills.
+If the current host cannot perform the install directly, report `NEEDS MANUAL ACTION` and provide only the exact install instruction above.
+
+After the install attempt or manual install, verify that the Drive folder appears as a plugin/container, skills appear under that plugin/container, and proposal folders are not installed as runnable skills.
 
 Report `AIWS Drive Skill Library Install: PASS`, `FAIL`, or `NEEDS RETRY`.
 """

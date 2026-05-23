@@ -1,6 +1,6 @@
 ---
 name: aiws-install-drive-skill-library
-description: Prepare and verify the Cowork prompt for installing a Google Drive Skill Library as a plugin.
+description: Install or prepare the Cowork install prompt for a Google Drive Skill Library plugin.
 ---
 
 # AIWS Drive Skill Library Install
@@ -11,9 +11,11 @@ Use this skill when a user wants to install a Google Drive Skill Library in Cowo
 
 Collect the Google Drive folder URL.
 
-## Install Prompt
+## Install
 
-Give the user exactly this prompt to run in Cowork:
+If already running inside Cowork, treat the current user request as the install request and attempt the install now. Do not tell the user to run another prompt in the same Cowork session.
+
+The install instruction is exactly:
 
 ```text
 Install this Google Drive folder as a plugin:
@@ -22,9 +24,11 @@ Install this Google Drive folder as a plugin:
 
 Do not ask the user to type longer instructions. Do not say "install as standalone skills" or "install individual skills".
 
+If the current host cannot perform the install directly, report `NEEDS MANUAL ACTION` and provide only the exact install instruction above.
+
 ## Verify
 
-After the user runs the prompt, ask for the Cowork result and verify:
+After the install attempt or manual install, verify:
 
 - the Drive folder appears as a plugin/container
 - the skills appear under that plugin/container
