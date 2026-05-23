@@ -42,16 +42,27 @@ Present a concise evidence summary, proposed target, rationale, and the smallest
 
 AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL = """---
 name: aiws-install-drive-skill-library
-description: Install or prepare the Cowork install prompt for a Google Drive Skill Library plugin.
+description: Package a Google Drive Skill Library as a Cowork Save plugin artifact.
 ---
 
 # AIWS Drive Skill Library Install
 
 Use this skill when a user wants to install a Google Drive Skill Library in Cowork as a plugin-like container.
 
-If already running inside Cowork, treat the current user request as the install request and attempt the install now. Do not tell the user to run another prompt in the same Cowork session.
+This is not a direct remote-install API. In Cowork, the working path is: read the Drive folder with the Google Drive integration, collect `skills/<skill-id>/SKILL.md`, package those skills into one plugin artifact with a plugin manifest, and present a single **Save plugin** card to the user. Do not stop after producing individual **Save skill** cards.
 
-The install instruction is exactly:
+If already running inside Cowork, treat the current user request as the install request. Do not tell the user to run another prompt in the same Cowork session.
+
+Use the Google Drive integration to read the folder URL, then package the library into one Cowork plugin artifact:
+
+- plugin display name: the Drive root folder name, for example `Test Plugin`
+- plugin id: a stable slug derived from the Drive root folder name, for example `test-plugin`
+- skills: every `skills/<skill-id>/SKILL.md`
+- ignored as runtime skills: `Proposals/`, `aiws.library.json`, `aiws.skills/`, and any proposal metadata
+
+Present exactly one **Save plugin** card. If the host first produces individual **Save skill** cards, say that is not the requested result and repackage the same Drive contents as a plugin.
+
+The user-facing fallback prompt, only when a separate Cowork prompt is unavoidable, is exactly:
 
 ```text
 Install this Google Drive folder as a plugin:
@@ -60,11 +71,11 @@ Install this Google Drive folder as a plugin:
 
 Do not ask the user to type longer instructions. Do not say "install as standalone skills" or "install individual skills".
 
-If the current host cannot perform the install directly, report `NEEDS MANUAL ACTION` and provide only the exact install instruction above.
+If the current host cannot read the Drive folder or cannot produce a **Save plugin** artifact, report `NEEDS MANUAL ACTION` and provide the exact fallback prompt above.
 
-After the install attempt or manual install, verify that the Drive folder appears as a plugin/container, skills appear under that plugin/container, and proposal folders are not installed as runnable skills.
+After the Save plugin step or manual install, verify that the Drive folder appears as a plugin/container, skills appear under that plugin/container, and proposal folders are not installed as runnable skills.
 
-Report `AIWS Drive Skill Library Install: PASS`, `FAIL`, or `NEEDS RETRY`.
+Report `AIWS Drive Skill Library Install: PASS`, `FAIL`, `NEEDS RETRY`, or `NEEDS MANUAL ACTION`.
 """
 
 

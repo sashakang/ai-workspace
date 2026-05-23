@@ -13,11 +13,11 @@ Restart around a skill-first, Drive-backed model. Cowork can import/install a Go
 
 Cowork may present that root as a plugin-like container, but AIWS treats it as a Skill Library, not a packaged plugin marketplace. AIWS provides the convention, metadata, validation, and maintainer update skills. Cowork installs and runs skills. Google Drive is the shared source and review space.
 
-No `.claude-plugin/plugin.json`, ZIP upload, plugin contracts, bridge export, or Cowork marketplace registration is required for the Drive happy path.
+No ZIP upload, plugin contracts, bridge export, or Cowork marketplace registration is required for the Drive happy path. Cowork may still require a generated plugin artifact/card for first-class plugin visibility; that artifact is produced from the Drive folder at install time.
 
 ## Target User Stories
 
-- As a Cowork user, I can use the AIWS install skill to install a shared Drive folder as a plugin-like Cowork container and use its skills.
+- As a Cowork user, I can use the AIWS install skill to package a shared Drive folder into a Cowork **Save plugin** artifact and use its skills under one plugin-like container.
 - As a maintainer, I can keep team skills in a Google Drive folder with a predictable structure.
 - As a contributor, I can use the AIWS proposal skill to save or export the changed `SKILL.md` into `Proposals/Submitted/`.
 - As a maintainer, I can review a submitted `SKILL.md` in Drive and approve it by moving or copying the final proposal folder to `Proposals/Approved/`.
@@ -45,7 +45,7 @@ Test Plugin/
 - Keep AIWS metadata outside runtime skill folders.
 - Test whether Cowork tolerates root-level AIWS metadata/proposal folders. If not, store metadata out-of-band.
 - Add `aiws-validate-skill-library` as the Phase 1 AIWS skill for user-facing library validation. Python validation remains a developer/CI check, not the primary product surface.
-- Add `aiws-install-drive-skill-library` as the Phase 1 install helper. In Cowork, it attempts the install directly from the current request. Its fallback/manual wording is exactly `Install this Google Drive folder as a plugin: <drive-folder-url>`.
+- Add `aiws-install-drive-skill-library` as the Phase 1 install helper. In Cowork, it reads the Drive folder, packages `skills/<skill-id>/SKILL.md` into one plugin artifact, and presents a **Save plugin** card. Its fallback/manual wording is exactly `Install this Google Drive folder as a plugin: <drive-folder-url>`.
 - Add `aiws-propose-skill-update` as the Phase 1 contributor skill for preparing `Proposals/Submitted/<skill-id>/<proposal-id>/` folders and `aiws.proposal.json` metadata.
 - Add `aiws-update-skill-library` as the Phase 1 maintainer skill for applying only approved proposals from `Proposals/Approved/<skill-id>/<proposal-id>/`.
 - Treat Drive folder movement as the approval signal. Chat statements and proposal metadata do not approve a proposal.
@@ -91,7 +91,7 @@ Stable AIWS identity should come from the Drive folder ID or explicit AIWS metad
 
 ## Test Plan
 
-- Cowork import test: use `aiws-install-drive-skill-library`; Cowork should install the Drive root as a plugin/container, not only as loose skills.
+- Cowork import test: use `aiws-install-drive-skill-library`; Cowork should generate one **Save plugin** artifact/card for the Drive root and install it as a plugin/container, not only as loose skills.
 - Metadata tolerance test: verify whether Cowork ignores root-level `aiws.library.json`, `aiws.skills/`, and `Proposals/`.
 - Validation test: use `aiws-validate-skill-library` to check the Drive root and report PASS/FAIL with concrete fixes.
 - Proposal test: use `aiws-propose-skill-update` to save/export edited `SKILL.md` into `Proposals/Submitted/<skill-id>/<proposal-id>/` with `aiws.proposal.json`.
