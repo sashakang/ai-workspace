@@ -115,6 +115,8 @@ Proposals/Submitted/<skill-id>/<proposal-id>/aiws.proposal.json
 
 Do not edit the canonical file at `skills/<skill-id>/SKILL.md`; only a maintainer promotes an approved proposal.
 
+After writing the proposal, give the maintainer a simple local Markdown diff path. Do not rely on Google Docs compare. Recommend VS Code/VSCodium (`code --diff skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`) or Meld (`meld skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`). If the files are only in Google Drive, tell the maintainer to open or sync local copies first. Approval is still represented only by moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
+
 ## Validate First
 
 Use `aiws-validate-skill-library` before preparing the proposal. Do not duplicate its validation checklist here. If validation fails, report the concrete issue and stop.
@@ -160,7 +162,7 @@ Only copy `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` over `skills/<s
 
 Refuse `Proposals/Submitted/`, `Proposals/Rejected/`, and flat legacy `Proposals/<skill-id>/<proposal-id>/` paths.
 
-Do not judge content quality, approve proposals, resolve disagreements, apply runtime artifacts, rewrite metadata, create plugin manifests, run scripts, build packages, upload ZIPs, export bridges, create GitHub pull requests, or change marketplaces.
+Do not judge content quality, approve proposals, resolve disagreements, apply runtime artifacts, rewrite metadata, create plugin manifests, run scripts, build packages, upload ZIPs, export bridges, create GitHub pull requests, or change marketplaces. Maintainer review happens before this skill runs, normally by comparing local Markdown copies of the canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld. Approval is represented by the maintainer moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
 
 ## Workflow
 

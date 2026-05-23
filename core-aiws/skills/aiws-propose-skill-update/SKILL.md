@@ -69,6 +69,27 @@ skills/<skill-id>/SKILL.md
 
 Only a maintainer approves a proposal by moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
 
+## Maintainer Review Handoff
+
+After writing the proposal, give the maintainer a simple local Markdown diff path. Do not rely on Google Docs compare.
+
+Recommended free tools:
+
+- VS Code or VSCodium:
+  ```text
+  code --diff skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
+  ```
+- Meld:
+  ```text
+  meld skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
+  ```
+
+If the files are only in Google Drive, tell the maintainer to open or sync local copies of the canonical `SKILL.md` and proposed `SKILL.md`, then compare those two files. Approval is still represented only by moving or copying the final proposal folder to:
+
+```text
+Proposals/Approved/<skill-id>/<proposal-id>/
+```
+
 ## Proposal Metadata
 
 Write `aiws.proposal.json` as JSON:
@@ -99,6 +120,7 @@ Report:
 - skill id
 - files written or files prepared
 - maintainer review path under `Proposals/Submitted/`
+- local diff command for VS Code/VSCodium or Meld
 - approval path under `Proposals/Approved/`
 - explicit note that the canonical skill was not changed
 

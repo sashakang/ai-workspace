@@ -20,7 +20,7 @@ No ZIP upload, plugin contracts, bridge export, or Cowork marketplace registrati
 - As a Cowork user, I can use the AIWS install skill to package a shared Drive folder into a Cowork **Save plugin** artifact and use its skills under one plugin-like container.
 - As a maintainer, I can keep team skills in a Google Drive folder with a predictable structure.
 - As a contributor, I can use the AIWS proposal skill to save or export the changed `SKILL.md` into `Proposals/Submitted/`.
-- As a maintainer, I can review a submitted `SKILL.md` in Drive and approve it by moving or copying the final proposal folder to `Proposals/Approved/`.
+- As a maintainer, I can review a submitted `SKILL.md` by comparing local Markdown copies in VS Code/VSCodium or Meld, then approve it by moving or copying the final proposal folder to `Proposals/Approved/`.
 - As a maintainer, I can use the AIWS update skill to apply an approved proposal to the canonical skill file, validate the library, and verify Cowork refresh.
 - As an AIWS maintainer, I can keep the same skill folders compatible with Cowork, Claude Code, and Codex.
 - As an AIWS maintainer, I can later map GitHub libraries or real plugin-backed libraries into the same model.
@@ -51,6 +51,7 @@ Test Plugin/
 - Add `aiws-propose-skill-update` as the Phase 1 contributor skill for preparing `Proposals/Submitted/<skill-id>/<proposal-id>/` folders and `aiws.proposal.json` metadata.
 - Add `aiws-update-skill-library` as the Phase 1 maintainer skill for applying only approved proposals from `Proposals/Approved/<skill-id>/<proposal-id>/`.
 - Treat Drive folder movement as the approval signal. Chat statements and proposal metadata do not approve a proposal.
+- Use local Markdown diff for maintainer review. The recommended path is VS Code/VSCodium `code --diff skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`; Meld is the non-IDE alternative. Google Docs compare is not part of Phase 1.
 - Runtime capability artifacts like MCP servers, connectors, auth config, and host tools are out of phase 1.
 - Existing plugin-backed AIWS flows remain unchanged and still require plugin manifests, contracts, draft records, and proposal state.
 - The Drive source folder remains skill-first and does not contain plugin manifests or contracts. Any plugin manifest or contract exists only in the generated Cowork install artifact.
@@ -98,6 +99,7 @@ Stable AIWS identity should come from the Drive folder ID or explicit AIWS metad
 - Metadata tolerance test: verify whether Cowork ignores root-level `aiws.library.json`, `aiws.skills/`, and `Proposals/`.
 - Validation test: use `aiws-validate-skill-library` to check the Drive root and report PASS/FAIL with concrete fixes.
 - Proposal test: use `aiws-propose-skill-update` to save/export edited `SKILL.md` into `Proposals/Submitted/<skill-id>/<proposal-id>/` with `aiws.proposal.json`.
+- Review test: maintainer opens local/synced copies of canonical and proposed `SKILL.md` in VS Code/VSCodium or Meld and confirms the diff is understandable.
 - Approval test: maintainer moves or copies the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` in Google Drive UI.
 - Update test: use `aiws-update-skill-library` to apply the approved proposal, validate the library, and verify Cowork refresh/import sees the update.
 - Compatibility test: Cowork, Claude Code, and Codex consume plain skill folders.

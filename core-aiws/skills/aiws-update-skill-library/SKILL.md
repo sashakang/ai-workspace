@@ -15,7 +15,7 @@ This skill applies an already-approved proposal. It is not a review workflow.
 
 ## Boundaries
 
-Do not judge content quality, approve proposals, or resolve disagreements. Google Drive UI owns review and approval.
+Do not judge content quality, approve proposals, or resolve disagreements. Maintainer review happens before this skill runs, normally by comparing local Markdown copies of the canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld. Approval is represented by the maintainer moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
 
 Only apply:
 
