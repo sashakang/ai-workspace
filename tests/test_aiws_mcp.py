@@ -1483,6 +1483,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("plugin manifest", install)
         self.assertIn("Do not tell the user to run another prompt in the same Cowork session", install)
         self.assertIn("Do not stop after producing individual", install)
+        self.assertIn("Do not call, register, inspect, or repair `aiws.marketplaces.*`", install)
+        self.assertIn("Do not mention marketplace in the normal install report", install)
         self.assertIn("Skill Library Proposal", proposal)
         self.assertIn("Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md", proposal)
         self.assertIn("Skill Library Update", update)

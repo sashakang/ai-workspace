@@ -51,6 +51,10 @@ Use this skill when a user wants to install a Google Drive Skill Library in Cowo
 
 This is not a direct remote-install API. In Cowork, the working path is: read the Drive folder with the Google Drive integration, collect `skills/<skill-id>/SKILL.md`, package those skills into one plugin artifact with a plugin manifest, and present a single **Save plugin** card to the user. Do not stop after producing individual **Save skill** cards.
 
+This flow is not an AIWS marketplace workflow. Do not call, register, inspect, or repair `aiws.marketplaces.*`, `drive_workflow`, `export_cowork_bridge`, or any marketplace registry while installing a Drive Skill Library. A flat `skills/<skill-id>/SKILL.md` Drive folder is valid even if AIWS marketplace indexing would return no results.
+
+Do not tell the user that a `test-plugin` marketplace is empty or missing. Do not mention marketplace in the normal install report. The user-facing objects are Drive Skill Library, Cowork plugin artifact, Save plugin card, and installed plugin/container.
+
 If already running inside Cowork, treat the current user request as the install request. Do not tell the user to run another prompt in the same Cowork session.
 
 Use the Google Drive integration to read the folder URL, then package the library into one Cowork plugin artifact:
@@ -59,6 +63,8 @@ Use the Google Drive integration to read the folder URL, then package the librar
 - plugin id: a stable slug derived from the Drive root folder name, for example `test-plugin`
 - skills: every `skills/<skill-id>/SKILL.md`
 - ignored as runtime skills: `Proposals/`, `aiws.library.json`, `aiws.skills/`, and any proposal metadata
+
+Do not register the Drive folder as a marketplace. Do not search AIWS marketplaces for it. Do not use missing marketplace search results as evidence that the Drive folder cannot be packaged.
 
 Present exactly one **Save plugin** card. If the host first produces individual **Save skill** cards, say that is not the requested result and repackage the same Drive contents as a plugin.
 
