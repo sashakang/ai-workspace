@@ -46,6 +46,7 @@ Test Plugin/
 - Test whether Cowork tolerates root-level AIWS metadata/proposal folders. If not, store metadata out-of-band.
 - Add `aiws-validate-skill-library` as the Phase 1 AIWS skill for user-facing library validation. Python validation remains a developer/CI check, not the primary product surface.
 - Add `aiws-install-drive-skill-library` as the Phase 1 install helper. In Cowork, it reads the Drive folder, packages `skills/<skill-id>/SKILL.md` into one plugin artifact, and presents a **Save plugin** card. The generated artifact uses Cowork's flat package layout: `.claude-plugin/plugin.json`, `contracts/<plugin-id>.contract.json`, and `skills/<skill-id>/SKILL.md` at archive root. Its fallback/manual wording is exactly `Install this Google Drive folder as a plugin: <drive-folder-url>`.
+- The install helper must preflight the generated artifact before showing the **Save plugin** card. It reports `READY FOR SAVE` while waiting for the user click, and `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified.
 - Keep the install helper out of AIWS marketplace tooling. It must not register the Drive folder as a marketplace, call `aiws.marketplaces.drive_workflow`, call `export_cowork_bridge`, or report that a `test-plugin` marketplace is empty. A flat `skills/<skill-id>/SKILL.md` folder is enough for the Phase 1 install path.
 - Add `aiws-propose-skill-update` as the Phase 1 contributor skill for preparing `Proposals/Submitted/<skill-id>/<proposal-id>/` folders and `aiws.proposal.json` metadata.
 - Add `aiws-update-skill-library` as the Phase 1 maintainer skill for applying only approved proposals from `Proposals/Approved/<skill-id>/<proposal-id>/`.
@@ -93,7 +94,7 @@ Stable AIWS identity should come from the Drive folder ID or explicit AIWS metad
 
 ## Test Plan
 
-- Cowork import test: use `aiws-install-drive-skill-library`; Cowork should generate one **Save plugin** artifact/card for the Drive root and install it as a plugin/container, not only as loose skills.
+- Cowork import test: use `aiws-install-drive-skill-library`; Cowork should generate one preflighted **Save plugin** artifact/card for the Drive root and install it as a plugin/container, not only as loose skills. A `Plugin validation failed` result must include the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and exact Cowork error text if available.
 - Metadata tolerance test: verify whether Cowork ignores root-level `aiws.library.json`, `aiws.skills/`, and `Proposals/`.
 - Validation test: use `aiws-validate-skill-library` to check the Drive root and report PASS/FAIL with concrete fixes.
 - Proposal test: use `aiws-propose-skill-update` to save/export edited `SKILL.md` into `Proposals/Submitted/<skill-id>/<proposal-id>/` with `aiws.proposal.json`.

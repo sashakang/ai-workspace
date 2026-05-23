@@ -50,6 +50,22 @@ skills/<skill-id>/SKILL.md
 
 For `Test Plugin`, use `plugin-id` `test-plugin`. The manifest must include `name`, `description`, `version`, and `author.name`. The contract must include `plugin_id`, `version`, and `public_skills` listing exactly the packaged skill folder ids. Do not put files under an extra top-level wrapper folder inside the archive.
 
+Before presenting the **Save plugin** card, inspect the generated archive and verify:
+
+- `.claude-plugin/plugin.json` exists at archive root
+- `contracts/test-plugin.contract.json` exists at archive root for `Test Plugin`
+- `skills/morning-briefing/SKILL.md` and `skills/meeting-followup/SKILL.md` exist at archive root for the demo library
+- no entry starts with `test-plugin/`, `Test Plugin/`, or another wrapper folder
+- `plugin.json.name` equals `test-plugin`
+- `plugin.json.version` is a non-empty semver-like string
+- contract `plugin_id` and `version` match `plugin.json`
+- contract `public_skills` equals the packaged skill folder ids
+- each packaged `SKILL.md` has only `name` and `description` frontmatter
+- each packaged `SKILL.md` frontmatter `name` exactly matches its folder id
+- each packaged `SKILL.md` has a non-empty body
+
+If any preflight check fails, do not present the **Save plugin** card. Fix the artifact or report `AIWS Drive Skill Library Install: FAIL` with the exact failing file and field.
+
 Do not register the Drive folder as a marketplace. Do not search AIWS marketplaces for it. Do not use missing marketplace search results as evidence that the Drive folder cannot be packaged.
 
 Present exactly one **Save plugin** card. If the host first produces individual **Save skill** cards, say that is not the requested result and repackage the same Drive contents as a plugin.
@@ -86,14 +102,17 @@ and give the same short prompt again.
 Report:
 
 ```text
-AIWS Drive Skill Library Install: PASS|FAIL|NEEDS RETRY|NEEDS MANUAL ACTION
+AIWS Drive Skill Library Install: READY FOR SAVE|PASS|FAIL|NEEDS RETRY|NEEDS MANUAL ACTION
 
 Drive folder:
 Install prompt:
 Plugin artifact generated: PASS|FAIL|NEEDS MANUAL ACTION
 Plugin artifact layout valid: PASS|FAIL|not verified
+Plugin artifact preflight: PASS|FAIL|not verified
 Save plugin completed: PASS|FAIL|not verified
 Plugin/container visible: PASS|FAIL|not verified
 Skills visible under plugin/container: PASS|FAIL|not verified
 Proposal folders ignored as skills: PASS|FAIL|not verified
 ```
+
+Use `READY FOR SAVE` when the plugin card is generated and preflighted but the user has not clicked **Save plugin** yet. Use `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified. If Cowork reports `Plugin validation failed`, do not repeat the same artifact blindly; inspect and report the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and the exact Cowork error text if available.
