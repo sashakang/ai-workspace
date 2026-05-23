@@ -1680,6 +1680,24 @@ class AiwsRuntime:
                 "requires": ["refresh_proposal_state"],
             },
             {
+                "id": "export_cowork_bridge",
+                "label": "Export Cowork bridge artifact",
+                "tool": "aiws.marketplaces.export_cowork_bridge",
+                "args": {
+                    "marketplace_id": marketplace_id,
+                    "plugin_id": plugin_id,
+                    "version": record.version,
+                },
+                "mutates_state": True,
+                "enabled": is_current_version,
+                "requires": ["publish_approved_proposal"],
+                "disabled_reason": (
+                    None
+                    if is_current_version
+                    else "Only the current published version should be exported to the Cowork bridge."
+                ),
+            },
+            {
                 "id": "delete_old_artifact_dry_run",
                 "label": "Preview old Drive artifact cleanup",
                 "tool": "aiws.marketplaces.delete_artifact",
@@ -2545,7 +2563,7 @@ class AiwsRuntime:
             },
             "selection_status": selection_status,
             "selected_skill_count": selected_skill_count,
-            "workflow_schema_version": 1,
+            "workflow_schema_version": 2,
             "latest_only": latest_only,
             "include_history": include_history,
             "include_debug": include_debug,
@@ -2560,6 +2578,7 @@ class AiwsRuntime:
                 "aiws.skills.validate_draft: validate with expected_plugin_id and expected_marketplace_id.",
                 "aiws.skills.stage_proposal: stage to backend_kind=google_drive with the same marketplace_id.",
                 "aiws.skills.submit_for_review / aiws.skills.refresh_proposal_state / aiws.skills.publish_approved_proposal: review, approve, publish, then materialize again from a fresh task.",
+                "aiws.marketplaces.export_cowork_bridge: export the current Drive release to the generated Cowork bridge artifact; this does not install or activate the plugin in Cowork.",
             ],
         }
         if selection_filtered and selected_skill_count == 1:
@@ -2570,6 +2589,43 @@ class AiwsRuntime:
             )
             workflow_payload["selected_skill"] = selected_skill
             workflow_payload["selected_action"] = selected_skill["next_action_detail"]
+            workflow_payload["best_available_user_story"] = {
+                "status": "aiws_managed",
+                "title": "Use and improve this Drive marketplace skill through AIWS-managed actions.",
+                "why": (
+                    "Cowork native plugin tools do not currently expose custom marketplace source "
+                    "registration or sync, so this skill cannot yet be installed as a first-class "
+                    "Cowork native plugin from the bridge source."
+                ),
+                "steps": [
+                    "Materialize the skill with aiws.skills.materialize if it is not already materialized.",
+                    "Use the materialized skill from the AIWS-managed workflow.",
+                    "Open, edit, validate, stage, review, and publish changes through the Google Drive marketplace workflow.",
+                    "Export the current Drive release to the Cowork bridge artifact for later Cowork-native consumption.",
+                    "Treat Cowork-native install/update as blocked until Cowork exposes custom marketplace source registration or sync.",
+                ],
+            }
+            workflow_payload["cowork_native_blocker"] = {
+                "status": "blocked_missing_custom_marketplace_source",
+                "visible": False,
+                "native_tools_observed": [
+                    "mcp__plugins__list_plugins",
+                    "mcp__plugins__search_plugins",
+                    "mcp__plugins__suggest_plugin_install",
+                ],
+                "missing_capabilities": [
+                    "register custom plugin marketplace source",
+                    "browse custom Git repository marketplace",
+                    "sync repository subpath marketplace",
+                    "install/update plugin from custom source",
+                ],
+                "bridge_source": {
+                    "repository": "sashakang/ai-workspace",
+                    "branch": "master",
+                    "path": "generated/cowork-drive-bridge",
+                    "marketplace": "aiws-cowork-drive-bridge",
+                },
+            }
         return workflow_payload
 
     def register_marketplace(

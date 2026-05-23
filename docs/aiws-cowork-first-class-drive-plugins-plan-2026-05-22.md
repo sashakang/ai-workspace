@@ -12,6 +12,8 @@ Make AIWS-compatible Google Drive marketplace domain plugins visible through a C
 - `Checkout Main` remains the Google Drive authoring, review, and release backend for the demo domain plugin `productivity:meeting-followup`.
 - Cowork remains the owner of native plugin catalog visibility, install, update, and activation.
 
+Given the current Cowork native plugin tool limitations, the next best deliverable is an explicit AIWS-managed user story: users can discover, materialize, use, edit, validate, stage, review, publish, and bridge-export the Drive marketplace skill through AIWS workflow actions, while the workflow clearly reports that Cowork-native install/update remains blocked by missing custom marketplace source support.
+
 AIWS cannot make a Google Drive marketplace row appear in Cowork's native plugin Directory only by materializing a skill or copying an adapter package. Cowork currently documents native plugin distribution through its marketplace/catalog surfaces, Git repository marketplaces, organization-managed manual marketplaces, and file upload. The first AIWS-controlled implementation should therefore be a **bridge publication path** from a published Drive release into a Cowork-native marketplace shape. A true Cowork-native Drive marketplace provider is a separate Cowork product integration dependency.
 
 ## First-Class Definition
@@ -231,6 +233,7 @@ That request should include:
 - Cowork native install exposes `Meeting Follow-up` under the plugin UI.
 - Cowork native update pulls the next bridge-published release.
 - AIWS Drive workflow still reports Drive publication and bridge publication as distinct states.
+- Until Cowork custom marketplace source support exists, AIWS Drive workflow exposes `best_available_user_story.status=aiws_managed` and `cowork_native_blocker.status=blocked_missing_custom_marketplace_source`.
 
 ## Success Criteria
 

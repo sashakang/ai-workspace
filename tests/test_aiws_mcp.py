@@ -1265,6 +1265,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertNotIn("selected_skill", workflow)
         old_actions = {action["id"]: action for action in old_workflow_skills[0]["actions"]}
         self.assertTrue(old_actions["delete_old_artifact_dry_run"]["enabled"])
+        self.assertFalse(old_actions["export_cowork_bridge"]["enabled"])
         latest_skills = latest_workflow["marketplaces"][0]["plugins"][0]["skills"]
         self.assertEqual([skill["version"] for skill in latest_skills], ["1.0.2"])
         self.assertTrue(latest_skills[0]["materialized"])
@@ -1326,6 +1327,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertEqual(filtered_workflow["selected_skill"]["skill_id"], "meeting-followup")
         self.assertEqual(filtered_workflow["selected_action"], filtered_workflow["selected_skill"]["next_action_detail"])
         self.assertEqual(filtered_workflow["selected_action"]["id"], "open_draft")
+        self.assertEqual(filtered_workflow["best_available_user_story"]["status"], "aiws_managed")
+        self.assertEqual(
+            filtered_workflow["cowork_native_blocker"]["status"],
+            "blocked_missing_custom_marketplace_source",
+        )
         self.assertEqual(browse_workflow["selection_status"], "browse")
         self.assertEqual(browse_workflow["selected_skill_count"], 1)
         self.assertNotIn("selected_skill", browse_workflow)
@@ -1699,7 +1705,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
             )
 
         self.assertEqual(workflow["status"], "ok")
-        self.assertEqual(workflow["workflow_schema_version"], 1)
+        self.assertEqual(workflow["workflow_schema_version"], 2)
         self.assertEqual(workflow["selection_status"], "matched")
         self.assertEqual(workflow["selected_skill_count"], 1)
         self.assertFalse(workflow["latest_only"])
@@ -1732,6 +1738,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 "submit_for_review",
                 "refresh_proposal_state",
                 "publish_approved_proposal",
+                "export_cowork_bridge",
                 "delete_old_artifact_dry_run",
                 "check_core_update_status",
             ],
@@ -1768,7 +1775,34 @@ class AiwsMcpSkillTests(unittest.TestCase):
             "Current marketplace version cannot be deleted.",
         )
         self.assertEqual(actions["check_core_update_status"]["tool"], "aiws.runtime.update_status")
+        self.assertEqual(actions["export_cowork_bridge"]["tool"], "aiws.marketplaces.export_cowork_bridge")
+        self.assertTrue(actions["export_cowork_bridge"]["enabled"])
+        self.assertEqual(
+            actions["export_cowork_bridge"]["args"],
+            {
+                "marketplace_id": "checkout-main-real",
+                "plugin_id": "example-plugin",
+                "version": "1.0.1",
+            },
+        )
+        self.assertEqual(workflow["best_available_user_story"]["status"], "aiws_managed")
+        self.assertIn("Use and improve", workflow["best_available_user_story"]["title"])
+        self.assertEqual(
+            workflow["cowork_native_blocker"]["status"],
+            "blocked_missing_custom_marketplace_source",
+        )
+        self.assertFalse(workflow["cowork_native_blocker"]["visible"])
+        self.assertEqual(
+            workflow["cowork_native_blocker"]["bridge_source"],
+            {
+                "repository": "sashakang/ai-workspace",
+                "branch": "master",
+                "path": "generated/cowork-drive-bridge",
+                "marketplace": "aiws-cowork-drive-bridge",
+            },
+        )
         self.assertIn("aiws.skills.materialize", "\n".join(workflow["workflow"]))
+        self.assertIn("aiws.marketplaces.export_cowork_bridge", "\n".join(workflow["workflow"]))
 
     def test_install_host_cowork_prepares_package_handoff_from_materialized_adapter(self) -> None:
         self.write_personal_skill("local-review", "Review local work.")
