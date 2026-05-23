@@ -40,12 +40,178 @@ Present a concise evidence summary, proposed target, rationale, and the smallest
 """
 
 
+AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL = """---
+name: aiws-install-drive-skill-library
+description: Prepare and verify the Cowork prompt for installing a Google Drive Skill Library as a plugin.
+---
+
+# AIWS Drive Skill Library Install
+
+Use this skill when a user wants to install a Google Drive Skill Library in Cowork as a plugin-like container.
+
+Give the user exactly this prompt to run in Cowork:
+
+```text
+Install this Google Drive folder as a plugin:
+<drive-folder-url>
+```
+
+Do not ask the user to type longer instructions. Do not say "install as standalone skills" or "install individual skills".
+
+After the user runs the prompt, verify that the Drive folder appears as a plugin/container, skills appear under that plugin/container, and proposal folders are not installed as runnable skills.
+
+Report `AIWS Drive Skill Library Install: PASS`, `FAIL`, or `NEEDS RETRY`.
+"""
+
+
+AIWS_PROPOSE_SKILL_UPDATE_SKILL = """---
+name: aiws-propose-skill-update
+description: Prepare a Drive Skill Library proposal from an edited SKILL.md.
+---
+
+# AIWS Skill Library Proposal
+
+Use this skill when a user wants to propose an update to a skill stored in an AIWS Skill Library.
+
+Prepare a proposed replacement `SKILL.md` under:
+
+```text
+Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
+Proposals/Submitted/<skill-id>/<proposal-id>/aiws.proposal.json
+```
+
+Do not edit the canonical file at `skills/<skill-id>/SKILL.md`; only a maintainer promotes an approved proposal.
+
+## Validate First
+
+Use `aiws-validate-skill-library` before preparing the proposal. Do not duplicate its validation checklist here. If validation fails, report the concrete issue and stop.
+
+## Metadata
+
+Create `aiws.proposal.json` with factual metadata:
+
+```json
+{
+  "kind": "aiws.proposal",
+  "proposal_id": "<proposal-id>",
+  "library_id": "<library-id-or-unspecified>",
+  "library_display_name": "<library-display-name-or-unspecified>",
+  "source_kind": "google_drive",
+  "skill_id": "<skill-id>",
+  "source_path": "skills/<skill-id>/SKILL.md",
+  "proposed_path": "Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md",
+  "proposer": "<proposer-or-unspecified>",
+  "reason": "<reason-or-unspecified>",
+  "created_at": "<ISO-8601 timestamp>"
+}
+```
+
+If direct Drive write access is unavailable, provide the exact folder path and file contents for the user or host to save. Do not claim the proposal landed in Drive unless the files were actually written there.
+"""
+
+
+AIWS_UPDATE_SKILL_LIBRARY_SKILL = """---
+name: aiws-update-skill-library
+description: Apply an approved Drive Skill Library proposal and verify the refreshed skill.
+---
+
+# AIWS Skill Library Update
+
+Use this skill when a maintainer has approved a Drive Skill Library proposal by moving or copying the final proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/`.
+
+This skill applies an already-approved proposal. It is not a review workflow.
+
+## Boundaries
+
+Only copy `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` over `skills/<skill-id>/SKILL.md`.
+
+Refuse `Proposals/Submitted/`, `Proposals/Rejected/`, and flat legacy `Proposals/<skill-id>/<proposal-id>/` paths.
+
+Do not judge content quality, approve proposals, resolve disagreements, apply runtime artifacts, rewrite metadata, create plugin manifests, run scripts, build packages, upload ZIPs, export bridges, create GitHub pull requests, or change marketplaces.
+
+## Workflow
+
+1. Confirm the proposal path is under `Proposals/Approved/<skill-id>/<proposal-id>/`.
+2. Use `aiws-validate-skill-library` to validate the library and proposal structure.
+3. Replace canonical `skills/<skill-id>/SKILL.md` with the approved proposal `SKILL.md`.
+4. Verify the canonical file matches the approved proposal content.
+5. Use `aiws-validate-skill-library` again after replacement.
+6. Refresh or guide Cowork reimport of the Drive skill library.
+7. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
+
+If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
+
+## Output
+
+Report `AIWS Skill Library Update: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skill, proposal, approved proposal path, canonical update status, library validation status, Cowork refresh/import status, and skill invocation status.
+"""
+
+
+AIWS_VALIDATE_SKILL_LIBRARY_SKILL = """---
+name: aiws-validate-skill-library
+description: Validate an AIWS Skill Library folder and report concrete fixes.
+---
+
+# AIWS Skill Library Validation
+
+Use this skill when a user wants to check whether a Drive Skill Library is ready for Cowork import, maintainer review, or cross-host use.
+
+Validate a skill-first library shaped as:
+
+```text
+<Library root>/
+  skills/
+    <skill-id>/
+      SKILL.md
+```
+
+Optional AIWS metadata may exist at the library root: `aiws.library.json`, `aiws.skills/`, and `Proposals/`.
+
+## Required Checks
+
+1. The library has a `skills/` directory.
+2. Each skill lives at `skills/<skill-id>/SKILL.md`.
+3. Each `<skill-id>` uses lowercase letters, digits, and hyphens.
+4. Each `SKILL.md` has YAML frontmatter.
+5. Frontmatter contains only `name` and `description`.
+6. Frontmatter `name` equals the folder name.
+7. Frontmatter `description` is nonempty.
+8. The skill body is nonempty.
+
+Fail validation if the library requires plugin runtime artifacts such as `.claude-plugin/plugin.json`, `contracts/`, or `.mcp.json`.
+
+If proposals exist, validate `Proposals/Submitted/<skill-id>/<proposal-id>/`, `Proposals/Approved/<skill-id>/<proposal-id>/`, and `Proposals/Rejected/<skill-id>/<proposal-id>/`. Confirm each proposal includes `SKILL.md` and `aiws.proposal.json` and points back to `skills/<skill-id>/SKILL.md`.
+
+Reject flat legacy proposal paths such as `Proposals/<skill-id>/<proposal-id>/`.
+
+## Output
+
+Report `AIWS Skill Library Validation: PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Include concrete fixes for every failure.
+
+If the Python validator is available, it may be used as a secondary deterministic check:
+
+```bash
+PYTHONPATH=aiws-mcp python3 -m aiws_mcp validate-skill-library --library-root <library-root>
+```
+
+The Python command is developer/CI support. The user-facing validation surface is this skill.
+"""
+
+
 BUILTIN_SKILLS = {
     "aiws-improve": AIWS_IMPROVE_SKILL,
+    "aiws-install-drive-skill-library": AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL,
+    "aiws-propose-skill-update": AIWS_PROPOSE_SKILL_UPDATE_SKILL,
+    "aiws-update-skill-library": AIWS_UPDATE_SKILL_LIBRARY_SKILL,
+    "aiws-validate-skill-library": AIWS_VALIDATE_SKILL_LIBRARY_SKILL,
 }
 
 
 RESOURCES = {
     "aiws://protocols/sop": SOP_RESOURCE,
     "aiws://skills/aiws-improve": AIWS_IMPROVE_SKILL,
+    "aiws://skills/aiws-install-drive-skill-library": AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL,
+    "aiws://skills/aiws-propose-skill-update": AIWS_PROPOSE_SKILL_UPDATE_SKILL,
+    "aiws://skills/aiws-update-skill-library": AIWS_UPDATE_SKILL_LIBRARY_SKILL,
+    "aiws://skills/aiws-validate-skill-library": AIWS_VALIDATE_SKILL_LIBRARY_SKILL,
 }

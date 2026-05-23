@@ -1,0 +1,8 @@
+{
+  "display_name": "Meeting Follow-up",
+  "id": "meeting-followup",
+  "kind": "aiws.skill",
+  "library_id": "test-plugin",
+  "source_path": "skills/meeting-followup/SKILL.md",
+  "version": "0.1.0"
+}

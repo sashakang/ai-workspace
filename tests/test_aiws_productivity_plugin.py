@@ -41,6 +41,10 @@ class AiwsProductivityPluginTests(unittest.TestCase):
         self.assertIn("meeting-followup", productivity_contract["public_skills"])
         self.assertNotIn("meeting-followup", core_contract["public_skills"])
         self.assertIn("aiws-improve", core_contract["public_skills"])
+        self.assertIn("aiws-install-drive-skill-library", core_contract["public_skills"])
+        self.assertIn("aiws-propose-skill-update", core_contract["public_skills"])
+        self.assertIn("aiws-update-skill-library", core_contract["public_skills"])
+        self.assertIn("aiws-validate-skill-library", core_contract["public_skills"])
 
     def test_meeting_followup_scope_excludes_broad_productivity(self) -> None:
         content = (REPO_ROOT / "aiws-productivity" / "skills" / "meeting-followup" / "SKILL.md").read_text()

@@ -560,6 +560,22 @@ def create_server(root: Path | None = None):
     def improve_resource() -> str:
         return runtime.get_resource("aiws://skills/aiws-improve")
 
+    @server.resource("aiws://skills/aiws-install-drive-skill-library")
+    def install_drive_skill_library_resource() -> str:
+        return runtime.get_resource("aiws://skills/aiws-install-drive-skill-library")
+
+    @server.resource("aiws://skills/aiws-propose-skill-update")
+    def propose_skill_update_resource() -> str:
+        return runtime.get_resource("aiws://skills/aiws-propose-skill-update")
+
+    @server.resource("aiws://skills/aiws-update-skill-library")
+    def update_skill_library_resource() -> str:
+        return runtime.get_resource("aiws://skills/aiws-update-skill-library")
+
+    @server.resource("aiws://skills/aiws-validate-skill-library")
+    def validate_skill_library_resource() -> str:
+        return runtime.get_resource("aiws://skills/aiws-validate-skill-library")
+
     @server.prompt(name="aiws.sop")
     def sop_prompt() -> str:
         return runtime.get_resource("aiws://protocols/sop")
@@ -567,5 +583,21 @@ def create_server(root: Path | None = None):
     @server.prompt(name="aiws.improve")
     def improve_prompt() -> str:
         return runtime.get_resource("aiws://skills/aiws-improve")
+
+    @server.prompt(name="aiws.install_drive_skill_library")
+    def install_drive_skill_library_prompt() -> str:
+        return runtime.get_resource("aiws://skills/aiws-install-drive-skill-library")
+
+    @server.prompt(name="aiws.propose_skill_update")
+    def propose_skill_update_prompt() -> str:
+        return runtime.get_resource("aiws://skills/aiws-propose-skill-update")
+
+    @server.prompt(name="aiws.update_skill_library")
+    def update_skill_library_prompt() -> str:
+        return runtime.get_resource("aiws://skills/aiws-update-skill-library")
+
+    @server.prompt(name="aiws.validate_skill_library")
+    def validate_skill_library_prompt() -> str:
+        return runtime.get_resource("aiws://skills/aiws-validate-skill-library")
 
     return server

@@ -1459,17 +1459,32 @@ class AiwsMcpSkillTests(unittest.TestCase):
         )
         self.assert_no_memory_or_claude_writes()
 
-    def test_clean_machine_has_sop_and_aiws_improve_without_plugins(self) -> None:
+    def test_clean_machine_has_core_aiws_skills_without_plugins(self) -> None:
         local = self.runtime.list_local_skills()
         skill_ids = {item["skill_id"] for item in local["skills"]}
 
         self.assertIn("aiws-improve", skill_ids)
+        self.assertIn("aiws-install-drive-skill-library", skill_ids)
+        self.assertIn("aiws-propose-skill-update", skill_ids)
+        self.assertIn("aiws-update-skill-library", skill_ids)
+        self.assertIn("aiws-validate-skill-library", skill_ids)
         self.assertNotIn("meeting-followup", skill_ids)
         sop = self.runtime.get_resource("aiws://protocols/sop")
         improve = self.runtime.get_resource("aiws://skills/aiws-improve")
+        install = self.runtime.get_resource("aiws://skills/aiws-install-drive-skill-library")
+        proposal = self.runtime.get_resource("aiws://skills/aiws-propose-skill-update")
+        update = self.runtime.get_resource("aiws://skills/aiws-update-skill-library")
+        validation = self.runtime.get_resource("aiws://skills/aiws-validate-skill-library")
 
         self.assertIn("Standard Operating Procedure", sop)
         self.assertIn("Self-Improvement", improve)
+        self.assertIn("Install this Google Drive folder as a plugin:", install)
+        self.assertIn("Skill Library Proposal", proposal)
+        self.assertIn("Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md", proposal)
+        self.assertIn("Skill Library Update", update)
+        self.assertIn("Proposals/Approved/<skill-id>/<proposal-id>/", update)
+        self.assertIn("Skill Library Validation", validation)
+        self.assertIn("validate-skill-library", validation)
         self.assertNotIn("CLAUDE_PLUGIN_DATA", improve)
         self.assertNotIn("registry/plugins", improve)
 

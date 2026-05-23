@@ -21,6 +21,10 @@ from urllib.request import Request, urlopen
 
 NAME_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?")
 ALLOWED_SKILL_FRONTMATTER = {"name", "description"}
+SUPPORTED_SKILL_LIBRARY_SOURCE_KINDS = {"google_drive"}
+RESERVED_SKILL_LIBRARY_SOURCE_KINDS = {"github", "cowork_plugin"}
+PROPOSAL_ID_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]{0,127})")
+SKILL_LIBRARY_PROPOSAL_STATES = ("Submitted", "Approved", "Rejected")
 CLUTTER_FILES = {
     "CHANGELOG.md",
     "INSTALLATION_GUIDE.md",
@@ -416,6 +420,262 @@ def validate_skill_creator_compat(skill_root: Path) -> dict[str, str]:
         raise SkillManagerError(f"Unsupported clutter files in skill folder {skill_root}: {clutter}")
 
     return {"name": name, "description": description}
+
+
+def validate_skill_library_relative_path(root: Path, relative_path: Any, *, label: str) -> Path:
+    if not isinstance(relative_path, str) or not relative_path:
+        raise SkillManagerError(f"{label} must be a non-empty relative path.")
+    path = Path(relative_path)
+    if path.is_absolute() or ".." in path.parts:
+        raise SkillManagerError(f"{label} must be a safe relative path: {relative_path!r}")
+    candidate = root / path
+    try:
+        candidate.resolve().relative_to(root.resolve())
+    except ValueError as exc:
+        raise SkillManagerError(f"{label} escapes skill library root: {relative_path!r}") from exc
+    reject_existing_symlink_components(candidate, label=label)
+    return candidate
+
+
+def require_json_object(path: Path) -> dict[str, Any]:
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise SkillManagerError(f"JSON file must contain an object: {path}")
+    return payload
+
+
+def validate_skill_library_metadata(
+    library_root: Path,
+    metadata_root: Path,
+    actual_skill_names: set[str],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str], list[dict[str, Any]]]:
+    warnings: list[str] = []
+    library_file = metadata_root / "aiws.library.json"
+    library_metadata: dict[str, Any] | None = None
+    library_id: str | None = None
+    source_kind: str | None = None
+    source_status = "metadata_absent"
+
+    if library_file.exists():
+        if library_file.is_symlink():
+            raise SkillManagerError(f"Skill library metadata must not be a symlink: {library_file}")
+        library_metadata = require_json_object(library_file)
+        kind = library_metadata.get("kind")
+        if kind not in (None, "aiws.skill_library"):
+            raise SkillManagerError(f"aiws.library.json kind must be 'aiws.skill_library': {library_file}")
+        library_id = library_metadata.get("id")
+        if not isinstance(library_id, str) or not NAME_RE.fullmatch(library_id) or "--" in library_id:
+            raise SkillManagerError(f"aiws.library.json id must be lowercase hyphenated: {library_file}")
+        display_name = library_metadata.get("display_name")
+        if display_name is not None and not isinstance(display_name, str):
+            raise SkillManagerError(f"aiws.library.json display_name must be a string: {library_file}")
+        source = library_metadata.get("source")
+        if not isinstance(source, dict):
+            raise SkillManagerError(f"aiws.library.json source must be an object: {library_file}")
+        source_kind = source.get("kind")
+        allowed_kinds = SUPPORTED_SKILL_LIBRARY_SOURCE_KINDS | RESERVED_SKILL_LIBRARY_SOURCE_KINDS
+        if source_kind not in allowed_kinds:
+            raise SkillManagerError(f"Unsupported Skill Library source.kind {source_kind!r}: {library_file}")
+        if source_kind == "google_drive" and not isinstance(source.get("folder_id"), str):
+            raise SkillManagerError(f"Google Drive Skill Library source must define folder_id: {library_file}")
+        source_status = "supported" if source_kind in SUPPORTED_SKILL_LIBRARY_SOURCE_KINDS else "reserved"
+    else:
+        warnings.append("aiws.library.json is absent; stable library identity must be supplied out of band.")
+
+    metadata_results: list[dict[str, Any]] = []
+    metadata_by_skill: set[str] = set()
+    skill_metadata_root = metadata_root / "aiws.skills"
+    if skill_metadata_root.exists():
+        if skill_metadata_root.is_symlink() or not skill_metadata_root.is_dir():
+            raise SkillManagerError(f"aiws.skills must be a directory: {skill_metadata_root}")
+        for metadata_file in sorted(skill_metadata_root.glob("*.json")):
+            if metadata_file.is_symlink():
+                raise SkillManagerError(f"Skill metadata must not be a symlink: {metadata_file}")
+            payload = require_json_object(metadata_file)
+            kind = payload.get("kind")
+            if kind not in (None, "aiws.skill"):
+                raise SkillManagerError(f"Skill metadata kind must be 'aiws.skill': {metadata_file}")
+            skill_id = payload.get("id")
+            if not isinstance(skill_id, str) or skill_id != metadata_file.stem:
+                raise SkillManagerError(f"Skill metadata id must match filename: {metadata_file}")
+            if skill_id not in actual_skill_names:
+                raise SkillManagerError(f"Skill metadata references missing skill folder: {skill_id}")
+            metadata_library_id = payload.get("library_id")
+            if library_id is not None and metadata_library_id != library_id:
+                raise SkillManagerError(f"Skill metadata library_id must match aiws.library.json id: {metadata_file}")
+            source_path = payload.get("source_path", f"skills/{skill_id}/SKILL.md")
+            resolved_source = validate_skill_library_relative_path(library_root, source_path, label="Skill metadata source_path")
+            if not resolved_source.is_file():
+                raise SkillManagerError(f"Skill metadata source_path is missing: {source_path}")
+            expected_source = library_root / "skills" / skill_id / "SKILL.md"
+            if resolved_source.resolve() != expected_source.resolve():
+                raise SkillManagerError(f"Skill metadata source_path must point to skills/{skill_id}/SKILL.md.")
+            metadata_by_skill.add(skill_id)
+            metadata_results.append(
+                {
+                    "id": skill_id,
+                    "library_id": metadata_library_id,
+                    "source_path": source_path,
+                    "version": payload.get("version"),
+                }
+            )
+        missing_metadata = sorted(actual_skill_names - metadata_by_skill)
+        if missing_metadata:
+            warnings.append(f"aiws.skills metadata missing for skills: {missing_metadata}")
+
+    proposals = validate_skill_library_proposals(
+        library_root,
+        metadata_root,
+        actual_skill_names=actual_skill_names,
+        library_id=library_id,
+    )
+    metadata = None
+    if library_metadata is not None:
+        metadata = {
+            "id": library_id,
+            "display_name": library_metadata.get("display_name"),
+            "source_kind": source_kind,
+            "source_status": source_status,
+        }
+    return metadata, metadata_results, warnings + proposals["warnings"], proposals["proposals"]
+
+
+def validate_skill_library_proposal_skill(skill_file: Path, *, skill_id: str) -> None:
+    if not skill_file.is_file():
+        raise SkillManagerError(f"Proposal is missing SKILL.md: {skill_file}")
+    metadata, body = parse_skill_frontmatter(skill_file.read_text())
+    extra = set(metadata) - ALLOWED_SKILL_FRONTMATTER
+    if extra:
+        raise SkillManagerError(f"Unsupported proposal SKILL.md frontmatter fields: {sorted(extra)}")
+    if metadata.get("name") != skill_id:
+        raise SkillManagerError(f"Proposal SKILL.md name must match proposal skill id {skill_id!r}.")
+    if not metadata.get("description"):
+        raise SkillManagerError(f"Proposal SKILL.md description is required: {skill_file}")
+    if not body.strip():
+        raise SkillManagerError(f"Proposal SKILL.md body is required: {skill_file}")
+
+
+def validate_skill_library_proposals(
+    library_root: Path,
+    metadata_root: Path,
+    *,
+    actual_skill_names: set[str],
+    library_id: str | None,
+) -> dict[str, Any]:
+    proposals_root = metadata_root / "Proposals"
+    if not proposals_root.exists():
+        return {"proposals": [], "warnings": []}
+    if proposals_root.is_symlink() or not proposals_root.is_dir():
+        raise SkillManagerError(f"Proposals must be a directory: {proposals_root}")
+
+    proposals: list[dict[str, Any]] = []
+    allowed_states = set(SKILL_LIBRARY_PROPOSAL_STATES)
+    for state_dir in sorted(path for path in proposals_root.iterdir() if path.is_dir()):
+        if state_dir.is_symlink():
+            raise SkillManagerError(f"Proposal state directory must not be a symlink: {state_dir}")
+        state = state_dir.name
+        if state not in allowed_states:
+            raise SkillManagerError(
+                "Proposals must use state directories Submitted, Approved, or Rejected; "
+                f"found {state!r}. Flat legacy proposal paths are not supported."
+            )
+        for skill_dir in sorted(path for path in state_dir.iterdir() if path.is_dir()):
+            if skill_dir.is_symlink():
+                raise SkillManagerError(f"Proposal skill directory must not be a symlink: {skill_dir}")
+            skill_id = skill_dir.name
+            if skill_id not in actual_skill_names:
+                raise SkillManagerError(f"Proposal references missing skill folder: {skill_id}")
+            for proposal_dir in sorted(path for path in skill_dir.iterdir() if path.is_dir()):
+                if proposal_dir.is_symlink():
+                    raise SkillManagerError(f"Proposal directory must not be a symlink: {proposal_dir}")
+                proposal_id = proposal_dir.name
+                if not PROPOSAL_ID_RE.fullmatch(proposal_id):
+                    raise SkillManagerError(f"Proposal id contains unsupported characters: {proposal_id!r}")
+                validate_skill_library_proposal_skill(proposal_dir / "SKILL.md", skill_id=skill_id)
+                proposal_metadata_file = proposal_dir / "aiws.proposal.json"
+                if not proposal_metadata_file.is_file() or proposal_metadata_file.is_symlink():
+                    raise SkillManagerError(f"Proposal metadata is required: {proposal_metadata_file}")
+                payload = require_json_object(proposal_metadata_file)
+                kind = payload.get("kind")
+                if kind not in (None, "aiws.proposal"):
+                    raise SkillManagerError(f"Proposal metadata kind must be 'aiws.proposal': {proposal_metadata_file}")
+                if payload.get("proposal_id") != proposal_id:
+                    raise SkillManagerError(f"Proposal metadata proposal_id must match directory: {proposal_metadata_file}")
+                if payload.get("skill_id") != skill_id:
+                    raise SkillManagerError(f"Proposal metadata skill_id must match directory: {proposal_metadata_file}")
+                if library_id is not None and payload.get("library_id") != library_id:
+                    raise SkillManagerError(f"Proposal metadata library_id must match aiws.library.json id: {proposal_metadata_file}")
+                source_path = payload.get("source_path")
+                source = validate_skill_library_relative_path(library_root, source_path, label="Proposal source_path")
+                if not source.is_file():
+                    raise SkillManagerError(f"Proposal source_path is missing: {source_path}")
+                expected_source = library_root / "skills" / skill_id / "SKILL.md"
+                if source.resolve() != expected_source.resolve():
+                    raise SkillManagerError(f"Proposal source_path must point to skills/{skill_id}/SKILL.md.")
+                proposals.append(
+                    {
+                        "proposal_id": proposal_id,
+                        "state": state,
+                        "skill_id": skill_id,
+                        "source_path": source_path,
+                        "base_version": payload.get("base_version"),
+                        "base_revision": payload.get("base_revision"),
+                    }
+                )
+    return {"proposals": proposals, "warnings": []}
+
+
+def validate_skill_library(library_root: Path, *, metadata_root: Path | None = None) -> dict[str, Any]:
+    if not library_root.is_dir():
+        raise SkillManagerError(f"Skill Library root is not a directory: {library_root}")
+    reject_symlinked_root(library_root, label="Skill Library root")
+    reject_existing_symlink_components(library_root, label="Skill Library root")
+    for path in library_root.rglob("*"):
+        if path.is_symlink():
+            raise SkillManagerError(f"Skill Library must not contain symlinks: {path}")
+
+    if plugin_manifest_path(library_root).exists():
+        raise SkillManagerError("Skill Library mode must not contain plugin manifest; use plugin validation.")
+    if (library_root / "contracts").exists():
+        raise SkillManagerError("Skill Library mode must not contain plugin contracts; use plugin validation.")
+    if (library_root / ".mcp.json").exists():
+        raise SkillManagerError("Runtime MCP configuration is out of scope for Skill Library mode.")
+
+    skills_root = library_root / "skills"
+    if not skills_root.is_dir() or skills_root.is_symlink():
+        raise SkillManagerError(f"Skill Library must contain skills directory: {skills_root}")
+    skill_dirs = sorted(path for path in skills_root.iterdir() if path.is_dir())
+    if not skill_dirs:
+        raise SkillManagerError(f"Skill Library must contain at least one skill folder: {skills_root}")
+
+    skills = []
+    for skill_root in skill_dirs:
+        skill = validate_skill_creator_compat(skill_root)
+        skill["path"] = str(skill_root.relative_to(library_root))
+        skills.append(skill)
+    actual_skill_names = {skill["name"] for skill in skills}
+
+    effective_metadata_root = metadata_root or library_root
+    if not effective_metadata_root.is_dir():
+        raise SkillManagerError(f"Skill Library metadata root is not a directory: {effective_metadata_root}")
+    reject_symlinked_root(effective_metadata_root, label="Skill Library metadata root")
+    metadata, skill_metadata, warnings, proposals = validate_skill_library_metadata(
+        library_root,
+        effective_metadata_root,
+        actual_skill_names,
+    )
+
+    return {
+        "status": "ok",
+        "library_root": str(library_root),
+        "metadata_root": str(effective_metadata_root),
+        "metadata": metadata,
+        "skills": skills,
+        "skill_metadata": skill_metadata,
+        "proposals": proposals,
+        "warnings": warnings,
+        "plugin_manifest_required": False,
+    }
 
 
 def validate_mcp_config(path: Path) -> dict[str, Any]:

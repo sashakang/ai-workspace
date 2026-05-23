@@ -1,0 +1,9 @@
+{
+  "base_version": "0.1.0",
+  "kind": "aiws.proposal",
+  "library_id": "test-plugin",
+  "proposal_id": "proposal-demo-2026-05-23",
+  "proposed_path": "Proposals/Submitted/meeting-followup/proposal-demo-2026-05-23/SKILL.md",
+  "skill_id": "meeting-followup",
+  "source_path": "skills/meeting-followup/SKILL.md"
+}

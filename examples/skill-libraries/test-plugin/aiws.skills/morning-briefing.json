@@ -1,0 +1,8 @@
+{
+  "display_name": "Morning Briefing",
+  "id": "morning-briefing",
+  "kind": "aiws.skill",
+  "library_id": "test-plugin",
+  "source_path": "skills/morning-briefing/SKILL.md",
+  "version": "0.1.0"
+}

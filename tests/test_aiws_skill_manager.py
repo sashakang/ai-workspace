@@ -56,6 +56,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     update_from_github_decision,
     validate_marketplace,
     validate_plugin,
+    validate_skill_library,
     validate_draft,
     validate_mcp_config,
     validate_skill_creator_compat,
@@ -537,6 +538,91 @@ class AiwsSkillManagerTests(unittest.TestCase):
 
             with self.assertRaisesRegex(SkillManagerError, "must define url"):
                 validate_plugin(plugin_root)
+
+    def test_skill_library_validation_accepts_drive_root_without_plugin_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=True)
+
+            result = validate_skill_library(library_root)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertFalse(result["plugin_manifest_required"])
+        self.assertEqual(result["metadata"]["id"], "test-plugin")
+        self.assertEqual(result["metadata"]["source_kind"], "google_drive")
+        self.assertEqual({skill["name"] for skill in result["skills"]}, {"meeting-followup", "morning-briefing"})
+        self.assertEqual(result["proposals"][0]["skill_id"], "meeting-followup")
+        self.assertEqual(result["proposals"][0]["state"], "Submitted")
+
+    def test_skill_library_validation_accepts_plain_cowork_import_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=False, include_proposal=False)
+
+            result = validate_skill_library(library_root)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNone(result["metadata"])
+        self.assertIn("aiws.library.json is absent", "\n".join(result["warnings"]))
+
+    def test_skill_library_validation_rejects_wrong_skill_metadata_library(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+            metadata_path = library_root / "aiws.skills" / "meeting-followup.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["library_id"] = "wrong-library"
+            metadata_path.write_text(json.dumps(metadata))
+
+            with self.assertRaisesRegex(SkillManagerError, "library_id must match"):
+                validate_skill_library(library_root)
+
+    def test_skill_library_validation_rejects_plugin_manifest_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=False, include_proposal=False)
+            (library_root / ".claude-plugin").mkdir()
+            (library_root / ".claude-plugin" / "plugin.json").write_text("{}")
+
+            with self.assertRaisesRegex(SkillManagerError, "must not contain plugin manifest"):
+                validate_skill_library(library_root)
+
+    def test_plugin_validation_still_requires_plugin_manifest_for_skill_library_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=False, include_proposal=False)
+
+            with self.assertRaisesRegex(SkillManagerError, "Missing plugin manifest"):
+                validate_plugin(library_root)
+
+    def test_skill_library_validation_marks_future_source_kinds_reserved(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+            library_path = library_root / "aiws.library.json"
+            metadata = json.loads(library_path.read_text())
+            metadata["source"] = {"kind": "github", "repo": "example/test-plugin", "ref": "main", "path": "."}
+            library_path.write_text(json.dumps(metadata))
+
+            result = validate_skill_library(library_root)
+
+        self.assertEqual(result["metadata"]["source_kind"], "github")
+        self.assertEqual(result["metadata"]["source_status"], "reserved")
+
+    def test_skill_library_validation_accepts_explicit_proposal_states(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+            for state in ("Submitted", "Approved", "Rejected"):
+                self.write_library_proposal(library_root, state=state, proposal_id=f"proposal-{state.lower()}")
+
+            result = validate_skill_library(library_root)
+
+        self.assertEqual(
+            {proposal["state"] for proposal in result["proposals"]},
+            {"Submitted", "Approved", "Rejected"},
+        )
+
+    def test_skill_library_validation_rejects_flat_legacy_proposal_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+            self.write_library_proposal(library_root, state=None, proposal_id="proposal-flat-legacy")
+
+            with self.assertRaisesRegex(SkillManagerError, "Flat legacy proposal paths are not supported"):
+                validate_skill_library(library_root)
 
     def test_skill_management_docs_keep_memory_and_terminal_out_of_user_flow(self) -> None:
         contract = (REPO_ROOT / "core-aiws" / "contracts" / "skill-management.md").read_text()
@@ -3995,6 +4081,83 @@ class AiwsSkillManagerTests(unittest.TestCase):
             )
         )
         return plugin_root
+
+    def write_skill_library(self, root: Path, *, include_metadata: bool, include_proposal: bool) -> Path:
+        library_root = root / "test-plugin"
+        self.write_library_skill(library_root, "meeting-followup")
+        self.write_library_skill(library_root, "morning-briefing")
+
+        if include_metadata:
+            (library_root / "aiws.skills").mkdir()
+            (library_root / "aiws.library.json").write_text(
+                json.dumps(
+                    {
+                        "kind": "aiws.skill_library",
+                        "id": "test-plugin",
+                        "display_name": "Test Plugin",
+                        "source": {"kind": "google_drive", "folder_id": "1BiEjSTKeD0hyUyHWdLhvP0cp3RX3uo7L"},
+                    }
+                )
+            )
+            for skill_id in ("meeting-followup", "morning-briefing"):
+                (library_root / "aiws.skills" / f"{skill_id}.json").write_text(
+                    json.dumps(
+                        {
+                            "kind": "aiws.skill",
+                            "id": skill_id,
+                            "display_name": skill_id.replace("-", " ").title(),
+                            "library_id": "test-plugin",
+                            "version": "0.1.0",
+                            "source_path": f"skills/{skill_id}/SKILL.md",
+                        }
+                    )
+                )
+
+        if include_proposal:
+            self.write_library_proposal(library_root, state="Submitted", proposal_id="proposal-demo-2026-05-23")
+        return library_root
+
+    def write_library_proposal(self, library_root: Path, *, state: str | None, proposal_id: str) -> Path:
+        proposal_parts = ["Proposals"]
+        if state is not None:
+            proposal_parts.append(state)
+        proposal_parts.extend(["meeting-followup", proposal_id])
+        proposal_root = library_root.joinpath(*proposal_parts)
+        proposal_root.mkdir(parents=True)
+        (proposal_root / "SKILL.md").write_text(
+            "---\n"
+            "name: meeting-followup\n"
+            "description: Test skill.\n"
+            "---\n"
+            "\n"
+            "# Test Skill Proposal\n"
+        )
+        proposed_path = (
+            f"Proposals/{state}/meeting-followup/{proposal_id}/SKILL.md"
+            if state is not None
+            else f"Proposals/meeting-followup/{proposal_id}/SKILL.md"
+        )
+        (proposal_root / "aiws.proposal.json").write_text(
+            json.dumps(
+                {
+                    "kind": "aiws.proposal",
+                    "proposal_id": proposal_id,
+                    "library_id": "test-plugin",
+                    "skill_id": "meeting-followup",
+                    "source_path": "skills/meeting-followup/SKILL.md",
+                    "proposed_path": proposed_path,
+                    "base_version": "0.1.0",
+                }
+            )
+        )
+        return proposal_root
+
+    def write_library_skill(self, library_root: Path, name: str) -> Path:
+        skill_root = library_root / "skills" / name
+        skill_root.mkdir(parents=True)
+        skill_file = skill_root / "SKILL.md"
+        skill_file.write_text(f"---\nname: {name}\ndescription: Test skill.\n---\n\n# Test Skill\n")
+        return skill_file
 
     def write_skill(self, plugin_root: Path, name: str) -> Path:
         skill_root = plugin_root / "skills" / name

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from .runtime import AiwsRuntime
-from .skill_manager import validate_marketplace
+from .skill_manager import validate_marketplace, validate_skill_library
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,6 +42,10 @@ def build_parser() -> argparse.ArgumentParser:
     validate_release = subparsers.add_parser("validate-release")
     validate_release.add_argument("--repo-root", type=Path, default=Path.cwd())
 
+    validate_library = subparsers.add_parser("validate-skill-library")
+    validate_library.add_argument("--library-root", type=Path, default=Path.cwd())
+    validate_library.add_argument("--metadata-root", type=Path)
+
     return parser
 
 
@@ -59,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "validate-release":
         result = validate_marketplace(args.repo_root)
+    elif args.command == "validate-skill-library":
+        result = validate_skill_library(args.library_root, metadata_root=args.metadata_root)
     else:
         runtime = AiwsRuntime(root=args.root)
         if args.command == "search":

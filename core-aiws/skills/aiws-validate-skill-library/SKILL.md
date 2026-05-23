@@ -1,0 +1,137 @@
+---
+name: aiws-validate-skill-library
+description: Validate an AIWS Skill Library folder and report concrete fixes.
+---
+
+# AIWS Skill Library Validation
+
+Use this skill when a user wants to check whether a Drive Skill Library is ready for Cowork import, maintainer review, or cross-host use.
+
+Phase 1 validates a skill-first library, not a packaged plugin marketplace:
+
+```text
+<Library root>/
+  skills/
+    <skill-id>/
+      SKILL.md
+```
+
+Optional AIWS metadata may exist at the library root:
+
+```text
+aiws.library.json
+aiws.skills/
+Proposals/
+```
+
+## Validation Checklist
+
+### Required Library Shape
+
+Check:
+
+1. The library has a `skills/` directory.
+2. Each skill lives at `skills/<skill-id>/SKILL.md`.
+3. Each `<skill-id>` uses lowercase letters, digits, and hyphens.
+4. Each `SKILL.md` has YAML frontmatter.
+5. Frontmatter contains only `name` and `description`.
+6. Frontmatter `name` equals the folder name.
+7. Frontmatter `description` is nonempty.
+8. The skill body is nonempty.
+
+### Phase 1 Boundaries
+
+Fail validation if the library requires plugin runtime artifacts:
+
+```text
+.claude-plugin/plugin.json
+contracts/
+.mcp.json
+```
+
+Runtime capability artifacts like MCP servers, connectors, auth config, scripts, packaged plugins, ZIP uploads, and host tools are outside Phase 1 Skill Library mode.
+
+### Optional AIWS Metadata
+
+If `aiws.library.json` exists, check:
+
+- it is valid JSON
+- `kind` is absent or `aiws.skill_library`
+- `id` is lowercase letters, digits, and hyphens
+- `display_name`, if present, is text
+- `source.kind` is `google_drive` for Phase 1
+- for `google_drive`, `source.folder_id` is present if known
+
+If `aiws.skills/*.json` exists, check each file:
+
+- `kind` is absent or `aiws.skill`
+- `id` matches the filename stem
+- `id` references an existing `skills/<id>/SKILL.md`
+- `source_path` points to `skills/<id>/SKILL.md`
+
+### Proposal Folders
+
+If `Proposals/` exists, check:
+
+```text
+Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
+Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md
+Proposals/Rejected/<skill-id>/<proposal-id>/SKILL.md
+```
+
+For each proposal:
+
+- proposal state is exactly `Submitted`, `Approved`, or `Rejected`
+- `<skill-id>` references an existing canonical skill
+- proposal `SKILL.md` passes the same portable skill checks
+- proposal frontmatter `name` equals `<skill-id>`
+- `aiws.proposal.json` is valid JSON
+- `kind` is absent or `aiws.proposal`
+- `proposal_id` matches the folder name
+- `skill_id` matches the parent folder
+- `source_path` points to `skills/<skill-id>/SKILL.md`
+
+Fail flat legacy proposal paths such as:
+
+```text
+Proposals/<skill-id>/<proposal-id>/
+```
+
+## Output Format
+
+Report:
+
+```text
+AIWS Skill Library Validation: PASS|FAIL
+
+Library:
+- name:
+- root:
+- source kind:
+
+Skills:
+- <skill-id>: PASS|FAIL - <reason>
+
+Metadata:
+- aiws.library.json: PASS|WARN|FAIL|not present
+- aiws.skills/: PASS|WARN|FAIL|not present
+
+Proposals:
+- <proposal-id>: PASS|FAIL - <reason>
+
+Fixes:
+1. <specific fix>
+2. <specific fix>
+```
+
+Use `PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Do not fail only because optional metadata is absent.
+
+## Developer Check
+
+If the AIWS Python validator is available, it may be used as a secondary deterministic check:
+
+```bash
+PYTHONPATH=aiws-mcp python3 -m aiws_mcp validate-skill-library --library-root <library-root>
+```
+
+Treat the Python command as CI/developer support. The user-facing validation surface is this skill.

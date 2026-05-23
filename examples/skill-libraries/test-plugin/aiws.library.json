@@ -1,0 +1,9 @@
+{
+  "display_name": "Test Plugin",
+  "id": "test-plugin",
+  "kind": "aiws.skill_library",
+  "source": {
+    "folder_id": "1BiEjSTKeD0hyUyHWdLhvP0cp3RX3uo7L",
+    "kind": "google_drive"
+  }
+}
