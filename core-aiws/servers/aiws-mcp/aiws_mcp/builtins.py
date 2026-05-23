@@ -156,6 +156,8 @@ Use this skill after a maintainer has reviewed a submitted Drive Skill Library p
 
 This skill verifies the maintainer-applied update and guides Cowork refresh/reinstall. It is not a review workflow and does not approve proposals.
 
+Treat short human prompts as sufficient. `update Test Plugin skill library`, `refresh Test Plugin`, and `update meeting-followup in Test Plugin skill library` mean verify/refresh the library by default. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If a proposal folder is present and canonical already matches it, report that canonical is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall.
+
 ## Boundaries
 
 Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer explicitly asks for apply mode. If apply mode is explicitly requested, it is allowed only from `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` and must refuse `Proposals/Submitted/`, `Proposals/Rejected/`, and flat legacy `Proposals/<skill-id>/<proposal-id>/` paths.
@@ -166,9 +168,10 @@ Do not judge content quality, approve proposals, resolve disagreements, apply ru
 
 1. Confirm canonical `skills/<skill-id>/SKILL.md` exists.
 2. If a Submitted proposal path is provided, compare canonical `SKILL.md` against `Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md` and report whether the accepted changes appear in canonical.
-3. Use `aiws-validate-skill-library` to validate the library and proposal structure.
-4. Refresh or guide Cowork reimport of the Drive skill library.
-5. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
+3. If an Approved proposal path is present, compare canonical `SKILL.md` against `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` and report whether canonical is already in sync.
+4. Use `aiws-validate-skill-library` to validate the library and proposal structure.
+5. Refresh or guide Cowork reimport of the Drive skill library.
+6. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
 
 If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
 

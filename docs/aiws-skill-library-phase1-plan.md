@@ -51,6 +51,7 @@ Test Plugin/
 - Keep the install helper out of AIWS marketplace tooling. It must not register the Drive folder as a marketplace, call `aiws.marketplaces.drive_workflow`, call `export_cowork_bridge`, or report that a `test-plugin` marketplace is empty. A flat `skills/<skill-id>/SKILL.md` folder is enough for the Phase 1 install path.
 - Add `aiws-propose-skill-update` as the Phase 1 contributor skill for preparing `Proposals/Submitted/<skill-id>/<proposal-id>/` folders and `aiws.proposal.json` metadata.
 - Add `aiws-update-skill-library` as the Phase 1 maintainer verification and refresh skill after the maintainer applies accepted changes to canonical `skills/<skill-id>/SKILL.md`.
+- Make user prompts human-style. `update Test Plugin skill library`, `refresh Test Plugin`, and `update meeting-followup in Test Plugin skill library` mean verify/refresh the library by default. The assistant should ask what to change only when the user explicitly asks to edit, rewrite, propose, create, or change skill content.
 - Treat `Proposals/Approved/` and `Proposals/Rejected/` as optional archive/status folders. They are useful for recordkeeping, but they are not mandatory workflow gates.
 - Use local Markdown diff for maintainer review. The recommended path is VS Code/VSCodium `code --diff skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`; Meld is the non-IDE alternative. Google Docs compare is not part of Phase 1.
 - Runtime capability artifacts like MCP servers, connectors, auth config, and host tools are out of phase 1.
@@ -96,14 +97,14 @@ Stable AIWS identity should come from the Drive folder ID or explicit AIWS metad
 
 ## Test Plan
 
-- Cowork import test: use `aiws-install-drive-skill-library`; Cowork should generate one preflighted **Save plugin** artifact/card for the Drive root and install it as a plugin/container, not only as loose skills. A `Plugin validation failed` result must include the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and exact Cowork error text if available.
+- Cowork import test prompt: `Install Test Plugin from this Drive folder: <folder-url>`. Cowork should generate one preflighted **Save plugin** artifact/card for the Drive root and install it as a plugin/container, not only as loose skills. A `Plugin validation failed` result must include the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and exact Cowork error text if available.
 - Metadata tolerance test: verify whether Cowork ignores root-level `aiws.library.json`, `aiws.skills/`, and `Proposals/`.
-- Validation test: use `aiws-validate-skill-library` to check the Drive root and report PASS/FAIL with concrete fixes.
-- Proposal test: use `aiws-propose-skill-update` to save/export edited `SKILL.md` into `Proposals/Submitted/<skill-id>/<proposal-id>/` with `aiws.proposal.json`.
+- Validation test prompt: `Check Test Plugin skill library`.
+- Proposal test prompt: `Propose this meeting-followup change for Test Plugin: <plain-language change>`.
 - Review test: maintainer opens local/synced copies of canonical and proposed `SKILL.md` in VS Code/VSCodium or Meld and confirms the diff is understandable.
 - Canonical update test: maintainer applies accepted changes directly to `skills/<skill-id>/SKILL.md`.
 - Optional archive test: maintainer may move or copy the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` in Google Drive UI for recordkeeping.
-- Update test: use `aiws-update-skill-library` to verify the canonical update, validate the library, and verify Cowork refresh/import sees the update.
+- Update test prompt: `Update Test Plugin skill library` or `Update meeting-followup in Test Plugin skill library`. This should verify the canonical update, validate the library, and verify Cowork refresh/import sees the update without asking what content change to make.
 - Compatibility test: Cowork, Claude Code, and Codex consume plain skill folders.
 - Boundary test: existing plugin-backed flows still require manifests/contracts and are not treated as Skill Library mode.
 
