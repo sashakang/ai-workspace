@@ -152,6 +152,8 @@ description: Verify and refresh a Drive Skill Library after maintainer-applied c
 
 # AIWS Skill Library Update
 
+Compatibility alias for `aiws-refresh-skill-library`. Prefer the user-facing verb "refresh" for this lifecycle.
+
 Use this skill after a maintainer has reviewed a submitted Drive Skill Library proposal and directly applied the accepted changes to canonical `skills/<skill-id>/SKILL.md`.
 
 This skill verifies the maintainer-applied update and guides Cowork refresh/reinstall. It is not a review workflow and does not approve proposals.
@@ -178,6 +180,35 @@ If direct Drive write access is unavailable, provide exact manual copy/replace i
 ## Output
 
 Report `AIWS Skill Library Update: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skill, submitted proposal path if provided, canonical verification status, library validation status, Cowork refresh/import status, and skill invocation status.
+"""
+
+
+AIWS_REFRESH_SKILL_LIBRARY_SKILL = """---
+name: aiws-refresh-skill-library
+description: Refresh a Cowork-installed Drive Skill Library after Drive changed.
+---
+
+# AIWS Skill Library Refresh
+
+Use this skill when a user wants Cowork to pick up changes that are already in a Google Drive Skill Library.
+
+Short human prompts are enough: `refresh Test Plugin`, `sync Test Plugin from Drive`, and `refresh meeting-followup in Test Plugin`.
+
+These prompts mean: the Drive library is the source of truth, and Cowork should verify the Drive files, rebuild or reinstall the plugin artifact if needed, and confirm the installed skill behavior. Do not interpret these prompts as a request to edit or improve the skill content.
+
+If the user says `update Test Plugin skill library`, treat it as refresh/sync unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content.
+
+Do not judge content quality, approve proposals, or resolve disagreements. Maintainer review happens before refresh, normally by comparing local Markdown copies of canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld.
+
+Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer explicitly asks for apply mode. The normal path is verification after the maintainer has already edited the canonical file.
+
+If an Approved proposal is present and canonical already matches it, report that canonical is already in sync and continue. `Proposals/Approved/` and `Proposals/Rejected/` are optional archive/status folders, not mandatory gates.
+
+Do not call AIWS marketplace tools, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations.
+
+Workflow: identify the Drive Skill Library, verify named skill or all skills in `skills/`, confirm canonical `SKILL.md` exists and validates, compare Submitted or Approved proposals only as evidence when present, use `aiws-validate-skill-library`, rebuild or guide reinstall of the Cowork plugin artifact from the Drive library, and verify installed plugin/container and skill invocation show refreshed content.
+
+Report `AIWS Skill Library Refresh: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skills, canonical verification, proposal sync evidence, library validation, Cowork refresh/reinstall, and skill invocation.
 """
 
 
@@ -236,6 +267,7 @@ BUILTIN_SKILLS = {
     "aiws-improve": AIWS_IMPROVE_SKILL,
     "aiws-install-drive-skill-library": AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL,
     "aiws-propose-skill-update": AIWS_PROPOSE_SKILL_UPDATE_SKILL,
+    "aiws-refresh-skill-library": AIWS_REFRESH_SKILL_LIBRARY_SKILL,
     "aiws-update-skill-library": AIWS_UPDATE_SKILL_LIBRARY_SKILL,
     "aiws-validate-skill-library": AIWS_VALIDATE_SKILL_LIBRARY_SKILL,
 }
@@ -246,6 +278,7 @@ RESOURCES = {
     "aiws://skills/aiws-improve": AIWS_IMPROVE_SKILL,
     "aiws://skills/aiws-install-drive-skill-library": AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL,
     "aiws://skills/aiws-propose-skill-update": AIWS_PROPOSE_SKILL_UPDATE_SKILL,
+    "aiws://skills/aiws-refresh-skill-library": AIWS_REFRESH_SKILL_LIBRARY_SKILL,
     "aiws://skills/aiws-update-skill-library": AIWS_UPDATE_SKILL_LIBRARY_SKILL,
     "aiws://skills/aiws-validate-skill-library": AIWS_VALIDATE_SKILL_LIBRARY_SKILL,
 }

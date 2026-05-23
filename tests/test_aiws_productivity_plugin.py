@@ -43,6 +43,7 @@ class AiwsProductivityPluginTests(unittest.TestCase):
         self.assertIn("aiws-improve", core_contract["public_skills"])
         self.assertIn("aiws-install-drive-skill-library", core_contract["public_skills"])
         self.assertIn("aiws-propose-skill-update", core_contract["public_skills"])
+        self.assertIn("aiws-refresh-skill-library", core_contract["public_skills"])
         self.assertIn("aiws-update-skill-library", core_contract["public_skills"])
         self.assertIn("aiws-validate-skill-library", core_contract["public_skills"])
 

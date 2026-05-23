@@ -1,10 +1,11 @@
 {
   "plugin_id": "core-aiws",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "public_skills": [
     "aiws-improve",
     "aiws-install-drive-skill-library",
     "aiws-propose-skill-update",
+    "aiws-refresh-skill-library",
     "aiws-update-skill-library",
     "aiws-validate-skill-library"
   ],

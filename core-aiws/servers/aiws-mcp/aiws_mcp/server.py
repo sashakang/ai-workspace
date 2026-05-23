@@ -568,6 +568,10 @@ def create_server(root: Path | None = None):
     def propose_skill_update_resource() -> str:
         return runtime.get_resource("aiws://skills/aiws-propose-skill-update")
 
+    @server.resource("aiws://skills/aiws-refresh-skill-library")
+    def refresh_skill_library_resource() -> str:
+        return runtime.get_resource("aiws://skills/aiws-refresh-skill-library")
+
     @server.resource("aiws://skills/aiws-update-skill-library")
     def update_skill_library_resource() -> str:
         return runtime.get_resource("aiws://skills/aiws-update-skill-library")
@@ -591,6 +595,10 @@ def create_server(root: Path | None = None):
     @server.prompt(name="aiws.propose_skill_update")
     def propose_skill_update_prompt() -> str:
         return runtime.get_resource("aiws://skills/aiws-propose-skill-update")
+
+    @server.prompt(name="aiws.refresh_skill_library")
+    def refresh_skill_library_prompt() -> str:
+        return runtime.get_resource("aiws://skills/aiws-refresh-skill-library")
 
     @server.prompt(name="aiws.update_skill_library")
     def update_skill_library_prompt() -> str:

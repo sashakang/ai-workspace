@@ -5,6 +5,8 @@ description: Verify and refresh a Drive Skill Library after maintainer-applied c
 
 # AIWS Skill Library Update
 
+Compatibility alias for `aiws-refresh-skill-library`. Prefer the user-facing verb "refresh" for this lifecycle.
+
 Use this skill after a maintainer has reviewed a submitted Drive Skill Library proposal and directly applied the accepted changes to canonical:
 
 ```text
