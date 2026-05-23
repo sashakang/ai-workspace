@@ -1,6 +1,6 @@
 {
   "plugin_id": "core-aiws",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "public_skills": [
     "aiws-improve",
     "aiws-install-drive-skill-library",

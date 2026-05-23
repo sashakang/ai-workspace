@@ -45,13 +45,14 @@ Test Plugin/
 - Keep AIWS metadata outside runtime skill folders.
 - Test whether Cowork tolerates root-level AIWS metadata/proposal folders. If not, store metadata out-of-band.
 - Add `aiws-validate-skill-library` as the Phase 1 AIWS skill for user-facing library validation. Python validation remains a developer/CI check, not the primary product surface.
-- Add `aiws-install-drive-skill-library` as the Phase 1 install helper. In Cowork, it reads the Drive folder, packages `skills/<skill-id>/SKILL.md` into one plugin artifact, and presents a **Save plugin** card. Its fallback/manual wording is exactly `Install this Google Drive folder as a plugin: <drive-folder-url>`.
+- Add `aiws-install-drive-skill-library` as the Phase 1 install helper. In Cowork, it reads the Drive folder, packages `skills/<skill-id>/SKILL.md` into one plugin artifact, and presents a **Save plugin** card. The generated artifact uses Cowork's flat package layout: `.claude-plugin/plugin.json`, `contracts/<plugin-id>.contract.json`, and `skills/<skill-id>/SKILL.md` at archive root. Its fallback/manual wording is exactly `Install this Google Drive folder as a plugin: <drive-folder-url>`.
 - Keep the install helper out of AIWS marketplace tooling. It must not register the Drive folder as a marketplace, call `aiws.marketplaces.drive_workflow`, call `export_cowork_bridge`, or report that a `test-plugin` marketplace is empty. A flat `skills/<skill-id>/SKILL.md` folder is enough for the Phase 1 install path.
 - Add `aiws-propose-skill-update` as the Phase 1 contributor skill for preparing `Proposals/Submitted/<skill-id>/<proposal-id>/` folders and `aiws.proposal.json` metadata.
 - Add `aiws-update-skill-library` as the Phase 1 maintainer skill for applying only approved proposals from `Proposals/Approved/<skill-id>/<proposal-id>/`.
 - Treat Drive folder movement as the approval signal. Chat statements and proposal metadata do not approve a proposal.
 - Runtime capability artifacts like MCP servers, connectors, auth config, and host tools are out of phase 1.
 - Existing plugin-backed AIWS flows remain unchanged and still require plugin manifests, contracts, draft records, and proposal state.
+- The Drive source folder remains skill-first and does not contain plugin manifests or contracts. Any plugin manifest or contract exists only in the generated Cowork install artifact.
 
 ## Metadata Convention
 

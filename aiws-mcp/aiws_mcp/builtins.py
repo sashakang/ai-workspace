@@ -64,6 +64,16 @@ Use the Google Drive integration to read the folder URL, then package the librar
 - skills: every `skills/<skill-id>/SKILL.md`
 - ignored as runtime skills: `Proposals/`, `aiws.library.json`, `aiws.skills/`, and any proposal metadata
 
+The plugin artifact must be a zip-compatible Cowork plugin package with files at the archive root:
+
+```text
+.claude-plugin/plugin.json
+contracts/<plugin-id>.contract.json
+skills/<skill-id>/SKILL.md
+```
+
+For `Test Plugin`, use `plugin-id` `test-plugin`. The manifest must include `name`, `description`, `version`, and `author.name`. The contract must include `plugin_id`, `version`, and `public_skills` listing exactly the packaged skill folder ids. Do not put files under an extra top-level wrapper folder inside the archive.
+
 Do not register the Drive folder as a marketplace. Do not search AIWS marketplaces for it. Do not use missing marketplace search results as evidence that the Drive folder cannot be packaged.
 
 Present exactly one **Save plugin** card. If the host first produces individual **Save skill** cards, say that is not the requested result and repackage the same Drive contents as a plugin.
