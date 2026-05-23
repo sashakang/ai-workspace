@@ -166,6 +166,8 @@ Cowork native visibility failed:
 - `mcp__plugins__suggest_plugin_install` can suggest installs only from search results
 - none of the native Cowork plugin tools accepts `repository`, `branch`, `path`, `source`, `ref`, or custom marketplace registration parameters
 - `aiws-cowork-drive-bridge`, `productivity@0.2.4`, and `meeting-followup` are not visible through the native Cowork plugin tools
+- registering `sashakang/ai-workspace@master:generated/cowork-drive-bridge` through AIWS succeeds as an AIWS registry operation but does not make the bridge visible through Cowork native plugin tools
+- Cowork native search currently returns the official `productivity@knowledge-work-plugins`, which is a separate plugin with different skills and must not be confused with the bridge-exported `productivity@aiws-cowork-drive-bridge`
 
 Therefore Slice 2 is complete for AIWS publication but blocked for first-class Cowork proof. The next work item is a Cowork-side native marketplace source/sync capability, specified in `docs/cowork-native-custom-marketplace-source-request-2026-05-23.md`.
 

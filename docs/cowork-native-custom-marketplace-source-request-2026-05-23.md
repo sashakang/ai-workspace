@@ -58,6 +58,13 @@ Native visibility test result:
 - plugin `productivity` version `0.2.4`: not visible
 - skill `meeting-followup`: not visible
 
+Additional AIWS registry test result:
+
+- registering an AIWS marketplace with `backend_kind=github` and `backend_ref=sashakang/ai-workspace@master:generated/cowork-drive-bridge` succeeds
+- the registered AIWS marketplace does not surface bridge plugins through the tested workflow
+- this does not satisfy the Cowork-native requirement because it is an AIWS registry operation, not a Cowork native plugin marketplace source
+- the native Cowork plugin search still returns the official `productivity@knowledge-work-plugins` plugin, not the bridge-exported `productivity` plugin
+
 ## Required Cowork Capability
 
 Cowork should expose a native marketplace source operation that can register or browse a custom marketplace source.
@@ -92,6 +99,8 @@ Any of these would unblock the flow:
 - equivalent native UI flow that is observable from tools
 
 The operation must be Cowork-native. AIWS-only marketplace registration does not satisfy this requirement because first-class plugin status requires Cowork Directory/catalog visibility and Cowork-owned install/update.
+
+The operation must also disambiguate plugins by marketplace source. Cowork already has an official `productivity` plugin in `knowledge-work-plugins`; a bridge-exported `productivity` plugin from `aiws-cowork-drive-bridge` must remain visibly distinct until Cowork's install/update policy decides whether names can collide, shadow, or require explicit marketplace qualification.
 
 ## Acceptance Test
 
