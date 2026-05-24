@@ -79,20 +79,40 @@ Expected:
 
 - First action is reading Drive `skills/<skill-id>/SKILL.md`.
 - Cowork validates the Drive library.
-- Cowork rebuilds the whole `Test Plugin` plugin artifact from the Drive root.
 - Plugin id remains `test-plugin`.
+- If installed content already matches Drive canonical content, Cowork reports that no rebuild is required.
+- If installed content differs from Drive canonical content, Cowork rebuilds the whole `Test Plugin` plugin artifact from the Drive root.
 - It does not create draft packages.
 - It does not create `test-plugin--meeting-followup`.
+- It does not create or report `aiws-generated-plugin` as the refreshed plugin identity.
 - It does not use AIWS marketplace/materialize/export tools.
+- It does not report marketplace state, empty marketplace state, or materialized skill state in the normal user-visible path.
 - It does not require a `plugins/` folder.
-- It presents **Save plugin** if user confirmation is needed.
+- It presents **Save plugin** only if user confirmation is needed.
 
-Pass after Save:
+Pass:
 
 - Refresh report is `AIWS Skill Library Refresh: PASS`.
 - `test-plugin:meeting-followup` is visible and invocable.
 - `test-plugin:morning-briefing` is visible and invocable.
 - `meeting-followup` reflects the canonical Drive marker line.
+- If the refresh did not invoke a skill, invocation status may be reported as not verified or optional, but not as a refresh failure.
+
+Live invocation check:
+
+User prompt:
+
+Use meeting-followup
+
+Expected:
+
+- Cowork routes to the `meeting-followup` skill.
+- If Cowork asks for meeting details, provide minimal notes and continue.
+- The first output line is the canonical Drive marker:
+
+```text
+> meeting-followup update
+```
 
 ## Test 5: Check
 
