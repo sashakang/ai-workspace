@@ -17,6 +17,17 @@ Check meeting-followup in Test Plugin
 
 These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
 
+For `Check Test Plugin`, the Drive folder is the source of truth. Start with the Drive library root and read:
+
+```text
+skills/<skill-id>/SKILL.md
+Proposals/Submitted/
+Proposals/Approved/
+Proposals/Rejected/
+```
+
+Do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
+
 Phase 1 validates a skill-first library, not a packaged plugin marketplace:
 
 ```text
@@ -64,6 +75,8 @@ Runtime capability artifacts like MCP servers, connectors, auth config, scripts,
 ### Read-Only Boundaries
 
 This skill is read-only. Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for **Save plugin**, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
+
+First action must be reading the Drive Skill Library source, not the installed plugin copy. Installed plugin inspection may happen only after Drive canonical skills and proposal folders have been checked.
 
 Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library check path.
 
@@ -153,6 +166,8 @@ Installed Cowork plugin:
 ```
 
 Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
+
+If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 
 ## Developer Check
 

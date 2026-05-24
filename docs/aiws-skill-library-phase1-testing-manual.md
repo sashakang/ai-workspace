@@ -125,9 +125,13 @@ Check Test Plugin
 
 Expected:
 
+- First action is reading the Drive `Test Plugin` library source, not the installed plugin copy.
+- It checks `skills/meeting-followup/SKILL.md` and `skills/morning-briefing/SKILL.md`.
+- It checks `Proposals/Submitted/`, `Proposals/Approved/`, and `Proposals/Rejected/`.
 - Cowork reports that `Test Plugin` is installed.
 - Both skills are visible.
 - Proposal folders are not installed as runnable skills.
 - It validates the Drive library and proposal folders without changing anything.
+- It reports installed plugin status only as secondary evidence after Drive validation.
 - It does not mention AIWS marketplace, materialize, export, drafts, host install, bridge, or package rebuilds.
 - It does not ask for **Save plugin** unless the user asked to refresh or install.

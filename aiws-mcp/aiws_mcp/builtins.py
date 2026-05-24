@@ -245,6 +245,8 @@ Short human prompts are enough: `Check Test Plugin`, `Validate Test Plugin`, and
 
 These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
 
+For `Check Test Plugin`, the Drive folder is the source of truth. Start with the Drive library root and read `skills/<skill-id>/SKILL.md`, `Proposals/Submitted/`, `Proposals/Approved/`, and `Proposals/Rejected/`. Do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
+
 Validate a skill-first library shaped as:
 
 ```text
@@ -271,6 +273,8 @@ Fail validation if the library requires plugin runtime artifacts such as `.claud
 
 This skill is read-only. Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for Save plugin, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
 
+First action must be reading the Drive Skill Library source, not the installed plugin copy. Installed plugin inspection may happen only after Drive canonical skills and proposal folders have been checked.
+
 Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library check path.
 
 Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `test-plugin` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to checking a Drive Skill Library.
@@ -284,6 +288,8 @@ Reject flat legacy proposal paths such as `Proposals/<skill-id>/<proposal-id>/`.
 Report `AIWS Skill Library Validation: PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Include concrete fixes for every failure.
 
 When installed plugin status is available, include it as a separate `Installed Cowork plugin` section. Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
+
+If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 
 If the Python validator is available, it may be used as a secondary deterministic check:
 
