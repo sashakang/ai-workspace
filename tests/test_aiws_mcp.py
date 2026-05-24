@@ -1504,6 +1504,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("create or open drafts", refresh)
         self.assertIn("First action must be reading the Google Drive folder contents", refresh)
         self.assertIn("materialize, resolve, export, draft, or activation tools", refresh)
+        self.assertIn("Do not inspect or report AIWS marketplace/materialized state", refresh)
+        self.assertIn("Do not use marketplace or materialization results as evidence", refresh)
         self.assertIn("test-plugin--meeting-followup", refresh)
         self.assertIn("missing `plugins/` folder", refresh)
         self.assertIn("whole Cowork plugin artifact", refresh)

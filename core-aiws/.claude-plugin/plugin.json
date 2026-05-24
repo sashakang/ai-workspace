@@ -1,7 +1,7 @@
 {
   "name": "core-aiws",
   "description": "REQUIRED: Shared process plugin for the AI workspace.",
-  "version": "0.4.11",
+  "version": "0.4.12",
   "author": {
     "name": "Sasha Kang"
   }
