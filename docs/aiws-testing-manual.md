@@ -984,6 +984,8 @@ result: cowork_install_confirmation_unavailable
 
 Source: [AIWS Cowork Phase 2B Runtime Plan](./aiws-cowork-phase2b-runtime-plan.md#slice-2b8a-cowork-package-intake-probe).
 
+Latest live result, 2026-05-24: [Cowork Package Intake Probe: No Automatic Intake Observed](./cowork-package-intake-probe-no-automatic-intake-2026-05-24.md).
+
 ## Scenario 14: Hosted / Uploaded MCP Smoke Experiments
 
 Purpose: preserve evidence about Cowork MCP runtime shapes. These are diagnostic experiments, not the normal user path.

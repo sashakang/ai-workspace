@@ -93,6 +93,8 @@ Acceptance: Activation preserves one logical visible skill identity. It does not
 
 Evidence: Tests should extend the current CW-08/CW-09/CW-10 coverage. They must prove no manual ZIP handling is required in the handoff path, duplicate visible skill identity is avoided or reported as a fail-closed conflict, activation state is correctly reported as `active`, `pending_upload`, `handoff_prepared`, `handoff_required`, or `host_capability_missing`, and deactivation does not remove Cowork-owned installed packages. Add a new scenario to `docs/aiws-testing-manual.md` when the implementation exists.
 
+Update, 2026-05-24: a disposable package intake probe showed that Cowork did not automatically consume a ZIP copied into the writable `package_uploads` surface in a fresh Cowork session. AIWS `handoff_prepared` still passed as a non-terminal package-copy state, but automatic Cowork intake was not observed. Future normal-user activation work should not depend on Cowork watching `~/.cowork/packages` unless newer runtime evidence proves that behavior changed.
+
 Likely files, modules, and contracts to inspect: `docs/aiws-testing-manual.md`, `docs/cowork-modified-draft-upload-report-2026-05-15.md`, `docs/cowork-pending-upload-deactivation-report-2026-05-15.md`, `aiws-mcp/aiws_mcp/runtime.py`, `aiws-mcp/aiws_mcp/skill_manager.py`, `scripts/cowork_package_intake_probe.py`, `tests/test_aiws_mcp.py`, and `tests/test_cowork_package_intake_probe.py`.
 
 ## Slice 3C: Check Installed Skill Copies Before Activation UX
