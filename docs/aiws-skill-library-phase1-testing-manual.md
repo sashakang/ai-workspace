@@ -52,10 +52,13 @@ Propose this meeting-followup change for Test Plugin: change the marker line to 
 
 Expected:
 
+- First action is reading Drive `skills/meeting-followup/SKILL.md`.
 - Proposal is written under `Proposals/Submitted/meeting-followup/<proposal-id>/`.
 - Proposal contains `SKILL.md` and `aiws.proposal.json`.
 - Canonical `skills/meeting-followup/SKILL.md` is not changed.
 - Output includes a local diff command for VS Code/VSCodium or Meld.
+- It does not mention AIWS marketplace, materialize, export, drafts, host install, bridge, or package rebuilds.
+- It asks for missing information only when the proposal cannot be written safely.
 
 ## Test 3: Review
 

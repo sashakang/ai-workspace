@@ -22,6 +22,30 @@ Use this skill when a user wants to propose an update to a skill stored in an AI
 
 The goal is to place a proposed replacement `SKILL.md` in the library's proposal area without changing the canonical skill file.
 
+Short human prompts are enough:
+
+```text
+propose a meeting-followup update for Test Plugin
+propose this meeting-followup change for Test Plugin: change the marker line to > meeting-followup update
+submit a morning-briefing proposal for Test Plugin
+```
+
+These prompts mean: find the Drive Skill Library, read the canonical skill, collect or infer the proposed change, and write a proposal under `Proposals/Submitted/`. Do not interpret them as a request to edit canonical `skills/<skill-id>/SKILL.md`.
+
+## Boundaries
+
+First action should be locating and reading the Drive Skill Library contents directly:
+
+```text
+<Drive root>/skills/<skill-id>/SKILL.md
+```
+
+Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library proposal path.
+
+Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `test-plugin` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to proposal submission.
+
+Do not create drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, create plugin manifests, upload ZIPs, rebuild Cowork packages, or change marketplace registrations.
+
 ## Inputs
 
 Collect or infer:
@@ -35,6 +59,8 @@ Collect or infer:
 - short reason for the change
 
 If a value is missing but not required to write the proposal, use `unspecified` in metadata rather than blocking.
+
+Ask for missing information only when the proposal cannot be written safely. Prefer one concise question over a multi-step form.
 
 ## Validate First
 
