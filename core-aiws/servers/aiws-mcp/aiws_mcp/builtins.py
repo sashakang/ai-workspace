@@ -247,6 +247,8 @@ These prompts mean: inspect the Drive Skill Library, validate canonical skill fi
 
 For `Check Test Plugin`, the Drive folder is the source of truth. Start with the Drive library root and read `skills/<skill-id>/SKILL.md`, `Proposals/Submitted/`, `Proposals/Approved/`, and `Proposals/Rejected/`. Do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
 
+For `Check Test Plugin`, after Drive validation completes, attempt to report installed Cowork plugin visibility when the host exposes it. This is secondary evidence, not the source of truth. If installed status cannot be checked, report `not verified`; do not omit the section.
+
 Validate a skill-first library shaped as:
 
 ```text
@@ -288,6 +290,8 @@ Reject flat legacy proposal paths such as `Proposals/<skill-id>/<proposal-id>/`.
 Report `AIWS Skill Library Validation: PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Include concrete fixes for every failure.
 
 When installed plugin status is available, include it as a separate `Installed Cowork plugin` section. Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
+
+For `Check Test Plugin`, always include the `Installed Cowork plugin` section after Drive validation. Use `not verified` when the host cannot expose installed plugin status.
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 

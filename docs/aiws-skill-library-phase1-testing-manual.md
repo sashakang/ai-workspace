@@ -133,5 +133,6 @@ Expected:
 - Proposal folders are not installed as runnable skills.
 - It validates the Drive library and proposal folders without changing anything.
 - It reports installed plugin status only as secondary evidence after Drive validation.
+- It includes an installed plugin section; if Cowork visibility cannot be checked, that section says `not verified`.
 - It does not mention AIWS marketplace, materialize, export, drafts, host install, bridge, or package rebuilds.
 - It does not ask for **Save plugin** unless the user asked to refresh or install.

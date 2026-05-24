@@ -1531,6 +1531,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("Do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy", validation)
         self.assertIn("First action must be reading the Drive Skill Library source", validation)
         self.assertIn("Do not replace Drive validation with installed-plugin-only validation", validation)
+        self.assertIn("after Drive validation completes", validation)
+        self.assertIn("always include the `Installed Cowork plugin` section", validation)
         self.assertIn("This skill is read-only", validation)
         self.assertIn("Do not start by calling AIWS marketplace workflow", validation)
         self.assertIn("Do not inspect or report AIWS marketplace/materialized state", validation)

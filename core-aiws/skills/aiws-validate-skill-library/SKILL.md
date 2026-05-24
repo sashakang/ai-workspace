@@ -28,6 +28,8 @@ Proposals/Rejected/
 
 Do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
 
+For `Check Test Plugin`, after Drive validation completes, attempt to report installed Cowork plugin visibility when the host exposes it. This is secondary evidence, not the source of truth. If installed status cannot be checked, report `not verified`; do not omit the section.
+
 Phase 1 validates a skill-first library, not a packaged plugin marketplace:
 
 ```text
@@ -166,6 +168,8 @@ Installed Cowork plugin:
 ```
 
 Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
+
+For `Check Test Plugin`, always include this section after Drive validation. Use `not verified` when the host cannot expose installed plugin status.
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 
