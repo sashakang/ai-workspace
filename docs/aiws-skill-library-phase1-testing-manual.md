@@ -128,3 +128,6 @@ Expected:
 - Cowork reports that `Test Plugin` is installed.
 - Both skills are visible.
 - Proposal folders are not installed as runnable skills.
+- It validates the Drive library and proposal folders without changing anything.
+- It does not mention AIWS marketplace, materialize, export, drafts, host install, bridge, or package rebuilds.
+- It does not ask for **Save plugin** unless the user asked to refresh or install.

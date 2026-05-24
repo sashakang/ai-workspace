@@ -1525,7 +1525,12 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md", update)
         self.assertIn("comparing local Markdown copies", update)
         self.assertIn("Skill Library Validation", validation)
+        self.assertIn("Check Test Plugin", validation)
         self.assertIn("validate-skill-library", validation)
+        self.assertIn("This skill is read-only", validation)
+        self.assertIn("Do not start by calling AIWS marketplace workflow", validation)
+        self.assertIn("Do not inspect or report AIWS marketplace/materialized state", validation)
+        self.assertIn("Installed Cowork plugin", validation)
         self.assertNotIn("CLAUDE_PLUGIN_DATA", improve)
         self.assertNotIn("registry/plugins", improve)
 

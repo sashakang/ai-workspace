@@ -7,6 +7,16 @@ description: Validate an AIWS Skill Library folder and report concrete fixes.
 
 Use this skill when a user wants to check whether a Drive Skill Library is ready for Cowork import, maintainer review, or cross-host use.
 
+Short human prompts are enough:
+
+```text
+Check Test Plugin
+Validate Test Plugin
+Check meeting-followup in Test Plugin
+```
+
+These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
+
 Phase 1 validates a skill-first library, not a packaged plugin marketplace:
 
 ```text
@@ -50,6 +60,14 @@ contracts/
 ```
 
 Runtime capability artifacts like MCP servers, connectors, auth config, scripts, packaged plugins, ZIP uploads, and host tools are outside Phase 1 Skill Library mode.
+
+### Read-Only Boundaries
+
+This skill is read-only. Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for **Save plugin**, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
+
+Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library check path.
+
+Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `test-plugin` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to checking a Drive Skill Library.
 
 ### Optional AIWS Metadata
 
@@ -125,6 +143,16 @@ Fixes:
 ```
 
 Use `PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Do not fail only because optional metadata is absent.
+
+When installed plugin status is available, include it as a separate section:
+
+```text
+Installed Cowork plugin:
+- test-plugin: present|not verified|missing
+- skills visible: PASS|FAIL|not verified
+```
+
+Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
 
 ## Developer Check
 

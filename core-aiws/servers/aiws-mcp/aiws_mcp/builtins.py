@@ -241,6 +241,10 @@ description: Validate an AIWS Skill Library folder and report concrete fixes.
 
 Use this skill when a user wants to check whether a Drive Skill Library is ready for Cowork import, maintainer review, or cross-host use.
 
+Short human prompts are enough: `Check Test Plugin`, `Validate Test Plugin`, and `Check meeting-followup in Test Plugin`.
+
+These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
+
 Validate a skill-first library shaped as:
 
 ```text
@@ -265,6 +269,12 @@ Optional AIWS metadata may exist at the library root: `aiws.library.json`, `aiws
 
 Fail validation if the library requires plugin runtime artifacts such as `.claude-plugin/plugin.json`, `contracts/`, or `.mcp.json`.
 
+This skill is read-only. Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for Save plugin, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
+
+Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library check path.
+
+Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `test-plugin` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to checking a Drive Skill Library.
+
 If proposals exist, validate `Proposals/Submitted/<skill-id>/<proposal-id>/`, `Proposals/Approved/<skill-id>/<proposal-id>/`, and `Proposals/Rejected/<skill-id>/<proposal-id>/`. Confirm each proposal includes `SKILL.md` and `aiws.proposal.json` and points back to `skills/<skill-id>/SKILL.md`.
 
 Reject flat legacy proposal paths such as `Proposals/<skill-id>/<proposal-id>/`.
@@ -272,6 +282,8 @@ Reject flat legacy proposal paths such as `Proposals/<skill-id>/<proposal-id>/`.
 ## Output
 
 Report `AIWS Skill Library Validation: PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Include concrete fixes for every failure.
+
+When installed plugin status is available, include it as a separate `Installed Cowork plugin` section. Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
 
 If the Python validator is available, it may be used as a secondary deterministic check:
 
