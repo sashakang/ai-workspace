@@ -98,6 +98,8 @@ Stable AIWS identity should come from the Drive folder ID or explicit AIWS metad
 
 ## Test Plan
 
+Detailed test manual: [AIWS Skill Library Phase 1 Testing Manual](./aiws-skill-library-phase1-testing-manual.md).
+
 - Cowork import test prompt: `Install Test Plugin from this Drive folder: <folder-url>`. Cowork should generate one preflighted **Save plugin** artifact/card for the Drive root and install it as a plugin/container, not only as loose skills. A `Plugin validation failed` result must include the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and exact Cowork error text if available.
 - Metadata tolerance test: verify whether Cowork ignores root-level `aiws.library.json`, `aiws.skills/`, and `Proposals/`.
 - Validation test prompt: `Check Test Plugin skill library`.
@@ -106,7 +108,7 @@ Stable AIWS identity should come from the Drive folder ID or explicit AIWS metad
 - Canonical update test: maintainer applies accepted changes directly to `skills/<skill-id>/SKILL.md`.
 - Optional archive test: maintainer may move or copy the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` in Google Drive UI for recordkeeping.
 - Refresh test prompt: `Refresh Test Plugin` or `Refresh meeting-followup in Test Plugin`. This should verify the canonical update, validate the library, and verify Cowork refresh/import sees the update without asking what content change to make.
-- Refresh must rebuild the whole Cowork plugin artifact from the Drive root while preserving plugin id `test-plugin` for `Test Plugin`. It must not create drafts, activate draft packages, patch runtime plugin files, use marketplace/export tooling, require a `plugins/` folder, or create per-skill plugin ids such as `test-plugin--meeting-followup`.
+- Refresh must start by reading Drive `skills/<skill-id>/SKILL.md`, then rebuild the whole Cowork plugin artifact from the Drive root while preserving plugin id `test-plugin` for `Test Plugin`. It must not create drafts, activate draft packages, patch runtime plugin files, use marketplace/materialize/export tooling, require a `plugins/` folder, or create per-skill plugin ids such as `test-plugin--meeting-followup`.
 - Compatibility test: Cowork, Claude Code, and Codex consume plain skill folders.
 - Boundary test: existing plugin-backed flows still require manifests/contracts and are not treated as Skill Library mode.
 

@@ -21,6 +21,14 @@ If the user says `update Test Plugin skill library`, treat it as refresh/sync un
 
 ## Boundaries
 
+First action must be reading the Google Drive folder contents directly:
+
+```text
+<Drive root>/skills/<skill-id>/SKILL.md
+```
+
+Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, or activation tools. Those are not part of the Phase 1 Drive Skill Library refresh path.
+
 Do not judge content quality, approve proposals, or resolve disagreements. Maintainer review happens before refresh, normally by comparing local Markdown copies of canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld.
 
 Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer explicitly asks for apply mode. The normal path is verification after the maintainer has already edited the canonical file.

@@ -1502,6 +1502,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("Do not interpret these prompts as a request to edit", refresh)
         self.assertIn("canonical already matches", refresh)
         self.assertIn("create or open drafts", refresh)
+        self.assertIn("First action must be reading the Google Drive folder contents", refresh)
+        self.assertIn("materialize, resolve, export, draft, or activation tools", refresh)
         self.assertIn("test-plugin--meeting-followup", refresh)
         self.assertIn("missing `plugins/` folder", refresh)
         self.assertIn("whole Cowork plugin artifact", refresh)
