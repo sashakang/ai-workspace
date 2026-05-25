@@ -172,7 +172,7 @@ Use this skill after a maintainer has reviewed a submitted Drive Skill Library p
 
 This skill verifies the maintainer-applied update and guides Cowork refresh/reinstall. It is not a review workflow and does not approve proposals.
 
-Treat short human prompts as sufficient. `update Test Plugin skill library`, `refresh Test Plugin`, and `update meeting-followup in Test Plugin skill library` mean verify/refresh the library by default. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If a proposal folder is present and canonical already matches it, report that canonical is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall.
+Treat short human prompts as sufficient. `update Test Plugin skill library`, `refresh Test Plugin`, and `update meeting-followup in Test Plugin skill library` mean verify/refresh the library by default. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If a proposal folder is present and canonical already matches it, report that canonical is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall. If installed Cowork content already matches Drive canonical content, report that no rebuild is required.
 
 ## Boundaries
 
@@ -186,14 +186,14 @@ Do not judge content quality, approve proposals, resolve disagreements, apply ru
 2. If a Submitted proposal path is provided, compare canonical `SKILL.md` against `Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md` and report whether the accepted changes appear in canonical.
 3. If an Approved proposal path is present, compare canonical `SKILL.md` against `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` and report whether canonical is already in sync.
 4. Use `aiws-validate-skill-library` to validate the library and proposal structure.
-5. Refresh or guide Cowork reimport of the Drive skill library.
-6. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
+5. Refresh or guide Cowork reimport of the Drive skill library, following `aiws-refresh-skill-library` semantics: compare installed Cowork plugin content when available, report no rebuild required if installed content matches Drive, and rebuild or guide reinstall only when installed content differs or cannot be verified.
+6. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
 
 If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
 
 ## Output
 
-Report `AIWS Skill Library Update: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skill, submitted proposal path if provided, canonical verification status, library validation status, Cowork refresh/import status, and skill invocation status.
+Report `AIWS Skill Library Update: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skill, submitted proposal path if provided, canonical verification status, library validation status, Cowork refresh/import status, and skill invocation status. Do not fail a successful update/refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
 """
 
 
@@ -224,11 +224,11 @@ If an Approved proposal is present and canonical already matches it, report that
 
 Do not call AIWS marketplace tools, create or open drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations. Do not use marketplace or materialization results as evidence for or against refresh.
 
-Refresh always rebuilds the installed Cowork plugin artifact from the Drive Skill Library root. For `Test Plugin`, preserve plugin id `test-plugin` and display name `Test Plugin`. Do not generate per-skill plugin identities such as `test-plugin--meeting-followup`. Do not report that a missing `plugins/` folder blocks refresh; a flat `skills/<skill-id>/SKILL.md` Drive folder is the expected Phase 1 source shape.
+Refresh compares the Drive Skill Library root against the installed Cowork plugin when installed content is available. If installed content already matches Drive canonical content, report that no rebuild is required. Rebuild or guide reinstall of the whole Cowork plugin artifact only when installed content differs, installed visibility is missing, or installed content cannot be confirmed. For `Test Plugin`, preserve plugin id `test-plugin` and display name `Test Plugin`. Do not generate per-skill plugin identities such as `test-plugin--meeting-followup`. Do not report that a missing `plugins/` folder blocks refresh; a flat `skills/<skill-id>/SKILL.md` Drive folder is the expected Phase 1 source shape.
 
-Workflow: identify the Drive Skill Library, verify named skill or all skills in `skills/`, confirm canonical `SKILL.md` exists and validates, compare Submitted or Approved proposals only as evidence when present, use `aiws-validate-skill-library`, rebuild or guide reinstall of the whole Cowork plugin artifact from the Drive library root, preserving the plugin id `test-plugin` for `Test Plugin`, and verify installed plugin/container and skill invocation show refreshed content.
+Workflow: identify the Drive Skill Library, verify named skill or all skills in `skills/`, confirm canonical `SKILL.md` exists and validates, compare Submitted or Approved proposals only as evidence when present, use `aiws-validate-skill-library`, compare installed Cowork plugin content when available, report no rebuild required if installed content matches Drive, otherwise rebuild or guide reinstall of the whole Cowork plugin artifact from the Drive library root while preserving plugin id `test-plugin` for `Test Plugin`, and verify installed plugin/container when possible. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
 
-Report `AIWS Skill Library Refresh: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skills, canonical verification, proposal sync evidence, library validation, Cowork refresh/reinstall, and skill invocation.
+Report `AIWS Skill Library Refresh: PASS`, `FAIL`, or `NEEDS MANUAL ACTION`, including library, skills, canonical verification, proposal sync evidence, library validation, Cowork refresh/reinstall, and skill invocation. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
 """
 
 
@@ -241,7 +241,7 @@ description: Validate an AIWS Skill Library folder and report concrete fixes.
 
 Use this skill when a user wants to check whether a Drive Skill Library is ready for Cowork import, maintainer review, or cross-host use.
 
-Short human prompts are enough: `Check Test Plugin`, `Validate Test Plugin`, and `Check meeting-followup in Test Plugin`.
+Reliable human prompts are: `Validate the Test Plugin Drive library and include installed plugin status`, `Check the Test Plugin Drive library and installed plugin status`, and `Check Test Plugin Drive library`. The shorter `Check Test Plugin` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
 
 These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
 

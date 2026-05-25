@@ -39,7 +39,9 @@ If an Approved proposal is present and canonical already matches it, report that
 
 Do not call AIWS marketplace tools, create or open drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations. Do not use marketplace or materialization results as evidence for or against refresh.
 
-Refresh always rebuilds the installed Cowork plugin artifact from the Drive Skill Library root. For `Test Plugin`, the refreshed artifact identity is still:
+Refresh compares the Drive Skill Library root against the installed Cowork plugin when installed content is available. If installed content already matches Drive canonical content, report that no rebuild is required. Rebuild or guide reinstall of the whole Cowork plugin artifact only when installed content differs, installed visibility is missing, or installed content cannot be confirmed.
+
+For `Test Plugin`, any rebuilt artifact identity is still:
 
 ```text
 plugin id: test-plugin
@@ -55,8 +57,10 @@ Do not generate per-skill plugin identities such as `test-plugin--meeting-follow
 3. Confirm canonical `skills/<skill-id>/SKILL.md` exists and validates.
 4. If Submitted or Approved proposal folders are present, compare them only as evidence; do not require them.
 5. Use `aiws-validate-skill-library` to validate the library and proposal structure.
-6. Rebuild or guide reinstall of the whole Cowork plugin artifact from the Drive library root, preserving the plugin id `test-plugin` for `Test Plugin`.
-7. Verify the installed plugin/container and skill invocation show the refreshed content.
+6. Compare the installed Cowork plugin content when available.
+7. If installed content matches Drive, report no rebuild required.
+8. If installed content differs or cannot be verified, rebuild or guide reinstall of the whole Cowork plugin artifact from the Drive library root, preserving the plugin id `test-plugin` for `Test Plugin`.
+9. Verify the installed plugin/container when possible. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
 
 ## Output
 
@@ -71,7 +75,7 @@ Canonical SKILL.md verified: PASS|FAIL
 Proposal sync evidence: PASS|FAIL|not present
 Library validation: PASS|FAIL
 Cowork refresh/reinstall: PASS|FAIL|NEEDS MANUAL ACTION
-Skill invocation: PASS|FAIL|NEEDS MANUAL ACTION
+Skill invocation: PASS|FAIL|not verified|optional
 ```
 
-Use `PASS` only when canonical Drive content is verified, validation passes, and Cowork-visible behavior is verified. Use `NEEDS MANUAL ACTION` when the user or host must click **Save plugin**, refresh/reinstall, or invoke the skill outside the current session.
+Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `NEEDS MANUAL ACTION` when the user or host must click **Save plugin** or refresh/reinstall outside the current session. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.

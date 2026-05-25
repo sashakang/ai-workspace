@@ -27,7 +27,7 @@ update meeting-followup in Test Plugin skill library
 
 For these prompts, default to verification and refresh of the Drive Skill Library. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If the skill id is named in the prompt, use it. If only the library is named, inspect the library and verify all changed or available skills.
 
-If a proposal folder is present and canonical already matches it, report that the canonical file is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall.
+If a proposal folder is present and canonical already matches it, report that the canonical file is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall. If installed Cowork content already matches Drive canonical content, report that no rebuild is required.
 
 ## Boundaries
 
@@ -57,8 +57,8 @@ Do not apply runtime artifacts, metadata rewrites, plugin manifests, scripts, pa
 2. If a Submitted proposal path is provided, compare canonical `SKILL.md` against `Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md` and report whether the accepted changes appear in canonical.
 3. If an Approved proposal path is present, compare canonical `SKILL.md` against `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` and report whether canonical is already in sync.
 4. Use `aiws-validate-skill-library` to validate the library and proposal structure.
-5. Refresh or guide Cowork reimport of the Drive skill library.
-6. Ask Cowork to invoke the updated skill on a small test input and verify the expected changed behavior.
+5. Refresh or guide Cowork reimport of the Drive skill library, following `aiws-refresh-skill-library` semantics: compare installed Cowork plugin content when available, report no rebuild required if installed content matches Drive, and rebuild or guide reinstall only when installed content differs or cannot be verified.
+6. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
 
 If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
 
@@ -76,7 +76,7 @@ Submitted proposal path:
 Canonical SKILL.md verified: PASS|FAIL|NEEDS MANUAL ACTION
 Library validation: PASS|FAIL
 Cowork refresh/import: PASS|FAIL|NEEDS MANUAL ACTION
-Skill invocation: PASS|FAIL|NEEDS MANUAL ACTION
+Skill invocation: PASS|FAIL|not verified|optional
 ```
 
-Use `PASS` only when the canonical file update is verified, library validation passes after the update, and Cowork-visible behavior is verified. Use `NEEDS MANUAL ACTION` when the maintainer or host must perform a Drive copy, refresh/import, or skill invocation outside the current session.
+Use `PASS` when the canonical file update is verified, library validation passes after the update, and Cowork installed content is either already in sync or successfully refreshed. Use `NEEDS MANUAL ACTION` when the maintainer or host must perform a Drive copy or refresh/import outside the current session. Do not fail a successful update/refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.

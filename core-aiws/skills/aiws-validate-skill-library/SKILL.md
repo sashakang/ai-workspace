@@ -7,15 +7,17 @@ description: Validate an AIWS Skill Library folder and report concrete fixes.
 
 Use this skill when a user wants to check whether a Drive Skill Library is ready for Cowork import, maintainer review, or cross-host use.
 
-Short human prompts are enough:
+Reliable human prompts are:
 
 ```text
-Check Test Plugin
-Validate Test Plugin
-Check meeting-followup in Test Plugin
+Validate the Test Plugin Drive library and include installed plugin status
+Check the Test Plugin Drive library and installed plugin status
+Check Test Plugin Drive library
 ```
 
 These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
+
+The shorter `Check Test Plugin` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
 
 For `Check Test Plugin`, the Drive folder is the source of truth. Start with the Drive library root and read:
 
