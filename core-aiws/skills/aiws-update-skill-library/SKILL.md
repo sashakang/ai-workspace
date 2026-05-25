@@ -57,7 +57,7 @@ Do not apply runtime artifacts, metadata rewrites, plugin manifests, scripts, pa
 2. If a Submitted proposal path is provided, compare canonical `SKILL.md` against `Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md` and report whether the accepted changes appear in canonical.
 3. If an Approved proposal path is present, compare canonical `SKILL.md` against `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` and report whether canonical is already in sync.
 4. Use `aiws-validate-skill-library` to validate the library and proposal structure.
-5. Refresh or guide Cowork reimport of the Drive skill library, following `aiws-refresh-skill-library` semantics: compare installed Cowork plugin content when available, report no rebuild required if installed content matches Drive, and rebuild or guide reinstall only when installed content differs or cannot be verified.
+5. Refresh Cowork reimport of the Drive skill library, following `aiws-refresh-skill-library` semantics: compare installed Cowork plugin content when available, report no rebuild required if installed content matches Drive, and rebuild/preflight/present a **Save plugin** card when installed content differs or cannot be verified. Guide manual reinstall only when the current host cannot read Drive, build the artifact, preflight it, or present the **Save plugin** card.
 6. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
 
 If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
@@ -67,7 +67,7 @@ If direct Drive write access is unavailable, provide exact manual copy/replace i
 Report:
 
 ```text
-AIWS Skill Library Update: PASS|FAIL|NEEDS MANUAL ACTION
+AIWS Skill Library Update: PASS|FAIL|READY FOR SAVE|NEEDS MANUAL ACTION
 
 Library:
 Skill:
@@ -75,8 +75,8 @@ Proposal:
 Submitted proposal path:
 Canonical SKILL.md verified: PASS|FAIL|NEEDS MANUAL ACTION
 Library validation: PASS|FAIL
-Cowork refresh/import: PASS|FAIL|NEEDS MANUAL ACTION
+Cowork refresh/import: PASS|FAIL|READY FOR SAVE|NEEDS MANUAL ACTION
 Skill invocation: PASS|FAIL|not verified|optional
 ```
 
-Use `PASS` when the canonical file update is verified, library validation passes after the update, and Cowork installed content is either already in sync or successfully refreshed. Use `NEEDS MANUAL ACTION` when the maintainer or host must perform a Drive copy or refresh/import outside the current session. Do not fail a successful update/refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+Use `PASS` when the canonical file update is verified, library validation passes after the update, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS MANUAL ACTION` when the maintainer or host must perform a Drive copy or when the current host cannot read Drive, build the artifact, preflight it, or present the **Save plugin** card. Do not fail a successful update/refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.

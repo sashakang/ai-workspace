@@ -48,7 +48,7 @@ Pass after Save:
 
 User prompt:
 
-Propose this meeting-followup change for Test Plugin: change the marker line to `> meeting-followup update`.
+Propose this meeting-followup change for Test Plugin: change the marker line to `> meeting-followup demo proposal`.
 
 Expected:
 
@@ -84,22 +84,28 @@ Expected:
 - Cowork validates the Drive library.
 - Plugin id remains `test-plugin`.
 - If installed content already matches Drive canonical content, Cowork reports that no rebuild is required.
-- If installed content differs from Drive canonical content, Cowork rebuilds the whole `Test Plugin` plugin artifact from the Drive root.
+- If installed content differs from Drive canonical content, Cowork rebuilds and preflights the whole `Test Plugin` plugin artifact from the Drive root.
+- It presents one **Save plugin** card in the current Cowork session when rebuilt content needs user confirmation.
 - It does not create draft packages.
 - It does not create `test-plugin--meeting-followup`.
 - It does not create or report `aiws-generated-plugin` as the refreshed plugin identity.
 - It does not use AIWS marketplace/materialize/export tools.
 - It does not report marketplace state, empty marketplace state, or materialized skill state in the normal user-visible path.
 - It does not require a `plugins/` folder.
-- It presents **Save plugin** only if user confirmation is needed.
+- It uses manual plugin-management reinstall instructions only if the current host cannot read Drive, build/preflight the artifact, or present the **Save plugin** card.
 
-Pass:
+Pre-click checkpoint:
 
-- Refresh report is `AIWS Skill Library Refresh: PASS`.
-- `test-plugin:meeting-followup` is visible and invocable.
-- `test-plugin:morning-briefing` is visible and invocable.
-- `meeting-followup` reflects the canonical Drive marker line.
-- If the refresh did not invoke a skill, invocation status may be reported as not verified or optional, but not as a refresh failure.
+- If Cowork rebuilt the artifact and is waiting for the user click, refresh report is `AIWS Skill Library Refresh: READY FOR SAVE`.
+- Cowork presents one **Save plugin** card for `Test Plugin`.
+
+Final pass:
+
+- Refresh report is `AIWS Skill Library Refresh: PASS` when installed content was already in sync or after Cowork accepts the refreshed plugin.
+- `test-plugin:meeting-followup` is visible under `Test Plugin`.
+- `test-plugin:morning-briefing` is visible under `Test Plugin`.
+- Installed `meeting-followup/SKILL.md`, when inspectable, matches the canonical Drive `SKILL.md`.
+- If the refresh did not invoke a skill, invocation status may be reported as `not verified` or `optional`; that is not a refresh failure.
 
 Live invocation check:
 
@@ -111,10 +117,10 @@ Expected:
 
 - Cowork routes to the `meeting-followup` skill.
 - If Cowork asks for meeting details, provide minimal notes and continue.
-- The first output line is the canonical Drive marker:
+- The first output line reflects the canonical Drive marker. In the current demo, that marker is:
 
 ```text
-> meeting-followup update
+> meeting-followup demo proposal
 ```
 
 ## Test 5: Check

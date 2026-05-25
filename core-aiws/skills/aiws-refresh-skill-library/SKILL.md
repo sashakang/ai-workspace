@@ -39,7 +39,7 @@ If an Approved proposal is present and canonical already matches it, report that
 
 Do not call AIWS marketplace tools, create or open drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations. Do not use marketplace or materialization results as evidence for or against refresh.
 
-Refresh compares the Drive Skill Library root against the installed Cowork plugin when installed content is available. If installed content already matches Drive canonical content, report that no rebuild is required. Rebuild or guide reinstall of the whole Cowork plugin artifact only when installed content differs, installed visibility is missing, or installed content cannot be confirmed.
+Refresh compares the Drive Skill Library root against the installed Cowork plugin when installed content is available. If installed content already matches Drive canonical content, report that no rebuild is required. If installed content differs, installed visibility is missing, or installed content cannot be confirmed, rebuild the whole Cowork plugin artifact from the Drive root and present a single **Save plugin** card in the current Cowork session. Fall back to manual reinstall guidance only when the host cannot read Drive, cannot build the artifact, or cannot present the **Save plugin** card.
 
 For `Test Plugin`, any rebuilt artifact identity is still:
 
@@ -59,23 +59,26 @@ Do not generate per-skill plugin identities such as `test-plugin--meeting-follow
 5. Use `aiws-validate-skill-library` to validate the library and proposal structure.
 6. Compare the installed Cowork plugin content when available.
 7. If installed content matches Drive, report no rebuild required.
-8. If installed content differs or cannot be verified, rebuild or guide reinstall of the whole Cowork plugin artifact from the Drive library root, preserving the plugin id `test-plugin` for `Test Plugin`.
-9. Verify the installed plugin/container when possible. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
+8. If installed content differs or cannot be verified, rebuild the whole Cowork plugin artifact from the Drive library root, preserving the plugin id `test-plugin` for `Test Plugin`.
+9. Before presenting the **Save plugin** card, run the same artifact preflight as `aiws-install-drive-skill-library`: verify `.claude-plugin/plugin.json`, `contracts/<plugin-id>.contract.json`, every packaged `skills/<skill-id>/SKILL.md`, no wrapper folder, matching manifest/contract ids and versions, exact `public_skills`, portable skill frontmatter, matching skill folder names, and non-empty skill bodies.
+10. Present exactly one **Save plugin** card when rebuild is needed and preflight passes. Do not send the user to plugin management first if the current Cowork session can present the card.
+11. Use manual reinstall guidance only if Drive access, artifact creation, artifact preflight, or **Save plugin** presentation is unavailable in the current host.
+12. Verify the installed plugin/container when possible. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
 
 ## Output
 
 Report:
 
 ```text
-AIWS Skill Library Refresh: PASS|FAIL|NEEDS MANUAL ACTION
+AIWS Skill Library Refresh: PASS|FAIL|READY FOR SAVE|NEEDS MANUAL ACTION
 
 Library:
 Skill(s):
 Canonical SKILL.md verified: PASS|FAIL
 Proposal sync evidence: PASS|FAIL|not present
 Library validation: PASS|FAIL
-Cowork refresh/reinstall: PASS|FAIL|NEEDS MANUAL ACTION
+Cowork refresh/reinstall: PASS|FAIL|READY FOR SAVE|NEEDS MANUAL ACTION
 Skill invocation: PASS|FAIL|not verified|optional
 ```
 
-Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `NEEDS MANUAL ACTION` when the user or host must click **Save plugin** or refresh/reinstall outside the current session. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS MANUAL ACTION` only when the current host cannot complete Drive read, artifact build, preflight, or **Save plugin** presentation. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
