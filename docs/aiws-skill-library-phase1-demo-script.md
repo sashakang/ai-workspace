@@ -25,14 +25,14 @@ Expected:
 
 - Cowork reads the Drive folder.
 - Cowork packages one plugin artifact named `Test Plugin` with plugin id `test-plugin`.
-- Cowork shows one **Save plugin** card.
+- Cowork shows one **Save plugin** card for a `.plugin` artifact.
 - After Save, these skills are visible:
   - `test-plugin:meeting-followup`
   - `test-plugin:morning-briefing`
 
 Do not accept:
 
-- Separate **Save skill** cards as the final result.
+- A `.skill` artifact or separate **Save skill** cards as the final result.
 - AIWS marketplace, materialize, export, draft, bridge, or missing `plugins/` explanations.
 
 ## 2. Use Existing Skill

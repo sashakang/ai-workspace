@@ -48,6 +48,8 @@ contracts/<plugin-id>.contract.json
 skills/<skill-id>/SKILL.md
 ```
 
+The artifact is a plugin artifact, not a `.skill` artifact. Name and present it as a `.plugin` file/card so Cowork routes it to the plugin installer. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Drive Skill Library Install: NEEDS RETRY`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
+
 For `Test Plugin`, use `plugin-id` `test-plugin`. The manifest must include `name`, `description`, `version`, and `author.name`. The contract must include `plugin_id`, `version`, and `public_skills` listing exactly the packaged skill folder ids. Do not put files under an extra top-level wrapper folder inside the archive.
 
 Before presenting the **Save plugin** card, inspect the generated archive and verify:
@@ -68,7 +70,7 @@ If any preflight check fails, do not present the **Save plugin** card. Fix the a
 
 Do not register the Drive folder as a marketplace. Do not search AIWS marketplaces for it. Do not use missing marketplace search results as evidence that the Drive folder cannot be packaged.
 
-Present exactly one **Save plugin** card. If the host first produces individual **Save skill** cards, say that is not the requested result and repackage the same Drive contents as a plugin.
+Present exactly one **Save plugin** card for a `.plugin` artifact. If the host first produces individual **Save skill** cards, a `.skill` artifact, or labels the plugin artifact with a **Save skill** button, say that is not the requested result and repackage the same Drive contents as a plugin. Never report `READY FOR SAVE` while the visible action is **Save skill**.
 
 The user-facing fallback prompt, only when a separate Cowork prompt is unavoidable, is exactly:
 

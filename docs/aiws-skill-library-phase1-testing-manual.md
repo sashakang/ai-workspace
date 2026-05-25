@@ -37,6 +37,7 @@ Expected:
 - Cowork packages one plugin artifact for `Test Plugin`.
 - Cowork presents one **Save plugin** card.
 - It does not present separate **Save skill** cards.
+- It does not create or present a `.skill` artifact.
 - It does not mention AIWS marketplace, materialize, export, drafts, or missing `plugins/`.
 
 Pass after Save:
