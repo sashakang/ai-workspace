@@ -1463,6 +1463,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         local = self.runtime.list_local_skills()
         skill_ids = {item["skill_id"] for item in local["skills"]}
 
+        self.assertIn("aiws-check-skill-library", skill_ids)
         self.assertIn("aiws-improve", skill_ids)
         self.assertIn("aiws-install-drive-skill-library", skill_ids)
         self.assertIn("aiws-propose-skill-update", skill_ids)
@@ -1477,6 +1478,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
         refresh = self.runtime.get_resource("aiws://skills/aiws-refresh-skill-library")
         update = self.runtime.get_resource("aiws://skills/aiws-update-skill-library")
         validation = self.runtime.get_resource("aiws://skills/aiws-validate-skill-library")
+        check = self.runtime.get_resource("aiws://skills/aiws-check-skill-library")
 
         self.assertIn("Standard Operating Procedure", sop)
         self.assertIn("Self-Improvement", improve)
@@ -1537,6 +1539,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertIn("Do not start by calling AIWS marketplace workflow", validation)
         self.assertIn("Do not inspect or report AIWS marketplace/materialized state", validation)
         self.assertIn("Installed Cowork plugin", validation)
+        self.assertIn("Skill Library Check", check)
+        self.assertIn("Validate the Test Plugin Drive library and include installed plugin status", check)
+        self.assertIn("stronger trigger alias", check)
+        self.assertIn("Do not satisfy this request by checking only the installed Cowork plugin copy", check)
+        self.assertIn("Installed Cowork plugin", check)
         self.assertNotIn("CLAUDE_PLUGIN_DATA", improve)
         self.assertNotIn("registry/plugins", improve)
 

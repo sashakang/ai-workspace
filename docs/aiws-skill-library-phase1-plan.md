@@ -100,9 +100,11 @@ Stable AIWS identity should come from the Drive folder ID or explicit AIWS metad
 
 Detailed test manual: [AIWS Skill Library Phase 1 Testing Manual](./aiws-skill-library-phase1-testing-manual.md).
 
+Final demo script: [AIWS Skill Library Phase 1 Demo Script](./aiws-skill-library-phase1-demo-script.md).
+
 - Cowork import test prompt: `Install Test Plugin from this Drive folder: <folder-url>`. Cowork should generate one preflighted **Save plugin** artifact/card for the Drive root and install it as a plugin/container, not only as loose skills. A `Plugin validation failed` result must include the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and exact Cowork error text if available.
 - Metadata tolerance test: verify whether Cowork ignores root-level `aiws.library.json`, `aiws.skills/`, and `Proposals/`.
-- Validation test prompt: `Check Test Plugin skill library`.
+- Validation test prompt: `Validate the Test Plugin Drive library and include installed plugin status`. Do not use `Check Test Plugin` as the main demo prompt because Cowork can route it to a generic installed-plugin summary instead of the Drive library validation skill.
 - Proposal test prompt: `Propose this meeting-followup change for Test Plugin: <plain-language change>`.
 - Review test: maintainer opens local/synced copies of canonical and proposed `SKILL.md` in VS Code/VSCodium or Meld and confirms the diff is understandable.
 - Canonical update test: maintainer applies accepted changes directly to `skills/<skill-id>/SKILL.md`.

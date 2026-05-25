@@ -121,7 +121,9 @@ Expected:
 
 User prompt:
 
-Check Test Plugin
+Validate the Test Plugin Drive library and include installed plugin status
+
+Do not use `Check Test Plugin` as the main demo prompt. In Cowork it can route to a generic installed-plugin summary instead of the Drive library validation skill.
 
 Expected:
 

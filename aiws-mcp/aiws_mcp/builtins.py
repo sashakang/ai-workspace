@@ -305,8 +305,38 @@ The Python command is developer/CI support. The user-facing validation surface i
 """
 
 
+AIWS_CHECK_SKILL_LIBRARY_SKILL = """---
+name: aiws-check-skill-library
+description: Check a Drive Skill Library source and installed Cowork plugin status without changing anything.
+---
+
+# AIWS Skill Library Check
+
+Use this skill when a user wants to check a Drive Skill Library and its installed Cowork plugin status.
+
+Reliable human prompts: `Validate the Test Plugin Drive library and include installed plugin status`, `Check the Test Plugin Drive library and installed plugin status`, and `Check Test Plugin Drive library`.
+
+This is a read-only check. It is a stronger trigger alias for `aiws-validate-skill-library`, intended for Cowork sessions where `Check Test Plugin` may route to a generic installed-plugin summary.
+
+Start from the Google Drive Skill Library source, not from the installed Cowork plugin copy. Read and validate `skills/<skill-id>/SKILL.md`, `Proposals/Submitted/`, `Proposals/Approved/`, `Proposals/Rejected/`, `aiws.library.json` if present, and `aiws.skills/` if present.
+
+After Drive validation, include installed Cowork plugin status as secondary evidence. If installed status cannot be checked, report `not verified`; do not omit the `Installed Cowork plugin` section.
+
+Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for Save plugin, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
+
+Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library check path.
+
+Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path.
+
+Do not satisfy this request by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
+
+Report `AIWS Skill Library Validation: PASS`, `FAIL`, or `NEEDS MANUAL ACTION` with Library, Skills, Metadata, Proposals, Phase 1 boundaries, Installed Cowork plugin, and Fixes sections.
+"""
+
+
 BUILTIN_SKILLS = {
     "aiws-improve": AIWS_IMPROVE_SKILL,
+    "aiws-check-skill-library": AIWS_CHECK_SKILL_LIBRARY_SKILL,
     "aiws-install-drive-skill-library": AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL,
     "aiws-propose-skill-update": AIWS_PROPOSE_SKILL_UPDATE_SKILL,
     "aiws-refresh-skill-library": AIWS_REFRESH_SKILL_LIBRARY_SKILL,
@@ -318,6 +348,7 @@ BUILTIN_SKILLS = {
 RESOURCES = {
     "aiws://protocols/sop": SOP_RESOURCE,
     "aiws://skills/aiws-improve": AIWS_IMPROVE_SKILL,
+    "aiws://skills/aiws-check-skill-library": AIWS_CHECK_SKILL_LIBRARY_SKILL,
     "aiws://skills/aiws-install-drive-skill-library": AIWS_INSTALL_DRIVE_SKILL_LIBRARY_SKILL,
     "aiws://skills/aiws-propose-skill-update": AIWS_PROPOSE_SKILL_UPDATE_SKILL,
     "aiws://skills/aiws-refresh-skill-library": AIWS_REFRESH_SKILL_LIBRARY_SKILL,
