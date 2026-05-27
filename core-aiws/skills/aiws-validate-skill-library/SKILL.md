@@ -7,19 +7,19 @@ description: Validate an AIWS Skill Library folder and report concrete fixes.
 
 Use this skill when a user wants to check whether a Drive Skill Library is ready for Cowork import, maintainer review, or cross-host use.
 
-Reliable human prompts are:
+Reliable human prompts are (replace `<library-display-name>` with the user's actual library name):
 
 ```text
-Validate the Test Plugin Drive library and include installed plugin status
-Check the Test Plugin Drive library and installed plugin status
-Check Test Plugin Drive library
+Validate the <library-display-name> Drive library and include installed plugin status
+Check the <library-display-name> Drive library and installed plugin status
+Check <library-display-name> Drive library
 ```
 
 These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
 
-The shorter `Check Test Plugin` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
+The shorter `Check <library-display-name>` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
 
-For `Check Test Plugin`, the Drive folder is the source of truth. Start with the Drive library root and read:
+For `Check <library-display-name>`, the Drive folder is the source of truth. Start with the Drive library root and read:
 
 ```text
 skills/<skill-id>/SKILL.md
@@ -28,9 +28,9 @@ Proposals/Approved/
 Proposals/Rejected/
 ```
 
-Do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
+Do not satisfy `Check <library-display-name>` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
 
-For `Check Test Plugin`, after Drive validation completes, attempt to report installed Cowork plugin visibility when the host exposes it. This is secondary evidence, not the source of truth. If installed status cannot be checked, report `not verified`; do not omit the section.
+For `Check <library-display-name>`, after Drive validation completes, attempt to report installed Cowork plugin visibility when the host exposes it. This is secondary evidence, not the source of truth. If installed status cannot be checked, report `not verified`; do not omit the section.
 
 Phase 1 validates a skill-first library, not a packaged plugin marketplace:
 
@@ -84,7 +84,7 @@ First action must be reading the Drive Skill Library source, not the installed p
 
 Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library check path.
 
-Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `test-plugin` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to checking a Drive Skill Library.
+Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `<plugin-id>` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to checking a Drive Skill Library.
 
 ### Optional AIWS Metadata
 
@@ -165,13 +165,13 @@ When installed plugin status is available, include it as a separate section:
 
 ```text
 Installed Cowork plugin:
-- test-plugin: present|not verified|missing
+- <plugin-id>: present|not verified|missing
 - skills visible: PASS|FAIL|not verified
 ```
 
 Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
 
-For `Check Test Plugin`, always include this section after Drive validation. Use `not verified` when the host cannot expose installed plugin status.
+For `Check <library-display-name>`, always include this section after Drive validation. Use `not verified` when the host cannot expose installed plugin status.
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 

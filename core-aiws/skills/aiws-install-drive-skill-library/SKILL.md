@@ -18,7 +18,7 @@ Do not stop after producing individual **Save skill** cards.
 
 This flow is not an AIWS marketplace workflow. Do not call, register, inspect, or repair `aiws.marketplaces.*`, `drive_workflow`, `export_cowork_bridge`, or any marketplace registry while installing a Drive Skill Library. A flat `skills/<skill-id>/SKILL.md` Drive folder is valid even if AIWS marketplace indexing would return no results.
 
-Do not tell the user that a `test-plugin` marketplace is empty or missing. Do not mention marketplace in the normal install report. The user-facing objects are:
+Do not tell the user that a `<plugin-id>` marketplace is empty or missing. Do not mention marketplace in the normal install report. The user-facing objects are:
 
 - Drive Skill Library
 - Cowork plugin artifact
@@ -35,9 +35,9 @@ If already running inside Cowork, treat the current user request as the install 
 
 Use the Google Drive integration to read the folder URL, then package the library into one Cowork plugin artifact:
 
-- plugin display name: the Drive root folder name, for example `Test Plugin`
-- plugin id: a stable slug derived from the Drive root folder name, for example `test-plugin`
-- skills: every `skills/<skill-id>/SKILL.md`
+- plugin display name: the Drive root folder name (`<library-display-name>`)
+- plugin id: a stable slug derived from the Drive root folder name (`<plugin-id>`)
+- skills: every `skills/<skill-id>/SKILL.md` actually present in the Drive folder
 - ignored as runtime skills: `Proposals/`, `aiws.library.json`, `aiws.skills/`, and any proposal metadata
 
 The plugin artifact must be a zip-compatible Cowork plugin package with files at the archive root:
@@ -50,15 +50,15 @@ skills/<skill-id>/SKILL.md
 
 The artifact is a plugin artifact, not a `.skill` artifact. Name and present it as a `.plugin` file/card so Cowork routes it to the plugin installer. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Drive Skill Library Install: NEEDS RETRY`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
 
-For `Test Plugin`, use `plugin-id` `test-plugin`. The manifest must include `name`, `description`, `version`, and `author.name`. The contract must include `plugin_id`, `version`, and `public_skills` listing exactly the packaged skill folder ids. Do not put files under an extra top-level wrapper folder inside the archive.
+Derive `<plugin-id>` as a stable slug from `<library-display-name>` (lowercase, hyphenated). The manifest must include `name`, `description`, `version`, and `author.name`. The contract must include `plugin_id`, `version`, and `public_skills` listing exactly the packaged skill folder ids. Do not put files under an extra top-level wrapper folder inside the archive.
 
 Before presenting the **Save plugin** card, inspect the generated archive and verify:
 
 - `.claude-plugin/plugin.json` exists at archive root
-- `contracts/test-plugin.contract.json` exists at archive root for `Test Plugin`
-- `skills/morning-briefing/SKILL.md` and `skills/meeting-followup/SKILL.md` exist at archive root for the demo library
-- no entry starts with `test-plugin/`, `Test Plugin/`, or another wrapper folder
-- `plugin.json.name` equals `test-plugin`
+- `contracts/<plugin-id>.contract.json` exists at archive root
+- every `skills/<skill-id>/SKILL.md` from the actual Drive folder exists at archive root (data-driven from the Drive listing — do not hard-code skill ids)
+- no entry starts with `<plugin-id>/`, `<library-display-name>/`, or another wrapper folder
+- `plugin.json.name` equals the derived `<plugin-id>`
 - `plugin.json.version` is a non-empty semver-like string
 - contract `plugin_id` and `version` match `plugin.json`
 - contract `public_skills` equals the packaged skill folder ids

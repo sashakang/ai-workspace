@@ -17,12 +17,12 @@ This skill verifies the maintainer-applied update and guides Cowork refresh/rein
 
 ## Natural User Prompts
 
-Treat short human prompts as sufficient. Examples:
+Treat short human prompts as sufficient. Examples (replace `<library-display-name>` and `<skill-id>` with the user's actual library and skill names):
 
 ```text
-update Test Plugin skill library
-refresh Test Plugin
-update meeting-followup in Test Plugin skill library
+update <library-display-name> skill library
+refresh <library-display-name>
+update <skill-id> in <library-display-name> skill library
 ```
 
 For these prompts, default to verification and refresh of the Drive Skill Library. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If the skill id is named in the prompt, use it. If only the library is named, inspect the library and verify all changed or available skills.

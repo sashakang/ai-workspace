@@ -7,15 +7,15 @@ description: Check a Drive Skill Library source and installed Cowork plugin stat
 
 Use this skill when a user wants to check a Drive Skill Library and its installed Cowork plugin status.
 
-Reliable human prompts:
+Reliable human prompts (replace `<library-display-name>` with the user's actual library name):
 
 ```text
-Validate the Test Plugin Drive library and include installed plugin status
-Check the Test Plugin Drive library and installed plugin status
-Check Test Plugin Drive library
+Validate the <library-display-name> Drive library and include installed plugin status
+Check the <library-display-name> Drive library and installed plugin status
+Check <library-display-name> Drive library
 ```
 
-This is a read-only check. It is a stronger trigger alias for `aiws-validate-skill-library`, intended for Cowork sessions where `Check Test Plugin` may route to a generic installed-plugin summary.
+This is a read-only check. It is a stronger trigger alias for `aiws-validate-skill-library`, intended for Cowork sessions where `Check <library-display-name>` may route to a generic installed-plugin summary.
 
 ## Required Behavior
 
@@ -36,7 +36,7 @@ After Drive validation, include installed Cowork plugin status as secondary evid
 
 ```text
 Installed Cowork plugin:
-- test-plugin: present|missing|not verified
+- <plugin-id>: present|missing|not verified
 - skills visible: PASS|FAIL|not verified
 ```
 
