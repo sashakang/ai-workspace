@@ -397,40 +397,13 @@ Outcome:
 
 - Canonical `skills/schedule-summary/SKILL.md` now reflects the partial-accept content. The new marker on canonical may be `> schedule-summary v2: running`, or a different marker chosen by the maintainer.
 
-## Step 10: User Downloads Or Updates And Uses Canonical
+## Step 10: User Refreshes And Verifies Canonical Reached The Installed Plugin
 
-Two execution paths. Both should produce the partial-accepted canonical content under `test-plugin:`.
+Precondition: the tester has the existing `test-plugin` install from Step 2 / Step 5 and possibly a stale local `schedule-summary` user skill (if Step 5.1 cleanup did not apply because the local was no longer byte-identical to the last proposal).
 
-### 10a — Fresh install (download)
+This step tests the propagation path that Step 2 did not cover: an **existing install** picks up a post-acceptance canonical change.
 
-Precondition: `test-plugin` is NOT installed (Reset, or a different tester is running this).
-
-User prompt:
-
-```text
-Install Test Plugin from this Drive folder:
-https://drive.google.com/drive/folders/1BiEjSTKeD0hyUyHWdLhvP0cp3RX3uo7L
-```
-
-Expected:
-
-- One **Save plugin** card, preflight PASS.
-- After Save: `test-plugin:morning-briefing`, `test-plugin:slack-response-triage`, and `test-plugin:schedule-summary` visible.
-
-User prompt:
-
-```text
-Use schedule-summary
-```
-
-Expected:
-
-- First output line matches the partial-accepted canonical marker (e.g., `> schedule-summary v2: running` or whatever the maintainer wrote).
-- Output reflects the partial-accepted canonical SKILL.md.
-
-### 10b — Refresh (update)
-
-Precondition: the tester has the previous `test-plugin` install and a possibly stale local `schedule-summary` user skill.
+(Fresh installation against the post-acceptance canonical is mechanically identical to Step 2 and exercises no new contract; it is not part of this demo. A separate "new installer onboarding" verification can run Step 2 against the post-acceptance Drive state if a different tester is available.)
 
 User prompt:
 
@@ -441,8 +414,15 @@ Refresh Test Plugin
 Expected:
 
 - AIWS reads Drive canonical first.
-- Rebuilds artifact with bumped version, preflight PASS, **Save plugin**.
-- After Save: `test-plugin:schedule-summary` reflects partial-accepted canonical.
+- AIWS detects that the installed plugin's `schedule-summary` content differs from Drive canonical (v.2 was accepted in Step 9).
+- AIWS rebuilds the `.plugin` artifact with a bumped `plugin.json.version` (observed convention: patch bump for a content-only change, e.g. `v0.2.0 → v0.2.1`).
+- Preflight passes; Cowork presents one **Save plugin** card.
+- Report header: `AIWS Skill Library Refresh: READY FOR SAVE` (or `Update`).
+
+After clicking Save plugin:
+
+- `test-plugin:schedule-summary` in the installed plugin reflects the partial-accepted canonical content.
+- Plugin id remains `test-plugin`. No per-skill plugin id.
 
 User prompt:
 
@@ -452,8 +432,8 @@ Use schedule-summary
 
 Expected:
 
-- If a local user skill `schedule-summary` still exists with the v.2 draft, Cowork will resolve to local and the canonical update will not be observed. To verify Step 10b end-state, remove or rename the local user skill, then re-run `Use schedule-summary`.
-- First output line matches the partial-accepted canonical marker.
+- If a local user skill `schedule-summary` still exists, Cowork resolves to local and the canonical update is not observed. To verify the canonical reached the plugin, remove the local user skill via Cowork's skill panel (or wait for Step 5.1 cleanup to run when the local matches the last proposal), then re-run `Use schedule-summary`.
+- First output line matches the partial-accepted canonical marker — e.g. `> schedule-summary v2: running` or whatever the maintainer wrote at Step 9.
 
 ## Final Pass Criteria
 
