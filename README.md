@@ -1,18 +1,50 @@
 # AI Workspace
 
-AI Workspace is a learning facilitation mechanism for teams using AI coding and productivity hosts.
+AI Workspace is a management solution for AI **Skills** and **Memory**.
 
-Every skill is a piece of crystallized know-how about a recurring task. When a user discovers a better way to do that task, they propose it back to the skill's source repository. The maintainer curates incoming proposals into a single canonical SKILL.md, and that curated version flows back to every user through install or refresh. One person's discovery becomes the team's working knowledge — without forking, vendoring, or manual sync.
+Skills and memory are the two durable assets that make AI work compound. A skill captures a repeatable way to perform valuable work: a procedure, checklist, domain method, prompt pattern, tool workflow, or review standard. Memory captures reusable context: preferences, project facts, lessons learned, operating constraints, and cross-session knowledge.
 
-To make this possible, AIWS is provider-agnostic and treats every skill as a repo-backed artifact that can be discovered, validated, installed, materialized, edited locally, and proposed back through a pull request. The same skill source works across supported hosts (Claude Code, Codex, Cowork) because AIWS generates the host-specific output each app needs.
+Together, they are the main sources of AI productivity. Without managed skills, every session starts from ad hoc prompting. Without managed memory, every session rediscovers context, repeats mistakes, or drifts from the user's real working environment. AI Workspace exists to make both assets reliable, portable, reviewable, and improvable.
 
-The system is built around three ideas:
+## General Requirements
 
-- skills live in repositories
-- access to skills is controlled by repository visibility and permissions
-- shared infrastructure, such as self-improvement workflows and memory contracts, should be reused across all skill levels
+Any serious Skills and Memory management system needs these properties:
 
-AI Workspace currently has real support for Claude Code and early support paths for Codex and Cowork. The target compatibility set is:
+1. **Canonical ownership**
+   Skills and memory need clear sources of truth. Teams must know where an asset lives, who can change it, how review works, and which copy is authoritative.
+
+2. **Host portability**
+   The same skill or memory asset should work across AI hosts even when each host needs a different native format. Source should stay stable; adapters should handle host-specific packaging.
+
+3. **Lifecycle management**
+   The system must support discovery, install, refresh, local use, editing, validation, proposal, review, merge, and rollback. A skill is not just a file; it has an operating lifecycle.
+
+4. **Permission alignment**
+   Access should follow existing repository, folder, marketplace, or organization permissions. The skill system should not invent a weaker parallel permission model.
+
+5. **Validation and safety**
+   Skills and memory need structure, metadata, integrity checks, and boundaries. The system must distinguish source truth, runtime copies, generated artifacts, pending proposals, and advisory memory.
+
+6. **Continuous improvement**
+   Every meaningful service procedure should end by asking what the run taught the system. Repeated confusion, bad routing, missing checks, or manual workarounds should feed back into skills, protocols, or memory through an explicit improvement path.
+
+## What This Repository Provides
+
+This repository is the reference AI Workspace implementation.
+
+It contains shared infrastructure for:
+
+- managing repo-backed and Drive-backed skills
+- defining portable skill-library conventions
+- validating skill and proposal structure
+- packaging skills for supported hosts
+- managing shared memory contracts
+- running SOP-governed service procedures
+- capturing self-improvement opportunities
+
+It also contains example domain plugins that show how specialized skill sets can reuse the same infrastructure.
+
+The current compatibility target is:
 
 - Codex app
 - Codex CLI
@@ -20,142 +52,146 @@ AI Workspace currently has real support for Claude Code and early support paths 
 - Claude Code Desktop
 - Claude Cowork Desktop
 
-The intended local shape is a single workspace folder containing all relevant skill and infrastructure repositories. All supported hosts can read from that shared workspace, while AI Workspace generates the host-specific files each app needs.
+Different hosts can require different runtime shapes. AI Workspace keeps the source model consistent, then generates or guides the host-specific output each app needs.
+
+## Core Concepts
+
+### Skills
+
+A skill is crystallized know-how for a recurring task. It may describe a process, domain method, prompt workflow, tool interaction, review gate, or expected output format.
+
+AI Workspace treats skills as managed assets:
+
+- they have source locations
+- they can be validated
+- they can be installed or materialized for a host
+- they can be edited locally
+- they can be proposed back to their source
+- they can be reviewed and promoted by owners
+
+For teams, this means one person's better way of working can become shared working knowledge without copy-paste drift.
+
+### Memory
+
+Memory is reusable context that helps future sessions work with less rediscovery.
+
+AI Workspace separates memory from authoritative documentation. Memory can advise a session, but it should not silently override source files, contracts, runbooks, or explicit user instructions.
+
+The memory layer defines:
+
+- project memory
+- shared cross-plugin memory
+- import and export contracts
+- automatic capture candidates
+- consolidation and promotion rules
+- boundaries between advisory memory and source truth
+
+### Self-Improvement
+
+Self-improvement is the feedback loop for the system itself.
+
+At the end of a service procedure, the agent checks whether the run exposed a reusable improvement: unclear skill wording, missing validation, bad routing, stale assumptions, artifact mismatch, repeated manual work, or a better procedure. If the evidence is real, the improvement is routed into the appropriate skill, protocol, documentation, or memory path. If nothing actionable was learned, the procedure says so explicitly and stops.
+
+## Architecture
+
+AI Workspace is intentionally modular. Shared infrastructure stays separate from domain skills.
 
 This repository currently includes:
 
-- `core-aiws` for shared process and improvement workflows
-- `memory-aiws` for shared cross-project memory contracts
-- `aiws-productivity` as a small demo domain plugin
-- `data-analysis-aiws` for analyst workflows
-- `software-engineer-aiws` for SOP-governed Python engineering and technical documentation work
+- `core-aiws` - shared process, skill-library workflows, validation, and self-improvement
+- `memory-aiws` - shared memory contracts and canonical memory structure
+- `aiws-productivity` - a small productivity domain plugin
+- `data-analysis-aiws` - analyst and forecasting workflows
+- `software-engineer-aiws` - SOP-governed engineering and documentation workflows
+- `aiws-host-memory` - host helper for Claude/Cowork memory bootstrap flows
 
-## What It Is For
+Infrastructure plugins provide capabilities that many domains reuse. Domain plugins stay opt-in and contribute only the workflows, references, and agents needed for their area.
 
-Use this platform when you want AI hosts to work from a structured skill system instead of ad hoc prompting.
+## Skill Distribution Models
 
-It is meant for people and teams that want:
+AI Workspace supports more than one source model.
 
-- shared operating procedures across host sessions
-- reusable domain workflows instead of ad hoc prompting
-- memory boundaries between project memory, shared memory, and runtime state
-- a path to ship more skills and domain plugins over time
-- a local contribution loop for improving skills and proposing changes back to their source repositories
+### Repo-Backed Skills
 
-AI Workspace does not force every AI provider to use the same native plugin format. Different hosts expect different shapes: Claude Code may need one plugin or skill layout, Codex may need another local skill layout, and Cowork may need a packaged plugin-style output. AI Workspace keeps the skill source model consistent, then creates the right host-specific output for each app.
+Skills and plugins can live in repositories. Repository access controls who can see and use them:
 
-## How The Platform Is Structured
+- public repositories for open-source skills
+- personal private repositories for individual skills
+- company repositories for company-wide skills
+- unit repositories for department or function skills
+- project repositories for project-team skills
 
-The platform is intentionally split into shared infrastructure and repo-backed skill layers rather than one large monolith.
+The source repository remains the canonical home. Local edits can be staged as proposals and submitted for review through the owner's normal process.
 
-This repository contains two kinds of plugins:
+### Drive Skill Libraries
 
-- infrastructure plugins, which provide shared behavior needed by the skill system itself
-- domain plugins, which provide example skill sets for specific kinds of work
+For Cowork-oriented workflows, AI Workspace also supports a lightweight Google Drive Skill Library shape:
 
-Users should install the infrastructure plugins plus only the domain plugins that are relevant to their work. A data analyst should not need to install a software-engineering plugin unless they want those workflows, and a software engineer should not need analyst workflows unless they are useful.
+```text
+<Library root>/
+  skills/
+    <skill-id>/
+      SKILL.md
+  Proposals/
+    Submitted/
+    Approved/
+    Rejected/
+```
 
-This repository is not the whole ecosystem. Other repositories can provide additional infrastructure or domain plugins for a person, project team, unit, company, or open-source community. Those external plugins still participate in the same shared architecture: they can live alongside this repository inside the same local AI Workspace folder, use the same infrastructure plugins, follow the same contracts, and produce host-specific output for the same supported apps.
+Cowork can install or refresh the Drive library as a plugin-like container. AI Workspace provides the convention, validation, proposal structure, packaging requirements, and service procedures.
 
-This keeps the system modular: shared infrastructure is reused across all skill levels, while domain capabilities remain opt-in.
+Drive is the review and collaboration surface. AI Workspace does not replace maintainer judgment; it helps keep the folder structure, proposal metadata, and refresh process coherent.
 
-### `core-aiws`
+## Service Procedures
 
-The shared process layer.
+The `core-aiws` service skills cover the main Skill Library lifecycle:
 
-It provides:
+- `aiws-validate-skill-library` checks Drive library and proposal structure
+- `aiws-check-skill-library` checks Drive source plus installed Cowork plugin status
+- `aiws-install-drive-skill-library` packages a Drive library as a Cowork plugin artifact
+- `aiws-propose-skill-update` prepares a proposed `SKILL.md` under `Proposals/Submitted/`
+- `aiws-update-skill-library` verifies maintainer-applied changes
+- `aiws-refresh-skill-library` refreshes a Cowork-installed Drive library from Drive source
+- `aiws-improve` routes accumulated improvement evidence through the self-improvement protocol
 
-- the platform SOP
-- the public `aiws-improve` workflow
-- shared protocols that other plugins can depend on
-
-### `memory-aiws`
-
-The shared memory layer.
-
-It defines:
-
-- the cross-plugin shared-memory model
-- import and export contracts
-- automatic candidate capture and consolidation rules
-- the boundary between authoritative docs and advisory shared memory
-
-### Domain plugins
-
-The example domain plugins today are `aiws-productivity`, `data-analysis-aiws`, and `software-engineer-aiws`.
-
-They currently provide:
-
-- `meeting-followup` (meeting notes to minutes, decisions, action items, and follow-up drafts)
-- `data-analyst-forecast` (time-series forecasting)
-- `analytical-research` (hypothesis-driven research with dual-gate review)
-- `/dev` (thin SOP adapter for Python engineering work)
-- `writing-documentation` (AIWS-aware technical documentation, docs audits, and docs-as-code maintenance)
-
-Some domain plugins are intentionally primed with references and bootstrap guidance. Others, like `software-engineer-aiws`, stay deliberately thin and rely on the shared SOP plus a small agent surface.
-
-## Skill Levels And Access
-
-AI Workspace assumes that skills and plugins are distributed through repositories. Repository access defines who can see and use them, while the local AI Workspace folder gives supported hosts one shared place to discover, edit, test, and materialize them.
-
-For example:
-
-- a public GitHub repository can provide open-source skills
-- a personal private repository can provide one user's private skills
-- a company repository can provide company-wide skills
-- a unit repository can provide skills for a department, function, or operating group
-- a project repository can provide skills for the project team
-
-The system should not need a separate permission model for skills if the repository host already controls access. AIWS focuses on discovery, validation, installation, materialization, local editing, host compatibility, and shared infrastructure.
+Every service procedure ends with a self-improvement checkpoint. The checkpoint must not mutate user content or runtime state. It only reports a concrete follow-up improvement when the run produced evidence for one.
 
 ## Local Skill Editing And Review
 
-AI Workspace also supports a contribution loop for skills.
+AI Workspace supports a contribution loop for skills.
 
-A skill can be installed or materialized locally, edited in the workspace, tested against a supported host, and staged as a proposal for a specific target repository. A later explicit submit-for-review action can create or update a pull request. The source repository remains the canonical home of the skill.
+A skill can be installed or materialized locally, edited in the workspace, tested against a supported host, and staged as a proposal for a target repository or Drive library. A later review step promotes the accepted version into the canonical source.
 
-The review and merge process stays with the repository owner:
+The review and merge process stays with the owner:
 
 - personal skills can be reviewed and merged by the user
 - company skills can be reviewed by the appropriate skill owner or team
-- open-source skills can follow the public repository's normal contribution process
+- open-source skills can follow the public repository's normal process
 - unit skills can be reviewed by the owning unit or delegated maintainers
-- project-team skills can be reviewed by the project maintainers
+- project-team skills can be reviewed by project maintainers
 
-This keeps local iteration fast while preserving ownership, review, and canonical versioning in the source repo. AI Workspace should help with the mechanics of editing, validating, packaging, and proposing changes, but it should not bypass the repo's normal review process.
+AI Workspace helps with mechanics: reading, validating, packaging, comparing, proposing, and refreshing. It should not bypass ownership or review.
 
-For private and non-public skills, the near-term maintainer workflow is a Claude Code "skill workshop": maintainers use Claude Code skills, workflows, and commands to update source, validate contracts, build Cowork packages, push through the maintainer or bot identity, and prepare marketplace artifacts on demand. That workflow is for maintainers, not normal Cowork users. Cowork remains the user-facing place to install and use skills, and the richer Cowork edit UX is deferred until the runtime and security model are clean.
+## Extensibility
 
-## Why This Is Extensible
+This repository is not the whole ecosystem. Other repositories can provide additional infrastructure or domain plugins for a person, project team, unit, company, or open-source community.
 
-This repository is not only an analyst plugin repo. It is a platform for adding more repo-backed skills and plugins with the same architecture.
-
-The extensibility model is:
-
-- `core-aiws` stays the shared process foundation
-- `memory-aiws` stays the shared memory foundation
-- each new domain plugin adds only the domain surfaces it actually needs
-
-That means future plugins can follow the same pattern without reinventing the platform:
+Future domain plugins can follow the same pattern:
 
 - `lawyer-aiws`
 - `marketologist-aiws`
 - `product-manager-aiws`
 - other domain-specific plugins
 
-A new plugin should not need to reimplement:
+A new domain plugin should not reimplement the shared foundations:
 
 - SOP
 - self-improvement workflow
 - shared memory contracts
 - project-memory boundaries
+- skill-library validation rules
 
-It should only contribute:
-
-- domain workflows
-- domain agents
-- domain references when needed
-- domain-specific bootstrap and integration guidance when needed
+It should contribute only the domain workflows, references, agents, and integration guidance it actually needs.
 
 ## Install
 
@@ -182,15 +218,15 @@ core-aiws
 aiws-productivity
 ```
 
-Do not install `memory-aiws` for that flow. Skill install, update, edit, test, and staged proposal creation are owned by the internal `core-aiws` skill-management bridge, with editable drafts under `~/.aiws/plugins/` and draft state under `~/.aiws/state/skill-drafts/`. Users stage proposals in Cowork first; a later explicit submit-for-review step can create the maintainer-facing PR.
+Do not install `memory-aiws` for that flow. Skill install, update, edit, test, and staged proposal creation are owned by the internal `core-aiws` skill-management bridge, with editable drafts under `~/.aiws/plugins/` and draft state under `~/.aiws/state/skill-drafts/`.
 
-You can also add additional Claude marketplaces for company, unit, or personal plugin repos. In v1, AIWS trusts marketplaces by the exact identifier Claude records for them. Installed plugins stay in the same local AIWS ecosystem, and plugins that declare shared-memory scopes read from or write to the same canonical `memory-aiws` store.
+You can also add additional Claude marketplaces for company, unit, or personal plugin repos. In v1, AIWS trusts marketplaces by the exact identifier Claude records for them.
 
 ## Memory Helper Setup
 
 This section is not part of the skills-only Cowork flow.
 
-Then install the host helper once:
+Install the host helper once:
 
 ```bash
 pipx install "aiws-host-memory @ git+https://github.com/sashakang/ai-workspace.git@master#subdirectory=aiws-host-memory"
@@ -198,12 +234,13 @@ aiws-host-memory bootstrap
 aiws-host-memory doctor
 ```
 
-Then restart Claude Code if prompted.
+Restart Claude Code if prompted.
+
 If you already installed an older helper build, reinstall it and rerun `bootstrap` so the managed hook is migrated from `Stop` to `SessionEnd`.
 
-If you already installed the marketplace earlier and want the latest plugin state, refresh and reinstall the relevant plugin.
-The helper now bootstraps with only `core-aiws` and `memory-aiws`; optional domain plugins are discovered dynamically when they are installed.
-If you use additional marketplaces, pass them to the helper with repeated `--trusted-marketplace <identifier>` flags so those installed plugins are included in registry bootstrap and any shared-memory imports or outboxes they declare.
+The helper bootstraps with `core-aiws` and `memory-aiws`; optional domain plugins are discovered dynamically when they are installed. If you use additional marketplaces, pass them to the helper with repeated `--trusted-marketplace <identifier>` flags so those installed plugins are included in registry bootstrap and shared-memory imports or outboxes they declare.
+
+Cowork v1 uses the same canonical shared memory that Claude owns under `memory-aiws`. It does not create a second canonical store. `bootstrap-cowork` and `refresh-cowork` attach a Cowork runtime to that Claude-owned memory on the same machine, and `refresh-cowork` rebuilds Cowork imports only.
 
 ## Current State
 
@@ -212,29 +249,31 @@ This platform is installable now as an early alpha.
 What is real today:
 
 - shared process foundation
+- Drive Skill Library service procedures
 - skills-management validation and draft registry contracts
 - shared memory contract layer
-- opt-in analyst and software-engineering domain plugins
+- opt-in analyst, productivity, and software-engineering domain plugins
 - one host-side helper for Claude bootstrap, `SessionEnd` hook setup, shared-memory refresh, and Cowork same-machine imports
 
 What that means in practice:
 
 - the architecture is real
 - the install path is real
-- the analyst and engineering workflows are real
-- the platform is still early and intended to expand with more opt-in domain plugins over time
+- the service-skill procedures are real
+- the domain workflows are real
+- the platform is still early and will expand with more opt-in domain plugins and host-specific adapters
 
 ## Repository Layout
 
 ```text
 ai-workspace/
-├── aiws-host-memory/
-├── core-aiws/
-├── memory-aiws/
-├── aiws-productivity/
-├── data-analysis-aiws/
-├── software-engineer-aiws/
-└── docs/
+|-- aiws-host-memory/
+|-- core-aiws/
+|-- memory-aiws/
+|-- aiws-productivity/
+|-- data-analysis-aiws/
+|-- software-engineer-aiws/
+`-- docs/
 ```
 
 Each plugin is independently installable from the marketplace, but they are developed together because they share contracts and architecture.
@@ -243,34 +282,27 @@ Each plugin is independently installable from the marketplace, but they are deve
 
 Repository path:
 
-`~/Documents/ai-workspace/`
+```text
+/Users/aleksanderkan/projects/ai-workspace
+```
 
 Local runtime testing:
 
 ```bash
 claude \
-  --plugin-dir ~/Documents/ai-workspace/core-aiws \
-  --plugin-dir ~/Documents/ai-workspace/memory-aiws \
-  --plugin-dir ~/Documents/ai-workspace/aiws-productivity \
-  --plugin-dir ~/Documents/ai-workspace/data-analysis-aiws \
-  --plugin-dir ~/Documents/ai-workspace/software-engineer-aiws
+  --plugin-dir /Users/aleksanderkan/projects/ai-workspace/core-aiws \
+  --plugin-dir /Users/aleksanderkan/projects/ai-workspace/memory-aiws \
+  --plugin-dir /Users/aleksanderkan/projects/ai-workspace/aiws-productivity \
+  --plugin-dir /Users/aleksanderkan/projects/ai-workspace/data-analysis-aiws \
+  --plugin-dir /Users/aleksanderkan/projects/ai-workspace/software-engineer-aiws
 ```
 
-The helper can be tested locally from this repo with:
+End users should install through the marketplace, not by cloning or symlinking this repository.
 
-```bash
-pipx install "aiws-host-memory @ git+https://github.com/sashakang/ai-workspace.git@master#subdirectory=aiws-host-memory"
-aiws-host-memory bootstrap
-```
-
-Cowork v1 uses the same canonical shared memory that Claude owns under `memory-aiws`. It does not create a second canonical store. `bootstrap-cowork` and `refresh-cowork` attach a Cowork runtime to that Claude-owned memory on the same machine, and `refresh-cowork` rebuilds Cowork imports only.
-
-End users should install through the marketplace, not by cloning or symlinking the repo.
-
-## Multi-marketplace rules
+## Multi-Marketplace Rules
 
 - `plugin_id` is the logical capability identity inside one local AIWS installation
-- the same `plugin_id` may move between marketplaces over time and AIWS will migrate the runtime state it owns for that logical plugin
+- the same `plugin_id` may move between marketplaces over time, and AIWS migrates the runtime state it owns for that logical plugin
 - if the same `plugin_id` is concurrently installed from more than one trusted marketplace, bootstrap fails until only one active copy remains
 - `memory-aiws` remains one canonical local store in v1, and plugins participate in it only through their declared shared-memory scopes
 
@@ -280,3 +312,4 @@ End users should install through the marketplace, not by cloning or symlinking t
 - [GitHub and rollout strategy](./docs/ai-workspace-github-rollout-strategy.md)
 - [Cowork skills marketplace architecture](./docs/aiws-skills-cowork-marketplace.md)
 - [AIWS testing manual](./docs/aiws-testing-manual.md)
+- [AIWS Skill Library Phase 1 plan](./docs/aiws-skill-library-phase1-plan.md)

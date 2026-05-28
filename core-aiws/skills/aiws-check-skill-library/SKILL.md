@@ -44,6 +44,8 @@ Installed Cowork plugin:
 
 If installed status cannot be checked, report `not verified`; do not omit the section.
 
+End the check by running the self-improvement phase.
+
 ## Boundaries
 
 Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for **Save plugin**, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.

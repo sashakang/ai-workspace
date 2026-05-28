@@ -179,6 +179,8 @@ For `Check <library-display-name>`, always include this section after Drive vali
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 
+End validation by running the self-improvement phase.
+
 ## Self-Improvement Phase
 
 End every validation procedure with a short self-improvement checkpoint. This checkpoint is also read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual validation path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing checks, inconsistent metadata, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.

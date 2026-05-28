@@ -230,6 +230,8 @@ AIWS Drive Skill Library Install: NEEDS RETRY
 
 and give the same short prompt again.
 
+End the install by running the self-improvement phase.
+
 ## Self-Improvement Phase
 
 End every install procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual install path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, missing validation, artifact-card mismatch, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
@@ -254,7 +256,6 @@ Self-improvement:
 ```
 
 Use `READY FOR SAVE` when the plugin card is generated and preflighted but the user has not clicked **Save plugin** yet. Use `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified. If Cowork reports `Plugin validation failed`, do not repeat the same artifact blindly; inspect and report the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and the exact Cowork error text if available.
-
 """
 
 
@@ -417,10 +418,11 @@ Report:
 
 If direct Drive write access is unavailable, provide the exact folder path and file contents for the user or host to save. Do not claim the proposal landed in Drive unless the files were actually written there.
 
+End the proposal by running the self-improvement phase.
+
 ## Self-Improvement Phase
 
 End every proposal procedure with a short self-improvement checkpoint. Do not mutate Drive content, rewrite proposal files, edit canonical skills, rebuild packages, or change plugin state during this checkpoint. Compare the actual proposal path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing metadata, failed Drive writes, unclear maintainer handoff, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
-
 """
 
 
@@ -796,6 +798,8 @@ For `Check <library-display-name>`, always include this section after Drive vali
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 
+End validation by running the self-improvement phase.
+
 ## Self-Improvement Phase
 
 End every validation procedure with a short self-improvement checkpoint. This checkpoint is also read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual validation path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing checks, inconsistent metadata, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
@@ -809,7 +813,6 @@ PYTHONPATH=aiws-mcp python3 -m aiws_mcp validate-skill-library --library-root <l
 ```
 
 Treat the Python command as CI/developer support. The user-facing validation surface is this skill.
-
 """
 
 
@@ -859,6 +862,8 @@ Installed Cowork plugin:
 
 If installed status cannot be checked, report `not verified`; do not omit the section.
 
+End the check by running the self-improvement phase.
+
 ## Boundaries
 
 Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for **Save plugin**, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
@@ -893,7 +898,6 @@ Self-improvement:
 ```
 
 Use `PASS` only if the Drive library shape and all present proposal metadata validate. Installed plugin visibility is reported separately unless the user specifically asked for installed-plugin status as a hard requirement.
-
 """
 
 

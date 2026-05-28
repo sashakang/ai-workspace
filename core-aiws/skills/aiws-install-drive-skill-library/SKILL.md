@@ -99,6 +99,8 @@ AIWS Drive Skill Library Install: NEEDS RETRY
 
 and give the same short prompt again.
 
+End the install by running the self-improvement phase.
+
 ## Self-Improvement Phase
 
 End every install procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual install path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, missing validation, artifact-card mismatch, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
