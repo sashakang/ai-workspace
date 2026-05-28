@@ -6,6 +6,8 @@ This manual exercises the Phase 1 Drive Skill Library path as a 10-step end-to-e
 
 Key principle: AIWS only enters when the user explicitly proposes a change or asks to install/refresh/validate. Local skill authoring and local skill use are plain Cowork operations with no AIWS involvement.
 
+Every AIWS service procedure in this manual ends with a short self-improvement checkpoint. The checkpoint does not mutate Drive, rebuild packages, or edit skills. It names one actionable follow-up improvement when the run exposed confusing wording, bad routing, missing validation, or a recurring manual workaround. If there is no useful follow-up, it says `No self-improvement action identified`.
+
 Demo library:
 
 ```text
@@ -34,7 +36,7 @@ Background canonical skills (not touched by the demo): `morning-briefing`, `slac
 
 ## Preconditions
 
-- AIWS plugin (core-aiws ≥ 0.4.21) is installed in Cowork and reachable.
+- AIWS plugin (core-aiws ≥ 0.4.23) is installed in Cowork and reachable.
 - Google Drive integration is connected and can read the Test Plugin folder.
 - The Drive root folder name is exactly `Test Plugin`.
 - The tester knows how to author a local Cowork user skill (Cowork's native local-skill mechanism). The manual treats the local-skill location as host-defined and does not pin a filesystem path.
@@ -63,6 +65,7 @@ Expected:
   - Cowork reports `test-plugin: not installed`.
   - The local `schedule-summary` user skill is gone.
 - Cowork does NOT delete `skills/morning-briefing/`, `skills/slack-response-triage/`, or `aiws.library.json` under any circumstance.
+- If AIWS handled the reset, the report ends with a self-improvement checkpoint.
 
 If Cowork cannot reach the local Drive sync path on the current host, fall back to manual deletion in the Drive UI for the Drive operations only; Cowork operations (uninstall, remove local skill) are still prompted.
 
@@ -105,6 +108,7 @@ The validation output may also include informational sections that are not pass/
 
 - `Fixes:` — next-step suggestions, e.g., install `test-plugin`. Expected at this stage; not a failure.
 - `Sources:` — Drive links to the validated files. Informational only.
+- `Self-improvement:` — one follow-up improvement or `No self-improvement action identified`.
 
 If any assertion fails, run the Reset procedure and re-run Step 1. Do not proceed to Step 2 until Step 1 passes.
 
@@ -126,6 +130,7 @@ Expected:
 - Report header is `AIWS Drive Skill Library Install: READY FOR SAVE` while waiting for the click, and `PASS` after Cowork accepts.
 - Default `plugin.json` fields when `aiws.library.json` does not specify them: `version=0.1.0`, `author.name` defaults to the active Cowork user's display name (e.g., `Sasha Kang`). Either default may be overridden by an explicit field in `aiws.library.json`.
 - The install report may include a `Sources:` section with Drive links. Informational only.
+- The install report ends with `Self-improvement:` and either a concrete follow-up or `No self-improvement action identified`.
 
 After clicking Save plugin:
 

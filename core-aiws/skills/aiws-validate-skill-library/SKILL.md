@@ -15,6 +15,8 @@ Check the <library-display-name> Drive library and installed plugin status
 Check <library-display-name> Drive library
 ```
 
+For example: `Validate the Test Plugin Drive library and include installed plugin status`.
+
 These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
 
 The shorter `Check <library-display-name>` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
@@ -29,6 +31,8 @@ Proposals/Rejected/
 ```
 
 Do not satisfy `Check <library-display-name>` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
+
+For example, do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy.
 
 For `Check <library-display-name>`, after Drive validation completes, attempt to report installed Cowork plugin visibility when the host exposes it. This is secondary evidence, not the source of truth. If installed status cannot be checked, report `not verified`; do not omit the section.
 
@@ -171,9 +175,13 @@ Installed Cowork plugin:
 
 Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
 
-For `Check <library-display-name>`, always include this section after Drive validation. Use `not verified` when the host cannot expose installed plugin status.
+For `Check <library-display-name>`, always include this section after Drive validation. Always include the `Installed Cowork plugin` section after Drive validation. Use `not verified` when the host cannot expose installed plugin status.
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
+
+## Self-Improvement Phase
+
+End every validation procedure with a short self-improvement checkpoint. This checkpoint is also read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual validation path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing checks, inconsistent metadata, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
 
 ## Developer Check
 

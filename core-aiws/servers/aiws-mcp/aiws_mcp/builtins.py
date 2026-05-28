@@ -18,25 +18,114 @@ Core rules:
 
 AIWS_IMPROVE_SKILL = """---
 name: aiws-improve
-description: Analyze local AIWS signals and stage process, skill, or protocol improvement proposals.
+description: Analyze accumulated user signals and propose improvements to workspace instructions, agents, skills, and hooks
 ---
 
-# AIWS Self-Improvement
+# Batch Self-Improvement Analysis
 
-Use this skill when the user asks to analyze accumulated local signals and improve AIWS behavior.
+This is the shared `aiws-improve` capability owned by `core-aiws`.
 
-This MCP-first version reads from local AIWS surfaces under `~/.aiws/`, MCP skill/catalog resources, current conversation context, and user-supplied evidence. It may propose changes to skills, protocols, prompts, adapter behavior, or documentation.
+Gathers accumulated signals from multiple sources, synthesizes patterns, then runs the unified [Self-Improvement Protocol](../../protocols/self-improvement.md) in batch mode.
 
-## Boundaries
+**Scope**: This skill is responsible only for evidence gathering and synthesis (Phases 1-3). All decision rules for prompt, skill, protocol, and workflow improvement live in the protocol — do not duplicate them here. Shared-memory refresh is not owned by this skill.
 
-- Do not upload personal skills, memory, transcripts, or staged evidence.
-- Do not directly mutate shared, unit, company, or public skills.
-- Do not assume installed plugin registries or helper-managed plugin data paths.
-- Stage proposed skill changes locally before any future shared review flow.
+`aiws-improve` is the canonical AIWS capability identity. Hosts may expose it as a slash command, a skill, an MCP prompt, or another native UI affordance. Do not assume `/aiws-improve` is available unless the current host advertises slash-command exposure.
 
-## Output
+---
 
-Present a concise evidence summary, proposed target, rationale, and the smallest useful change. If the user approves staging, use the AIWS skill-change staging flow.
+## Phase 1: Gather Batch Evidence
+
+Resolve host evidence surfaces first. Prefer the AIWS host evidence contract, for example `aiws.host.surfaces` when exposed by the local MCP runtime. Read all available logical surfaces and skip any that the current host does not provide:
+
+1. **Observations**: host-provided structured correction, frustration, give-up, positive, and improvement markers. Find the most recent `improve_run` marker as cutoff when markers exist.
+2. **Project notes or daily logs**: host-provided project memory or session notes for today and yesterday when available.
+3. **Session history and transcripts**: host-provided current or recent interaction history when available.
+4. **Installed contracts and skill catalog**: host-provided plugin contracts, skill manifests, or AIWS catalog resources.
+5. **Current conversation context**.
+
+Present evidence summary:
+
+```
+## Evidence Summary (since last aiws-improve run)
+
+**Observations** (from hook signals):
+| Signal Type   | Count |
+|---------------|-------|
+| correction    | N     |
+| frustration   | N     |
+| give_up       | N     |
+| positive      | N     |
+
+**Other sources**: N project notes, N session histories reviewed, N installed contracts or manifests reviewed
+- Unique sessions: N
+- Unique projects: N
+- Date range: YYYY-MM-DD to YYYY-MM-DD
+```
+
+If no evidence exists from any source, report "No new signals to analyze" and stop.
+
+---
+
+## Phase 2: Transcript Deep-Dive
+
+For each **high-severity** observation (correction, frustration, give_up):
+
+1. Resolve the related transcript or session context through the host-provided evidence surface when available. If the host provides only a summary, or no transcript surface at all, continue from the observation summary and current context, and mark the missing transcript as an evidence gap.
+2. Find context: what was the host agent doing? What did the user ask? Where did it go wrong?
+3. Identify root cause: missing rule, bad agent prompt, wrong default, process friction, tool discovery, architecture insight
+
+Present findings:
+```
+### Finding: <obs_id> (<type>, <date>)
+**User said**: "<message excerpt>"
+**Context**: <what the host agent was doing>
+**Root cause**: <category> - <specific explanation>
+**Target**: <file path> : <section/line>
+```
+
+---
+
+## Phase 3: Pattern Synthesis
+
+Group findings by root cause across sessions:
+- Same correction across multiple sessions → missing rule
+- Same frustration pattern → process issue
+- Positive patterns → reinforce what works
+
+Present:
+```
+### Pattern: <descriptive name>
+- Sessions: <list of session dates>
+- Root cause: <category>
+- Evidence: "<quote 1>", "<quote 2>"
+- Target file: <path>
+- Confidence: HIGH/MEDIUM (see protocol rules)
+```
+
+---
+
+## Phase 4: Run Self-Improvement Protocol
+
+Follow the [Self-Improvement Protocol](../../protocols/self-improvement.md) in batch mode with the synthesized findings from Phase 3 as input. Start from Step 3 (Categorize and Decide) — Steps 1-2 are skipped in batch mode. Use the synthesized patterns from Phase 3 as input to Step 3's categorization; formal Learning Entry Format is applied in Step 4.2.
+
+Do not treat `aiws-improve` as the routine shared-memory consolidation trigger. Shared-memory candidate capture happens during end-of-task auto-capture, and shared-memory refresh is handled automatically by the host-side shared-memory bridge.
+
+---
+
+## Phase 5: Update Observation Log
+
+After protocol completion:
+
+1. Append an `improve_run` marker to the host-provided writable observation or improvement-marker surface, if one exists:
+   ```json
+   {"id":"imp_<8-char-hex>","ts":"<ISO timestamp>","type":"improve_run","severity":"info","message":"Processed observations up to <latest_obs_id>"}
+   ```
+
+2. For each applied change, append a verification entry to the same host-provided marker surface, if one exists:
+   ```json
+   {"id":"verify_<8-char-hex>","ts":"<ISO timestamp>","type":"improvement_applied","severity":"info","message":"Applied: <brief description>. Monitor for recurrence."}
+   ```
+
 """
 
 
@@ -49,19 +138,37 @@ description: Package a Google Drive Skill Library as a Cowork Save plugin artifa
 
 Use this skill when a user wants to install a Google Drive Skill Library in Cowork as a plugin-like container.
 
-This is not a direct remote-install API. In Cowork, the working path is: read the Drive folder with the Google Drive integration, collect `skills/<skill-id>/SKILL.md`, package those skills into one plugin artifact with a plugin manifest, and present a single **Save plugin** card to the user. Do not stop after producing individual **Save skill** cards.
+This is not a direct remote-install API. In Cowork, the working path is:
+
+1. read the Drive folder with the Google Drive integration
+2. collect `skills/<skill-id>/SKILL.md`
+3. package those skills into one plugin artifact with a plugin manifest
+4. present a single **Save plugin** card to the user
+
+Do not stop after producing individual **Save skill** cards.
 
 This flow is not an AIWS marketplace workflow. Do not call, register, inspect, or repair `aiws.marketplaces.*`, `drive_workflow`, `export_cowork_bridge`, or any marketplace registry while installing a Drive Skill Library. A flat `skills/<skill-id>/SKILL.md` Drive folder is valid even if AIWS marketplace indexing would return no results.
 
-Do not tell the user that a `test-plugin` marketplace is empty or missing. Do not mention marketplace in the normal install report. The user-facing objects are Drive Skill Library, Cowork plugin artifact, Save plugin card, and installed plugin/container.
+Do not tell the user that a `<plugin-id>` marketplace is empty or missing. Do not mention marketplace in the normal install report. The user-facing objects are:
+
+- Drive Skill Library
+- Cowork plugin artifact
+- Save plugin card
+- installed plugin/container
+
+## Input
+
+Collect the Google Drive folder URL.
+
+## Package And Install
 
 If already running inside Cowork, treat the current user request as the install request. Do not tell the user to run another prompt in the same Cowork session.
 
 Use the Google Drive integration to read the folder URL, then package the library into one Cowork plugin artifact:
 
-- plugin display name: the Drive root folder name, for example `Test Plugin`
-- plugin id: a stable slug derived from the Drive root folder name, for example `test-plugin`
-- skills: every `skills/<skill-id>/SKILL.md`
+- plugin display name: the Drive root folder name (`<library-display-name>`)
+- plugin id: a stable slug derived from the Drive root folder name (`<plugin-id>`)
+- skills: every `skills/<skill-id>/SKILL.md` actually present in the Drive folder
 - ignored as runtime skills: `Proposals/`, `aiws.library.json`, `aiws.skills/`, and any proposal metadata
 
 The plugin artifact must be a zip-compatible Cowork plugin package with files at the archive root:
@@ -74,9 +181,23 @@ skills/<skill-id>/SKILL.md
 
 The artifact is a plugin artifact, not a `.skill` artifact. Name and present it as a `.plugin` file/card so Cowork routes it to the plugin installer. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Drive Skill Library Install: NEEDS RETRY`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
 
-For `Test Plugin`, use `plugin-id` `test-plugin`. The manifest must include `name`, `description`, `version`, and `author.name`. The contract must include `plugin_id`, `version`, and `public_skills` listing exactly the packaged skill folder ids. Do not put files under an extra top-level wrapper folder inside the archive.
+Derive `<plugin-id>` as a stable slug from `<library-display-name>` (lowercase, hyphenated). The manifest must include `name`, `description`, `version`, and `author.name`. The contract must include `plugin_id`, `version`, and `public_skills` listing exactly the packaged skill folder ids. Do not put files under an extra top-level wrapper folder inside the archive.
 
-Before presenting the **Save plugin** card, inspect the generated archive and verify `.claude-plugin/plugin.json`, `contracts/test-plugin.contract.json`, and the packaged `skills/<skill-id>/SKILL.md` files exist at archive root, no wrapper folder exists, manifest and contract ids/versions match, contract `public_skills` equals the packaged skill folder ids, each `SKILL.md` has only `name` and `description` frontmatter, each skill name exactly matches its folder id, and each skill body is non-empty. If any preflight check fails, do not present the card; fix the artifact or report `AIWS Drive Skill Library Install: FAIL` with the exact failing file and field.
+Before presenting the **Save plugin** card, inspect the generated archive and verify:
+
+- `.claude-plugin/plugin.json` exists at archive root
+- `contracts/<plugin-id>.contract.json` exists at archive root
+- every `skills/<skill-id>/SKILL.md` from the actual Drive folder exists at archive root (data-driven from the Drive listing — do not hard-code skill ids)
+- no entry starts with `<plugin-id>/`, `<library-display-name>/`, or another wrapper folder
+- `plugin.json.name` equals the derived `<plugin-id>`
+- `plugin.json.version` is a non-empty semver-like string
+- contract `plugin_id` and `version` match `plugin.json`
+- contract `public_skills` equals the packaged skill folder ids
+- each packaged `SKILL.md` has only `name` and `description` frontmatter
+- each packaged `SKILL.md` frontmatter `name` exactly matches its folder id
+- each packaged `SKILL.md` has a non-empty body
+
+If any preflight check fails, do not present the **Save plugin** card. Fix the artifact or report `AIWS Drive Skill Library Install: FAIL` with the exact failing file and field.
 
 Do not register the Drive folder as a marketplace. Do not search AIWS marketplaces for it. Do not use missing marketplace search results as evidence that the Drive folder cannot be packaged.
 
@@ -93,9 +214,47 @@ Do not ask the user to type longer instructions. Do not say "install as standalo
 
 If the current host cannot read the Drive folder or cannot produce a **Save plugin** artifact, report `NEEDS MANUAL ACTION` and provide the exact fallback prompt above.
 
-After the Save plugin step or manual install, verify that the Drive folder appears as a plugin/container, skills appear under that plugin/container, and proposal folders are not installed as runnable skills.
+## Verify
 
-Report `AIWS Drive Skill Library Install: READY FOR SAVE`, `PASS`, `FAIL`, `NEEDS RETRY`, or `NEEDS MANUAL ACTION`. Use `READY FOR SAVE` when the plugin card is generated and preflighted but the user has not clicked **Save plugin** yet. Use `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified. If Cowork reports `Plugin validation failed`, inspect and report the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and exact Cowork error text if available.
+After the Save plugin step or manual install, verify:
+
+- the Drive folder appears as a plugin/container
+- the skills appear under that plugin/container
+- proposal folders such as `Proposals/Submitted`, `Proposals/Approved`, and `Proposals/Rejected` are not installed as runnable skills
+
+If Cowork installed only loose skills, report:
+
+```text
+AIWS Drive Skill Library Install: NEEDS RETRY
+```
+
+and give the same short prompt again.
+
+## Self-Improvement Phase
+
+End every install procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual install path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, missing validation, artifact-card mismatch, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+
+## Output
+
+Report:
+
+```text
+AIWS Drive Skill Library Install: READY FOR SAVE|PASS|FAIL|NEEDS RETRY|NEEDS MANUAL ACTION
+
+Drive folder:
+Install prompt:
+Plugin artifact generated: PASS|FAIL|NEEDS MANUAL ACTION
+Plugin artifact layout valid: PASS|FAIL|not verified
+Plugin artifact preflight: PASS|FAIL|not verified
+Save plugin completed: PASS|FAIL|not verified
+Plugin/container visible: PASS|FAIL|not verified
+Skills visible under plugin/container: PASS|FAIL|not verified
+Proposal folders ignored as skills: PASS|FAIL|not verified
+Self-improvement:
+```
+
+Use `READY FOR SAVE` when the plugin card is generated and preflighted but the user has not clicked **Save plugin** yet. Use `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified. If Cowork reports `Plugin validation failed`, do not repeat the same artifact blindly; inspect and report the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and the exact Cowork error text if available.
+
 """
 
 
@@ -106,40 +265,124 @@ description: Prepare a Drive Skill Library proposal from an edited SKILL.md.
 
 # AIWS Skill Library Proposal
 
-Use this skill when a user wants to propose an update to a skill stored in an AIWS Skill Library.
+Use this skill when a user wants to propose an update to a skill stored in an AIWS Skill Library, especially a Google Drive library shaped as:
 
-Short human prompts are enough: `propose a meeting-followup update for Test Plugin`, `propose this meeting-followup change for Test Plugin: change the marker line to > meeting-followup update`, and `submit a morning-briefing proposal for Test Plugin`.
+```text
+<Library root>/
+  skills/
+    <skill-id>/
+      SKILL.md
+  Proposals/
+    Submitted/
+      <skill-id>/
+        <proposal-id>/
+          SKILL.md
+          aiws.proposal.json
+```
+
+The goal is to place a proposed replacement `SKILL.md` in the library's proposal area without changing the canonical skill file.
+
+Short human prompts are enough (replace `<library-display-name>` and `<skill-id>` with the user's actual library and skill names):
+
+```text
+propose a <skill-id> update for <library-display-name>
+propose this <skill-id> change for <library-display-name>: <plain-language change description>
+submit a <skill-id> proposal for <library-display-name>
+```
+
+For example: `propose a meeting-followup update for Test Plugin`.
 
 These prompts mean: find the Drive Skill Library, read the canonical skill, collect or infer the proposed change, and write a proposal under `Proposals/Submitted/`. Do not interpret them as a request to edit canonical `skills/<skill-id>/SKILL.md`.
 
-First action should be locating and reading the Drive Skill Library contents directly: `<Drive root>/skills/<skill-id>/SKILL.md`.
+## Boundaries
+
+First action should be locating and reading the Drive Skill Library contents directly:
+
+```text
+<Drive root>/skills/<skill-id>/SKILL.md
+```
 
 Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library proposal path.
 
-Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `test-plugin` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to proposal submission.
+Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `<plugin-id>` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to proposal submission.
 
 Do not create drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, create plugin manifests, upload ZIPs, rebuild Cowork packages, or change marketplace registrations.
 
-Prepare a proposed replacement `SKILL.md` under:
+## Inputs
+
+Collect or infer:
+
+- library display name (`<library-display-name>`)
+- library id, if known
+- library root location or Drive folder link, if available
+- skill id
+- edited `SKILL.md` content or path
+- proposer name or account, if available
+- short reason for the change
+
+If a value is missing but not required to write the proposal, use `unspecified` in metadata rather than blocking.
+
+Ask for missing information only when the proposal cannot be written safely. Prefer one concise question over a multi-step form.
+
+## Validate First
+
+Use `aiws-validate-skill-library` before preparing the proposal. Do not duplicate its validation checklist here. If validation fails, report the concrete issue and stop.
+
+## Proposal ID
+
+Use a stable, readable proposal id:
+
+```text
+proposal-YYYY-MM-DD-<short-topic>
+```
+
+Normalize `<short-topic>` to lowercase letters, digits, and hyphens. If no topic is obvious, use `skill-update`.
+
+If the destination already exists, append `-2`, `-3`, and so on instead of overwriting another proposal.
+
+## Write Target
+
+Prepare these files:
 
 ```text
 Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
 Proposals/Submitted/<skill-id>/<proposal-id>/aiws.proposal.json
 ```
 
-Do not edit the canonical file at `skills/<skill-id>/SKILL.md`; only a maintainer changes canonical skill content.
+Do not edit:
 
-Ask for missing information only when the proposal cannot be written safely. Prefer one concise question over a multi-step form.
+```text
+skills/<skill-id>/SKILL.md
+```
 
-After writing the proposal, give the maintainer a simple local Markdown diff path. Do not rely on Google Docs compare. Recommend VS Code/VSCodium (`code --diff skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`) or Meld (`meld skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md`). If the files are only in Google Drive, tell the maintainer to open or sync local copies first. After review, the maintainer applies accepted changes directly to `skills/<skill-id>/SKILL.md`. Moving or copying the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` is optional recordkeeping, not a required gate.
+Only a maintainer changes the canonical file at `skills/<skill-id>/SKILL.md`. The maintainer may optionally move or copy the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` for recordkeeping, but those archive folders are not required for the normal update path.
 
-## Validate First
+## Maintainer Review Handoff
 
-Use `aiws-validate-skill-library` before preparing the proposal. Do not duplicate its validation checklist here. If validation fails, report the concrete issue and stop.
+After writing the proposal, give the maintainer a simple local Markdown diff path. Do not rely on Google Docs compare.
 
-## Metadata
+Recommended free tools:
 
-Create `aiws.proposal.json` with factual metadata:
+- VS Code or VSCodium:
+  ```text
+  code --diff skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
+  ```
+- Meld:
+  ```text
+  meld skills/<skill-id>/SKILL.md Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
+  ```
+
+If the files are only in Google Drive, tell the maintainer to open or sync local copies of the canonical `SKILL.md` and proposed `SKILL.md`, then compare those two files. After review, the maintainer applies accepted changes directly to:
+
+```text
+skills/<skill-id>/SKILL.md
+```
+
+The maintainer may then optionally move or copy the proposal folder to `Proposals/Approved/<skill-id>/<proposal-id>/` or `Proposals/Rejected/<skill-id>/<proposal-id>/` for recordkeeping.
+
+## Proposal Metadata
+
+Write `aiws.proposal.json` as JSON:
 
 ```json
 {
@@ -157,7 +400,27 @@ Create `aiws.proposal.json` with factual metadata:
 }
 ```
 
+Keep metadata factual. Do not include private transcript text, credentials, or hidden runtime state.
+
+## Output
+
+Report:
+
+- proposal id
+- skill id
+- files written or files prepared
+- maintainer review path under `Proposals/Submitted/`
+- local diff command for VS Code/VSCodium or Meld
+- canonical update path under `skills/<skill-id>/SKILL.md`
+- optional archive paths under `Proposals/Approved/` and `Proposals/Rejected/`
+- explicit note that the canonical skill was not changed
+
 If direct Drive write access is unavailable, provide the exact folder path and file contents for the user or host to save. Do not claim the proposal landed in Drive unless the files were actually written there.
+
+## Self-Improvement Phase
+
+End every proposal procedure with a short self-improvement checkpoint. Do not mutate Drive content, rewrite proposal files, edit canonical skills, rebuild packages, or change plugin state during this checkpoint. Compare the actual proposal path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing metadata, failed Drive writes, unclear maintainer handoff, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+
 """
 
 
@@ -170,17 +433,51 @@ description: Verify and refresh a Drive Skill Library after maintainer-applied c
 
 Compatibility alias for `aiws-refresh-skill-library`. Prefer the user-facing verb "refresh" for this lifecycle.
 
-Use this skill after a maintainer has reviewed a submitted Drive Skill Library proposal and directly applied the accepted changes to canonical `skills/<skill-id>/SKILL.md`.
+Use this skill after a maintainer has reviewed a submitted Drive Skill Library proposal and directly applied the accepted changes to canonical:
+
+```text
+skills/<skill-id>/SKILL.md
+```
 
 This skill verifies the maintainer-applied update and guides Cowork refresh/reinstall. It is not a review workflow and does not approve proposals.
 
-Treat short human prompts as sufficient. `update Test Plugin skill library`, `refresh Test Plugin`, and `update meeting-followup in Test Plugin skill library` mean verify/refresh the library by default. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If a proposal folder is present and canonical already matches it, report that canonical is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall. If installed Cowork content already matches Drive canonical content, report that no rebuild is required.
+## Natural User Prompts
+
+Treat short human prompts as sufficient. Examples (replace `<library-display-name>` and `<skill-id>` with the user's actual library and skill names):
+
+```text
+update <library-display-name> skill library
+refresh <library-display-name>
+update <skill-id> in <library-display-name> skill library
+```
+
+For example: `update Test Plugin skill library`.
+
+For these prompts, verify/refresh the library by default. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If the skill id is named in the prompt, use it. If only the library is named, inspect the library and verify all changed or available skills.
+
+If a proposal folder is present and canonical already matches it, report that the canonical file is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall. If installed Cowork content already matches Drive canonical content, report that no rebuild is required.
 
 ## Boundaries
 
-Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer explicitly asks for apply mode. If apply mode is explicitly requested, it is allowed only from `Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md` and must refuse `Proposals/Submitted/`, `Proposals/Rejected/`, and flat legacy `Proposals/<skill-id>/<proposal-id>/` paths.
+Do not judge content quality, approve proposals, or resolve disagreements. Maintainer review happens before this skill runs, normally by comparing local Markdown copies of the canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld.
 
-Do not judge content quality, approve proposals, resolve disagreements, apply runtime artifacts, rewrite metadata, create plugin manifests, run scripts, build packages, upload ZIPs, export bridges, create GitHub pull requests, or change marketplaces. Maintainer review happens before this skill runs, normally by comparing local Markdown copies of the canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld.
+Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer explicitly asks for apply mode. The normal path is verification after the maintainer has already edited the canonical file.
+
+If the maintainer explicitly asks this skill to apply a proposal automatically, apply mode is allowed only from:
+
+```text
+Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md
+```
+
+Apply mode must refuse:
+
+```text
+Proposals/Submitted/
+Proposals/Rejected/
+Proposals/<skill-id>/<proposal-id>/
+```
+
+Do not apply runtime artifacts, metadata rewrites, plugin manifests, scripts, packages, ZIPs, bridge exports, GitHub pull requests, or marketplace changes.
 
 ## Workflow
 
@@ -190,12 +487,34 @@ Do not judge content quality, approve proposals, resolve disagreements, apply ru
 4. Use `aiws-validate-skill-library` to validate the library and proposal structure.
 5. Refresh Cowork reimport of the Drive skill library, following `aiws-refresh-skill-library` semantics: compare installed Cowork plugin content when available, report no rebuild required if installed content matches Drive, and rebuild/preflight/present a **Save plugin** card when installed content differs or cannot be verified. A `.skill` artifact or **Save skill** card is a retry/failure state, not a valid refresh. Guide manual reinstall only when the current host cannot read Drive, build the artifact, preflight it, or present the **Save plugin** card.
 6. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
+7. Run the self-improvement phase.
 
 If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
 
+## Self-Improvement Phase
+
+End every update procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual update path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, unclear approval evidence, stale installed state, missing verification, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+
 ## Output
 
-Report `AIWS Skill Library Update: PASS`, `FAIL`, `READY FOR SAVE`, `NEEDS RETRY`, or `NEEDS MANUAL ACTION`, including library, skill, submitted proposal path if provided, canonical verification status, library validation status, Cowork refresh/import status, and skill invocation status. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Do not fail a successful update/refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+Report:
+
+```text
+AIWS Skill Library Update: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
+
+Library:
+Skill:
+Proposal:
+Submitted proposal path:
+Canonical SKILL.md verified: PASS|FAIL|NEEDS MANUAL ACTION
+Library validation: PASS|FAIL
+Cowork refresh/import: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
+Skill invocation: PASS|FAIL|not verified|optional
+Self-improvement:
+```
+
+Use `PASS` when the canonical file update is verified, library validation passes after the update, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` when the maintainer or host must perform a Drive copy or when the current host cannot read Drive, build the artifact, preflight it, or present the **Save plugin** card. Do not fail a successful update/refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+
 """
 
 
@@ -208,15 +527,31 @@ description: Refresh a Cowork-installed Drive Skill Library after Drive changed.
 
 Use this skill when a user wants Cowork to pick up changes that are already in a Google Drive Skill Library.
 
-Short human prompts are enough: `refresh Test Plugin`, `sync Test Plugin from Drive`, and `refresh meeting-followup in Test Plugin`.
+Short human prompts are enough (replace `<library-display-name>` and `<skill-id>` with the user's actual library and skill names):
+
+```text
+refresh <library-display-name>
+sync <library-display-name> from Drive
+refresh <skill-id> in <library-display-name>
+```
+
+For example: `refresh Test Plugin`.
 
 These prompts mean: the Drive library is the source of truth, and Cowork should verify the Drive files, rebuild or reinstall the plugin artifact if needed, and confirm the installed skill behavior. Do not interpret these prompts as a request to edit or improve the skill content.
 
-If the user says `update Test Plugin skill library`, treat it as refresh/sync unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content.
+If the user says `update <library-display-name> skill library`, treat it as refresh/sync unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content.
 
-First action must be reading the Google Drive folder contents directly: `<Drive root>/skills/<skill-id>/SKILL.md`. Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, or activation tools. Those are not part of the Phase 1 Drive Skill Library refresh path.
+## Boundaries
 
-Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `test-plugin` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to Drive Skill Library refresh.
+First action must be reading the Google Drive folder contents directly:
+
+```text
+<Drive root>/skills/<skill-id>/SKILL.md
+```
+
+Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, or activation tools. Those are not part of the Phase 1 Drive Skill Library refresh path.
+
+Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `<plugin-id>` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to Drive Skill Library refresh.
 
 Do not judge content quality, approve proposals, or resolve disagreements. Maintainer review happens before refresh, normally by comparing local Markdown copies of canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld.
 
@@ -226,11 +561,57 @@ If an Approved proposal is present and canonical already matches it, report that
 
 Do not call AIWS marketplace tools, create or open drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations. Do not use marketplace or materialization results as evidence for or against refresh.
 
-Refresh compares the Drive Skill Library root against the installed Cowork plugin when installed content is available. If installed content already matches Drive canonical content, report that no rebuild is required. If installed content differs, installed visibility is missing, or installed content cannot be confirmed, rebuild the whole Cowork plugin artifact from the Drive root and present a single **Save plugin** card in the current Cowork session. Fall back to manual reinstall guidance only when the host cannot read Drive, cannot build the artifact, or cannot present the **Save plugin** card. For `Test Plugin`, preserve plugin id `test-plugin` and display name `Test Plugin`. Do not generate per-skill plugin identities such as `test-plugin--meeting-followup`. Do not report that a missing `plugins/` folder blocks refresh; a flat `skills/<skill-id>/SKILL.md` Drive folder is the expected Phase 1 source shape.
+Refresh compares the Drive Skill Library root against the installed Cowork plugin when installed content is available. If installed content already matches Drive canonical content, report that no rebuild is required. If installed content differs, installed visibility is missing, or installed content cannot be confirmed, rebuild the whole Cowork plugin artifact from the Drive root and present a single **Save plugin** card in the current Cowork session. Fall back to manual reinstall guidance only when the host cannot read Drive, cannot build the artifact, or cannot present the **Save plugin** card.
 
-Workflow: identify the Drive Skill Library, verify named skill or all skills in `skills/`, confirm canonical `SKILL.md` exists and validates, compare Submitted or Approved proposals only as evidence when present, use `aiws-validate-skill-library`, compare installed Cowork plugin content when available, report no rebuild required if installed content matches Drive, otherwise rebuild the whole Cowork plugin artifact from the Drive library root while preserving plugin id `test-plugin` for `Test Plugin`, run the same artifact preflight as `aiws-install-drive-skill-library`, present exactly one **Save plugin** card for a `.plugin` artifact when rebuild is needed and preflight passes, and verify installed plugin/container when possible. If Cowork produced a `.skill` artifact or **Save skill** card, report `NEEDS RETRY` or `FAIL` and repackage as a plugin artifact. Use manual reinstall guidance only if Drive access, artifact creation, artifact preflight, or **Save plugin** presentation is unavailable in the current host. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
+Any rebuilt artifact identity must remain stable across refreshes for the same library:
 
-Report `AIWS Skill Library Refresh: PASS`, `FAIL`, `READY FOR SAVE`, `NEEDS RETRY`, or `NEEDS MANUAL ACTION`, including library, skills, canonical verification, proposal sync evidence, library validation, Cowork refresh/reinstall, and skill invocation. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` only when the current host cannot complete Drive read, artifact build, preflight, or **Save plugin** presentation. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+```text
+plugin id: <plugin-id>          (the stable slug derived from <library-display-name>)
+plugin display name: <library-display-name>
+```
+
+Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. Do not report that a missing `plugins/` folder blocks refresh; a flat `skills/<skill-id>/SKILL.md` Drive folder is the expected Phase 1 source shape.
+
+## Workflow
+
+1. Identify the Drive Skill Library by display name (`<library-display-name>`).
+2. If a skill id is named, verify that skill; otherwise verify all skills in `skills/`.
+3. Confirm canonical `skills/<skill-id>/SKILL.md` exists and validates.
+4. If Submitted or Approved proposal folders are present, compare them only as evidence; do not require them.
+5. Use `aiws-validate-skill-library` to validate the library and proposal structure.
+6. Compare the installed Cowork plugin content when available.
+7. If installed content matches Drive, report no rebuild required.
+8. If installed content differs or cannot be verified, rebuild the whole Cowork plugin artifact from the Drive library root, preserving the stable `<plugin-id>` derived from `<library-display-name>`.
+9. Before presenting the **Save plugin** card, run the same artifact preflight as `aiws-install-drive-skill-library`: verify `.claude-plugin/plugin.json`, `contracts/<plugin-id>.contract.json`, every packaged `skills/<skill-id>/SKILL.md`, no wrapper folder, matching manifest/contract ids and versions, exact `public_skills`, portable skill frontmatter, matching skill folder names, and non-empty skill bodies.
+10. Present exactly one **Save plugin** card when rebuild is needed and preflight passes. Do not send the user to plugin management first if the current Cowork session can present the card.
+11. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Skill Library Refresh: NEEDS RETRY` or `FAIL`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
+12. Use manual reinstall guidance only if Drive access, artifact creation, artifact preflight, or **Save plugin** presentation is unavailable in the current host.
+13. Verify the installed plugin/container when possible. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
+14. Run the self-improvement phase.
+
+## Self-Improvement Phase
+
+End every refresh procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual refresh path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, stale installed state, missing verification, artifact-card mismatch, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+
+## Output
+
+Report:
+
+```text
+AIWS Skill Library Refresh: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
+
+Library:
+Skill(s):
+Canonical SKILL.md verified: PASS|FAIL
+Proposal sync evidence: PASS|FAIL|not present
+Library validation: PASS|FAIL
+Cowork refresh/reinstall: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
+Skill invocation: PASS|FAIL|not verified|optional
+Self-improvement:
+```
+
+Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` only when the current host cannot complete Drive read, artifact build, preflight, or **Save plugin** presentation. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+
 """
 
 
@@ -243,15 +624,36 @@ description: Validate an AIWS Skill Library folder and report concrete fixes.
 
 Use this skill when a user wants to check whether a Drive Skill Library is ready for Cowork import, maintainer review, or cross-host use.
 
-Reliable human prompts are: `Validate the Test Plugin Drive library and include installed plugin status`, `Check the Test Plugin Drive library and installed plugin status`, and `Check Test Plugin Drive library`. The shorter `Check Test Plugin` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
+Reliable human prompts are (replace `<library-display-name>` with the user's actual library name):
+
+```text
+Validate the <library-display-name> Drive library and include installed plugin status
+Check the <library-display-name> Drive library and installed plugin status
+Check <library-display-name> Drive library
+```
+
+For example: `Validate the Test Plugin Drive library and include installed plugin status`.
 
 These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
 
-For `Check Test Plugin`, the Drive folder is the source of truth. Start with the Drive library root and read `skills/<skill-id>/SKILL.md`, `Proposals/Submitted/`, `Proposals/Approved/`, and `Proposals/Rejected/`. Do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
+The shorter `Check <library-display-name>` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
 
-For `Check Test Plugin`, after Drive validation completes, attempt to report installed Cowork plugin visibility when the host exposes it. This is secondary evidence, not the source of truth. If installed status cannot be checked, report `not verified`; do not omit the section.
+For `Check <library-display-name>`, the Drive folder is the source of truth. Start with the Drive library root and read:
 
-Validate a skill-first library shaped as:
+```text
+skills/<skill-id>/SKILL.md
+Proposals/Submitted/
+Proposals/Approved/
+Proposals/Rejected/
+```
+
+Do not satisfy `Check <library-display-name>` by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
+
+For example, do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy.
+
+For `Check <library-display-name>`, after Drive validation completes, attempt to report installed Cowork plugin visibility when the host exposes it. This is secondary evidence, not the source of truth. If installed status cannot be checked, report `not verified`; do not omit the section.
+
+Phase 1 validates a skill-first library, not a packaged plugin marketplace:
 
 ```text
 <Library root>/
@@ -260,9 +662,19 @@ Validate a skill-first library shaped as:
       SKILL.md
 ```
 
-Optional AIWS metadata may exist at the library root: `aiws.library.json`, `aiws.skills/`, and `Proposals/`.
+Optional AIWS metadata may exist at the library root:
 
-## Required Checks
+```text
+aiws.library.json
+aiws.skills/
+Proposals/
+```
+
+## Validation Checklist
+
+### Required Library Shape
+
+Check:
 
 1. The library has a `skills/` directory.
 2. Each skill lives at `skills/<skill-id>/SKILL.md`.
@@ -273,37 +685,131 @@ Optional AIWS metadata may exist at the library root: `aiws.library.json`, `aiws
 7. Frontmatter `description` is nonempty.
 8. The skill body is nonempty.
 
-Fail validation if the library requires plugin runtime artifacts such as `.claude-plugin/plugin.json`, `contracts/`, or `.mcp.json`.
+### Phase 1 Boundaries
 
-This skill is read-only. Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for Save plugin, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
+Fail validation if the library requires plugin runtime artifacts:
+
+```text
+.claude-plugin/plugin.json
+contracts/
+.mcp.json
+```
+
+Runtime capability artifacts like MCP servers, connectors, auth config, scripts, packaged plugins, ZIP uploads, and host tools are outside Phase 1 Skill Library mode.
+
+### Read-Only Boundaries
+
+This skill is read-only. Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for **Save plugin**, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
 
 First action must be reading the Drive Skill Library source, not the installed plugin copy. Installed plugin inspection may happen only after Drive canonical skills and proposal folders have been checked.
 
 Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library check path.
 
-Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `test-plugin` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to checking a Drive Skill Library.
+Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `<plugin-id>` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to checking a Drive Skill Library.
 
-If proposals exist, validate `Proposals/Submitted/<skill-id>/<proposal-id>/`, `Proposals/Approved/<skill-id>/<proposal-id>/`, and `Proposals/Rejected/<skill-id>/<proposal-id>/`. Confirm each proposal includes `SKILL.md` and `aiws.proposal.json` and points back to `skills/<skill-id>/SKILL.md`.
+### Optional AIWS Metadata
 
-Reject flat legacy proposal paths such as `Proposals/<skill-id>/<proposal-id>/`.
+If `aiws.library.json` exists, check:
 
-## Output
+- it is valid JSON
+- `kind` is absent or `aiws.skill_library`
+- `id` is lowercase letters, digits, and hyphens
+- `display_name`, if present, is text
+- `source.kind` is `google_drive` for Phase 1
+- for `google_drive`, `source.folder_id` is present if known
 
-Report `AIWS Skill Library Validation: PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Include concrete fixes for every failure.
+If `aiws.skills/*.json` exists, check each file:
 
-When installed plugin status is available, include it as a separate `Installed Cowork plugin` section. Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
+- `kind` is absent or `aiws.skill`
+- `id` matches the filename stem
+- `id` references an existing `skills/<id>/SKILL.md`
+- `source_path` points to `skills/<id>/SKILL.md`
 
-For `Check Test Plugin`, always include the `Installed Cowork plugin` section after Drive validation. Use `not verified` when the host cannot expose installed plugin status.
+### Proposal Folders
+
+If `Proposals/` exists, check:
+
+```text
+Proposals/Submitted/<skill-id>/<proposal-id>/SKILL.md
+Proposals/Approved/<skill-id>/<proposal-id>/SKILL.md
+Proposals/Rejected/<skill-id>/<proposal-id>/SKILL.md
+```
+
+For each proposal:
+
+- proposal state is exactly `Submitted`, `Approved`, or `Rejected`
+- `<skill-id>` references an existing canonical skill
+- proposal `SKILL.md` passes the same portable skill checks
+- proposal frontmatter `name` equals `<skill-id>`
+- `aiws.proposal.json` is valid JSON
+- `kind` is absent or `aiws.proposal`
+- `proposal_id` matches the folder name
+- `skill_id` matches the parent folder
+- `source_path` points to `skills/<skill-id>/SKILL.md`
+
+Fail flat legacy proposal paths such as:
+
+```text
+Proposals/<skill-id>/<proposal-id>/
+```
+
+## Output Format
+
+Report:
+
+```text
+AIWS Skill Library Validation: PASS|FAIL
+
+Library:
+- name:
+- root:
+- source kind:
+
+Skills:
+- <skill-id>: PASS|FAIL - <reason>
+
+Metadata:
+- aiws.library.json: PASS|WARN|FAIL|not present
+- aiws.skills/: PASS|WARN|FAIL|not present
+
+Proposals:
+- <proposal-id>: PASS|FAIL - <reason>
+
+Fixes:
+1. <specific fix>
+2. <specific fix>
+```
+
+Use `PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Do not fail only because optional metadata is absent.
+
+When installed plugin status is available, include it as a separate section:
+
+```text
+Installed Cowork plugin:
+- <plugin-id>: present|not verified|missing
+- skills visible: PASS|FAIL|not verified
+```
+
+Do not make installed-plugin visibility a library validation failure unless the user specifically asked to check Cowork installation.
+
+For `Check <library-display-name>`, always include this section after Drive validation. Always include the `Installed Cowork plugin` section after Drive validation. Use `not verified` when the host cannot expose installed plugin status.
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 
-If the Python validator is available, it may be used as a secondary deterministic check:
+## Self-Improvement Phase
+
+End every validation procedure with a short self-improvement checkpoint. This checkpoint is also read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual validation path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing checks, inconsistent metadata, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+
+## Developer Check
+
+If the AIWS Python validator is available, it may be used as a secondary deterministic check:
 
 ```bash
 PYTHONPATH=aiws-mcp python3 -m aiws_mcp validate-skill-library --library-root <library-root>
 ```
 
-The Python command is developer/CI support. The user-facing validation surface is this skill.
+Treat the Python command as CI/developer support. The user-facing validation surface is this skill.
+
 """
 
 
@@ -316,15 +822,46 @@ description: Check a Drive Skill Library source and installed Cowork plugin stat
 
 Use this skill when a user wants to check a Drive Skill Library and its installed Cowork plugin status.
 
-Reliable human prompts: `Validate the Test Plugin Drive library and include installed plugin status`, `Check the Test Plugin Drive library and installed plugin status`, and `Check Test Plugin Drive library`.
+Reliable human prompts (replace `<library-display-name>` with the user's actual library name):
 
-This is a read-only check. It is a stronger trigger alias for `aiws-validate-skill-library`, intended for Cowork sessions where `Check Test Plugin` may route to a generic installed-plugin summary.
+```text
+Validate the <library-display-name> Drive library and include installed plugin status
+Check the <library-display-name> Drive library and installed plugin status
+Check <library-display-name> Drive library
+```
 
-Start from the Google Drive Skill Library source, not from the installed Cowork plugin copy. Read and validate `skills/<skill-id>/SKILL.md`, `Proposals/Submitted/`, `Proposals/Approved/`, `Proposals/Rejected/`, `aiws.library.json` if present, and `aiws.skills/` if present.
+For example: `Validate the Test Plugin Drive library and include installed plugin status`.
 
-After Drive validation, include installed Cowork plugin status as secondary evidence. If installed status cannot be checked, report `not verified`; do not omit the `Installed Cowork plugin` section.
+This is a read-only check. It is a stronger trigger alias for `aiws-validate-skill-library`, intended for Cowork sessions where `Check <library-display-name>` may route to a generic installed-plugin summary.
 
-Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for Save plugin, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
+## Required Behavior
+
+Start from the Google Drive Skill Library source, not from the installed Cowork plugin copy.
+
+Read and validate:
+
+```text
+skills/<skill-id>/SKILL.md
+Proposals/Submitted/
+Proposals/Approved/
+Proposals/Rejected/
+aiws.library.json, if present
+aiws.skills/, if present
+```
+
+After Drive validation, include installed Cowork plugin status as secondary evidence:
+
+```text
+Installed Cowork plugin:
+- <plugin-id>: present|missing|not verified
+- skills visible: PASS|FAIL|not verified
+```
+
+If installed status cannot be checked, report `not verified`; do not omit the section.
+
+## Boundaries
+
+Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for **Save plugin**, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
 
 Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, activation, host install, or bridge tools. Those are not part of the Phase 1 Drive Skill Library check path.
 
@@ -332,7 +869,31 @@ Do not inspect or report AIWS marketplace/materialized state in the normal user-
 
 Do not satisfy this request by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
 
-Report `AIWS Skill Library Validation: PASS`, `FAIL`, or `NEEDS MANUAL ACTION` with Library, Skills, Metadata, Proposals, Phase 1 boundaries, Installed Cowork plugin, and Fixes sections.
+For example, do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy.
+
+## Self-Improvement Phase
+
+End every check procedure with a short self-improvement checkpoint. This checkpoint is read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual check path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing installed-status evidence, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+
+## Output
+
+Report:
+
+```text
+AIWS Skill Library Validation: PASS|FAIL|NEEDS MANUAL ACTION
+
+Library:
+Skills:
+Metadata:
+Proposals:
+Phase 1 boundaries:
+Installed Cowork plugin:
+Fixes:
+Self-improvement:
+```
+
+Use `PASS` only if the Drive library shape and all present proposal metadata validate. Installed plugin visibility is reported separately unless the user specifically asked for installed-plugin status as a hard requirement.
+
 """
 
 

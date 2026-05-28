@@ -30,6 +30,8 @@ propose this <skill-id> change for <library-display-name>: <plain-language chang
 submit a <skill-id> proposal for <library-display-name>
 ```
 
+For example: `propose a meeting-followup update for Test Plugin`.
+
 These prompts mean: find the Drive Skill Library, read the canonical skill, collect or infer the proposed change, and write a proposal under `Proposals/Submitted/`. Do not interpret them as a request to edit canonical `skills/<skill-id>/SKILL.md`.
 
 ## Boundaries
@@ -154,3 +156,7 @@ Report:
 - explicit note that the canonical skill was not changed
 
 If direct Drive write access is unavailable, provide the exact folder path and file contents for the user or host to save. Do not claim the proposal landed in Drive unless the files were actually written there.
+
+## Self-Improvement Phase
+
+End every proposal procedure with a short self-improvement checkpoint. Do not mutate Drive content, rewrite proposal files, edit canonical skills, rebuild packages, or change plugin state during this checkpoint. Compare the actual proposal path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing metadata, failed Drive writes, unclear maintainer handoff, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.

@@ -15,6 +15,8 @@ Check the <library-display-name> Drive library and installed plugin status
 Check <library-display-name> Drive library
 ```
 
+For example: `Validate the Test Plugin Drive library and include installed plugin status`.
+
 This is a read-only check. It is a stronger trigger alias for `aiws-validate-skill-library`, intended for Cowork sessions where `Check <library-display-name>` may route to a generic installed-plugin summary.
 
 ## Required Behavior
@@ -52,6 +54,12 @@ Do not inspect or report AIWS marketplace/materialized state in the normal user-
 
 Do not satisfy this request by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
 
+For example, do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy.
+
+## Self-Improvement Phase
+
+End every check procedure with a short self-improvement checkpoint. This checkpoint is read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual check path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing installed-status evidence, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+
 ## Output
 
 Report:
@@ -66,6 +74,7 @@ Proposals:
 Phase 1 boundaries:
 Installed Cowork plugin:
 Fixes:
+Self-improvement:
 ```
 
 Use `PASS` only if the Drive library shape and all present proposal metadata validate. Installed plugin visibility is reported separately unless the user specifically asked for installed-plugin status as a hard requirement.

@@ -11,7 +11,7 @@ Restart around a skill-first, Drive-backed model. Cowork can import/install a Go
       SKILL.md
 ```
 
-Cowork may present that root as a plugin-like container, but AIWS treats it as a Skill Library, not a packaged plugin marketplace. AIWS provides the convention, metadata, validation, and maintainer update skills. Cowork installs and runs skills. Google Drive is the shared source and review space.
+Cowork may present that root as a plugin-like container, but AIWS treats it as a Skill Library, not a packaged plugin marketplace. AIWS provides the convention, metadata, validation, maintainer update skills, and a lightweight self-improvement checkpoint at the end of every service procedure. Cowork installs and runs skills. Google Drive is the shared source and review space.
 
 No ZIP upload, plugin contracts, bridge export, or Cowork marketplace registration is required for the Drive happy path. Cowork may still require a generated plugin artifact/card for first-class plugin visibility; that artifact is produced from the Drive folder at install time.
 
@@ -23,6 +23,7 @@ No ZIP upload, plugin contracts, bridge export, or Cowork marketplace registrati
 - As a maintainer, I can review a submitted `SKILL.md` by comparing local Markdown copies in VS Code/VSCodium or Meld, then apply accepted changes directly to canonical `skills/<skill-id>/SKILL.md`.
 - As a maintainer, I can optionally move or copy the proposal folder to `Proposals/Approved/` or `Proposals/Rejected/` for recordkeeping.
 - As a maintainer, I can use the AIWS refresh skill to verify the canonical skill file, validate the library, and refresh Cowork from Drive.
+- As an AIWS maintainer, I can get a short self-improvement checkpoint after every install, proposal, validation, check, refresh, or update procedure so recurring workflow problems are captured before the next run.
 - As an AIWS maintainer, I can keep the same skill folders compatible with Cowork, Claude Code, and Codex.
 - As an AIWS maintainer, I can later map GitHub libraries or real plugin-backed libraries into the same model.
 
@@ -58,6 +59,7 @@ Test Plugin/
 - Runtime capability artifacts like MCP servers, connectors, auth config, and host tools are out of phase 1.
 - Existing plugin-backed AIWS flows remain unchanged and still require plugin manifests, contracts, draft records, and proposal state.
 - The Drive source folder remains skill-first and does not contain plugin manifests or contracts. Any plugin manifest or contract exists only in the generated Cowork install artifact.
+- Every AIWS Skill Library service procedure ends with a self-improvement phase. This phase does not change Drive content, plugin artifacts, or user skills. It compares what happened against the expected procedure, records any recurring confusion or failed routing, and reports one concrete follow-up improvement when evidence supports it. If nothing actionable was learned, it says so explicitly and stops.
 
 ## Metadata Convention
 
@@ -113,6 +115,7 @@ Final demo script: [AIWS Skill Library Phase 1 Demo Script](./aiws-skill-library
 - Refresh must start by reading Drive `skills/<skill-id>/SKILL.md`, then compare installed Cowork plugin content when available. If installed content already matches Drive, it reports no rebuild required. If installed content differs or cannot be verified, it rebuilds and preflights the whole Cowork plugin artifact from the Drive root, preserves plugin id `test-plugin` for `Test Plugin`, and presents a single **Save plugin** card in the current Cowork session. Manual reinstall guidance is fallback-only when Drive read, artifact creation, preflight, or Save plugin presentation is unavailable. It must not create drafts, activate draft packages, patch runtime plugin files, use marketplace/materialize/export tooling, require a `plugins/` folder, or create per-skill plugin ids such as `test-plugin--meeting-followup`.
 - Compatibility test: Cowork, Claude Code, and Codex consume plain skill folders.
 - Boundary test: existing plugin-backed flows still require manifests/contracts and are not treated as Skill Library mode.
+- Self-improvement test: after install, validate/check, propose, refresh, or update, the report includes a final self-improvement checkpoint with either one concrete follow-up improvement or `No self-improvement action identified`.
 
 ## Assumptions
 
