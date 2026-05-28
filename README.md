@@ -25,9 +25,6 @@ Any serious Skills and Memory management system needs these properties:
 5. **Validation and safety**
    Skills and memory need structure, metadata, integrity checks, and boundaries. The system must distinguish source truth, runtime copies, generated artifacts, pending proposals, and advisory memory.
 
-6. **Continuous improvement**
-   Every meaningful service procedure should end by asking what the run taught the system. Repeated confusion, bad routing, missing checks, or manual workarounds should feed back into skills, protocols, or memory through an explicit improvement path.
-
 ## What This Repository Provides
 
 This repository is the reference AI Workspace implementation.
@@ -41,6 +38,8 @@ It contains shared infrastructure for:
 - managing shared memory contracts
 - running SOP-governed service procedures
 - capturing self-improvement opportunities
+
+It also includes continuous improvement as a platform feature: service procedures can end by asking what the run taught the system, then route real evidence about repeated confusion, bad routing, missing checks, or manual workarounds into skills, protocols, documentation, or memory.
 
 It also contains example domain plugins that show how specialized skill sets can reuse the same infrastructure.
 
