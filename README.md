@@ -1,8 +1,10 @@
 # AI Workspace
 
-AI Workspace is a provider-agnostic skill management system for AI coding and productivity hosts.
+AI Workspace is a learning facilitation mechanism for teams using AI coding and productivity hosts.
 
-Its purpose is to make skills reusable across tools, teams, and visibility levels. Instead of keeping workflows as scattered prompts, local folders, or host-specific setup, AI Workspace treats every skill as a repo-backed artifact that can be discovered, validated, installed, materialized, edited locally, and proposed back to its source repository through a pull request.
+Every skill is a piece of crystallized know-how about a recurring task. When a user discovers a better way to do that task, they propose it back to the skill's source repository. The maintainer curates incoming proposals into a single canonical SKILL.md, and that curated version flows back to every user through install or refresh. One person's discovery becomes the team's working knowledge — without forking, vendoring, or manual sync.
+
+To make this possible, AIWS is provider-agnostic and treats every skill as a repo-backed artifact that can be discovered, validated, installed, materialized, edited locally, and proposed back through a pull request. The same skill source works across supported hosts (Claude Code, Codex, Cowork) because AIWS generates the host-specific output each app needs.
 
 The system is built around three ideas:
 
