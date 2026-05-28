@@ -66,6 +66,18 @@ Expected:
 
 If Cowork cannot reach the local Drive sync path on the current host, fall back to manual deletion in the Drive UI for the Drive operations only; Cowork operations (uninstall, remove local skill) are still prompted.
 
+### Cowork persistence asymmetry — important for reset
+
+Cowork's plugin registry and its local user-skill registry behave differently when a running Cowork process is involved:
+
+- **Plugins (`test-plugin`, `rpm/plugin_*/`, `rpm/manifest.json`)**: filesystem-driven. Removing the rpm/manifest.json entry plus the plugin directory works durably. A running Cowork process may re-create the plugin directory on disk from in-memory state, so file-side deletion is reliable only after Cowork quits OR when the uninstall goes through Cowork's plugin panel.
+- **Local user skills (`anthropic-skills:<name>`, `skills-plugin/.../manifest.json`, `skills-plugin/.../skills/<name>/`)**: in-memory-driven. Cowork writes its in-memory skill index back to disk on quit, **overwriting any file-side deletions made while the process was running**. The only reliable way to remove a local user skill is through Cowork's skill panel UI — file-side delete alone does not survive Cowork's next quit cycle.
+
+Implications for reset:
+
+- To remove `test-plugin`: prefer Cowork UI uninstall. File-side cleanup also works if Cowork is quit immediately afterward.
+- To remove a local `anthropic-skills:<name>` user skill: use Cowork's skill panel UI. File-side delete will be undone by the next Cowork quit.
+
 ## Step 1: Verify AIWS Reachable, Drive Clean, test-plugin Not Installed
 
 User prompt:
@@ -242,6 +254,8 @@ Maintainer action: open `Proposals/Submitted/schedule-summary/<proposal-id>/SKIL
 
 ### 4.3 Maintainer accept
 
+**Role boundary**: Step 4.3 is a deliberate maintainer action. The assistant must NOT auto-execute it immediately after Step 4.1 / Step 4.2. Wait for an explicit maintainer signal (e.g., `accept as maintainer`, `approve`, `do it`) before touching canonical or deleting the proposal folder. In single-user demos where the proposer and the maintainer are the same person, the explicit signal is still required — it's the role transition that matters, not the identity of the actor.
+
 Maintainer action on Drive:
 
 - Create `skills/schedule-summary/SKILL.md` with the accepted content. This is a new file under `skills/`; do not move files out of `Proposals/Submitted/` into `skills/`.
@@ -296,6 +310,8 @@ Do NOT remove the local skill if:
 In either case, leave the local override in place. Run the cleanup only after the next propose+accept+refresh cycle confirms the new canonical AND the local matches what was just proposed.
 
 Mechanical check: byte-compare the local user skill's SKILL.md against the SKILL.md inside the most recent `Proposals/Submitted/<skill-id>/<proposal-id>/` (or, if the proposal folder was already deleted, against current canonical). Match → safe to remove. Differ → keep local.
+
+**Mechanism for removal**: per the Cowork persistence asymmetry note at the top of this manual, removing a local user skill requires Cowork's skill panel UI. File-side delete of the `skills-plugin/.../skills/<name>/` directory and the manifest entry is insufficient — Cowork writes its in-memory state back on quit and resurrects the deletion. The tester runs the byte-identity check, then opens Cowork's skill panel and removes the entry.
 
 Observed refresh report fields: `Library:`, `Skill(s):`, `Canonical SKILL.md verified:`, `Proposal sync evidence:`, `Library validation:`, `Cowork refresh/reinstall:`, `Skill invocation:`. The exact field set may vary; the headline `READY FOR SAVE | PASS | FAIL | NEEDS MANUAL ACTION` is the authoritative pass/fail signal.
 
@@ -382,9 +398,11 @@ code --diff "<drive-local>/Test Plugin/skills/schedule-summary/SKILL.md" "<drive
 
 - No package rebuild, no **Save plugin** card, no marketplace/materialize/export language.
 
-## Step 9: Maintainer Partially Accepts
+## Step 9: Maintainer Accepts (Full Or Partial)
 
-Maintainer reviews the diff and decides per-change. Some changes are accepted, some are edited, some are rejected.
+**Role boundary** (same as Step 4.3): Step 9 is a deliberate maintainer action. Do not auto-execute after Step 8. Wait for an explicit maintainer signal.
+
+Maintainer reviews the diff and decides per-change. The accept can be full (canonical is overwritten with the proposed body) or partial (canonical is hand-edited to incorporate accepted parts and reject others).
 
 Maintainer action on Drive:
 
@@ -490,6 +508,9 @@ Avoid:
 - Maintainer review uses local Markdown diff (`code --diff` or Meld). Google Docs compare is not part of Phase 1.
 - Approved/Rejected folders are optional recordkeeping. This manual instructs the maintainer to leave them empty; testers may add them for audit if desired without changing the pass criteria.
 - The local Cowork user-skill location is host-defined. The manual deliberately does not pin a filesystem path because that path can vary by host.
+- **Save plugin** and **Save skill** clicks are UI-only — the assistant can produce and present the artifact via `mcp__cowork__present_files`, but the click must come from the user. The assistant cannot complete the install/save itself; it can only verify the post-click state from disk after the user confirms.
+- **Role boundaries**: User (proposer), Maintainer (canonical owner), and the running Cowork host are three distinct actors even when the same human is performing all three. The manual gates Step 4.3 and Step 9 on an explicit maintainer signal so the assistant doesn't roll forward through a propose-then-accept on its own initiative.
+- **Pushing repo changes from inside a Cowork session**: standard `git push` from the sandbox shell fails (no credentials). Use `mcp__Control_your_Mac__osascript` to invoke `git push` on the macOS host, where the user's `gh auth git-credential` + `osxkeychain` chain resolves the GitHub token. Author commits as `athanasiosbot <athanasiosbot@users.noreply.github.com>` via `git -c user.name=... -c user.email=...` per the existing convention.
 
 ## Known Upstream Skill Issues
 
