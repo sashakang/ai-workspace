@@ -44,8 +44,6 @@ Installed Cowork plugin:
 
 If installed status cannot be checked, report `not verified`; do not omit the section.
 
-End the check by running the self-improvement phase.
-
 ## Boundaries
 
 Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for **Save plugin**, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
@@ -57,10 +55,6 @@ Do not inspect or report AIWS marketplace/materialized state in the normal user-
 Do not satisfy this request by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
 
 For example, do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy.
-
-## Self-Improvement Phase
-
-End every check procedure with a short self-improvement checkpoint. This checkpoint is read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual check path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing installed-status evidence, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
 
 ## Output
 
@@ -76,7 +70,10 @@ Proposals:
 Phase 1 boundaries:
 Installed Cowork plugin:
 Fixes:
-Self-improvement:
 ```
 
 Use `PASS` only if the Drive library shape and all present proposal metadata validate. Installed plugin visibility is reported separately unless the user specifically asked for installed-plugin status as a hard requirement.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.

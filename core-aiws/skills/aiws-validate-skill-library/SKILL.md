@@ -179,12 +179,6 @@ For `Check <library-display-name>`, always include this section after Drive vali
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 
-End validation by running the self-improvement phase.
-
-## Self-Improvement Phase
-
-End every validation procedure with a short self-improvement checkpoint. This checkpoint is also read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual validation path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing checks, inconsistent metadata, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
-
 ## Developer Check
 
 If the AIWS Python validator is available, it may be used as a secondary deterministic check:
@@ -194,3 +188,7 @@ PYTHONPATH=aiws-mcp python3 -m aiws_mcp validate-skill-library --library-root <l
 ```
 
 Treat the Python command as CI/developer support. The user-facing validation surface is this skill.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.

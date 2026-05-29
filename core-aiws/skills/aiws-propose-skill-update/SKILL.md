@@ -157,8 +157,6 @@ Report:
 
 If direct Drive write access is unavailable, provide the exact folder path and file contents for the user or host to save. Do not claim the proposal landed in Drive unless the files were actually written there.
 
-End the proposal by running the self-improvement phase.
+## Mandatory Self-Improvement
 
-## Self-Improvement Phase
-
-End every proposal procedure with a short self-improvement checkpoint. Do not mutate Drive content, rewrite proposal files, edit canonical skills, rebuild packages, or change plugin state during this checkpoint. Compare the actual proposal path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing metadata, failed Drive writes, unclear maintainer handoff, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.

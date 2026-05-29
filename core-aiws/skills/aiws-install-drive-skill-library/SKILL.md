@@ -99,12 +99,6 @@ AIWS Drive Skill Library Install: NEEDS RETRY
 
 and give the same short prompt again.
 
-End the install by running the self-improvement phase.
-
-## Self-Improvement Phase
-
-End every install procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual install path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, missing validation, artifact-card mismatch, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
-
 ## Output
 
 Report:
@@ -121,7 +115,10 @@ Save plugin completed: PASS|FAIL|not verified
 Plugin/container visible: PASS|FAIL|not verified
 Skills visible under plugin/container: PASS|FAIL|not verified
 Proposal folders ignored as skills: PASS|FAIL|not verified
-Self-improvement:
 ```
 
 Use `READY FOR SAVE` when the plugin card is generated and preflighted but the user has not clicked **Save plugin** yet. Use `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified. If Cowork reports `Plugin validation failed`, do not repeat the same artifact blindly; inspect and report the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and the exact Cowork error text if available.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.

@@ -67,11 +67,7 @@ Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. D
 11. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Skill Library Refresh: NEEDS RETRY` or `FAIL`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
 12. Use manual reinstall guidance only if Drive access, artifact creation, artifact preflight, or **Save plugin** presentation is unavailable in the current host.
 13. Verify the installed plugin/container when possible. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
-14. Run the self-improvement phase.
-
-## Self-Improvement Phase
-
-End every refresh procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual refresh path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, stale installed state, missing verification, artifact-card mismatch, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+14. Run mandatory self-improvement as the final phase.
 
 ## Output
 
@@ -87,7 +83,10 @@ Proposal sync evidence: PASS|FAIL|not present
 Library validation: PASS|FAIL
 Cowork refresh/reinstall: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
 Skill invocation: PASS|FAIL|not verified|optional
-Self-improvement:
 ```
 
 Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` only when the current host cannot complete Drive read, artifact build, preflight, or **Save plugin** presentation. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.
