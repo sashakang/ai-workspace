@@ -73,3 +73,7 @@ Use these plugin agents for the supported v1 code path:
 - `technical-writer`
 
 Keep their use aligned with the role taxonomy already defined in the SOP.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the Self-Improvement Protocol in `core-aiws/protocols/self-improvement.md` in realtime mode. Do not describe or substitute the protocol here.

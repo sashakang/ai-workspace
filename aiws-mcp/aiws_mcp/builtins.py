@@ -230,12 +230,6 @@ AIWS Drive Skill Library Install: NEEDS RETRY
 
 and give the same short prompt again.
 
-End the install by running the self-improvement phase.
-
-## Self-Improvement Phase
-
-End every install procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual install path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, missing validation, artifact-card mismatch, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
-
 ## Output
 
 Report:
@@ -252,10 +246,13 @@ Save plugin completed: PASS|FAIL|not verified
 Plugin/container visible: PASS|FAIL|not verified
 Skills visible under plugin/container: PASS|FAIL|not verified
 Proposal folders ignored as skills: PASS|FAIL|not verified
-Self-improvement:
 ```
 
 Use `READY FOR SAVE` when the plugin card is generated and preflighted but the user has not clicked **Save plugin** yet. Use `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified. If Cowork reports `Plugin validation failed`, do not repeat the same artifact blindly; inspect and report the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and the exact Cowork error text if available.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.
 """
 
 
@@ -418,11 +415,9 @@ Report:
 
 If direct Drive write access is unavailable, provide the exact folder path and file contents for the user or host to save. Do not claim the proposal landed in Drive unless the files were actually written there.
 
-End the proposal by running the self-improvement phase.
+## Mandatory Self-Improvement
 
-## Self-Improvement Phase
-
-End every proposal procedure with a short self-improvement checkpoint. Do not mutate Drive content, rewrite proposal files, edit canonical skills, rebuild packages, or change plugin state during this checkpoint. Compare the actual proposal path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing metadata, failed Drive writes, unclear maintainer handoff, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.
 """
 
 
@@ -489,13 +484,9 @@ Do not apply runtime artifacts, metadata rewrites, plugin manifests, scripts, pa
 4. Use `aiws-validate-skill-library` to validate the library and proposal structure.
 5. Refresh Cowork reimport of the Drive skill library, following `aiws-refresh-skill-library` semantics: compare installed Cowork plugin content when available, report no rebuild required if installed content matches Drive, and rebuild/preflight/present a **Save plugin** card when installed content differs or cannot be verified. A `.skill` artifact or **Save skill** card is a retry/failure state, not a valid refresh. Guide manual reinstall only when the current host cannot read Drive, build the artifact, preflight it, or present the **Save plugin** card.
 6. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
-7. Run the self-improvement phase.
+7. Run mandatory self-improvement as the final phase.
 
 If direct Drive write access is unavailable, provide exact manual copy/replace instructions and report `NEEDS MANUAL ACTION`. Do not claim the canonical file was updated until it is verified.
-
-## Self-Improvement Phase
-
-End every update procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual update path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, unclear approval evidence, stale installed state, missing verification, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
 
 ## Output
 
@@ -512,11 +503,13 @@ Canonical SKILL.md verified: PASS|FAIL|NEEDS MANUAL ACTION
 Library validation: PASS|FAIL
 Cowork refresh/import: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
 Skill invocation: PASS|FAIL|not verified|optional
-Self-improvement:
 ```
 
 Use `PASS` when the canonical file update is verified, library validation passes after the update, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` when the maintainer or host must perform a Drive copy or when the current host cannot read Drive, build the artifact, preflight it, or present the **Save plugin** card. Do not fail a successful update/refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
 
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.
 """
 
 
@@ -589,11 +582,7 @@ Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. D
 11. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Skill Library Refresh: NEEDS RETRY` or `FAIL`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
 12. Use manual reinstall guidance only if Drive access, artifact creation, artifact preflight, or **Save plugin** presentation is unavailable in the current host.
 13. Verify the installed plugin/container when possible. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
-14. Run the self-improvement phase.
-
-## Self-Improvement Phase
-
-End every refresh procedure with a short self-improvement checkpoint. Do not mutate Drive content, rebuild packages, edit skills, or change plugin state during this checkpoint. Compare the actual refresh path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, bad routing, stale installed state, missing verification, artifact-card mismatch, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
+14. Run mandatory self-improvement as the final phase.
 
 ## Output
 
@@ -609,11 +598,13 @@ Proposal sync evidence: PASS|FAIL|not present
 Library validation: PASS|FAIL
 Cowork refresh/reinstall: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
 Skill invocation: PASS|FAIL|not verified|optional
-Self-improvement:
 ```
 
 Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` only when the current host cannot complete Drive read, artifact build, preflight, or **Save plugin** presentation. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
 
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.
 """
 
 
@@ -798,12 +789,6 @@ For `Check <library-display-name>`, always include this section after Drive vali
 
 If Drive access is unavailable, report `NEEDS MANUAL ACTION` or `FAIL` for Drive library validation and provide the exact Drive folders/files that must be checked. Do not replace Drive validation with installed-plugin-only validation.
 
-End validation by running the self-improvement phase.
-
-## Self-Improvement Phase
-
-End every validation procedure with a short self-improvement checkpoint. This checkpoint is also read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual validation path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing checks, inconsistent metadata, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
-
 ## Developer Check
 
 If the AIWS Python validator is available, it may be used as a secondary deterministic check:
@@ -813,6 +798,10 @@ PYTHONPATH=aiws-mcp python3 -m aiws_mcp validate-skill-library --library-root <l
 ```
 
 Treat the Python command as CI/developer support. The user-facing validation surface is this skill.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.
 """
 
 
@@ -862,8 +851,6 @@ Installed Cowork plugin:
 
 If installed status cannot be checked, report `not verified`; do not omit the section.
 
-End the check by running the self-improvement phase.
-
 ## Boundaries
 
 Do not write proposal files, edit canonical `SKILL.md`, rebuild packages, ask for **Save plugin**, install plugins, refresh plugins, create drafts, activate drafts, upload ZIPs, create GitHub pull requests, or change marketplace registrations.
@@ -875,10 +862,6 @@ Do not inspect or report AIWS marketplace/materialized state in the normal user-
 Do not satisfy this request by checking only the installed Cowork plugin copy. The installed copy is secondary evidence after Drive validation.
 
 For example, do not satisfy `Check Test Plugin` by checking only the installed Cowork plugin copy.
-
-## Self-Improvement Phase
-
-End every check procedure with a short self-improvement checkpoint. This checkpoint is read-only: do not write proposal files, edit canonical skills, rebuild packages, or change plugin state. Compare the actual check path with this procedure and report one concrete follow-up improvement when the run exposed confusing wording, missing installed-status evidence, installed-copy substitution, or a recurring manual workaround. If nothing actionable was learned, report `No self-improvement action identified`.
 
 ## Output
 
@@ -894,10 +877,13 @@ Proposals:
 Phase 1 boundaries:
 Installed Cowork plugin:
 Fixes:
-Self-improvement:
 ```
 
 Use `PASS` only if the Drive library shape and all present proposal metadata validate. Installed plugin visibility is reported separately unless the user specifically asked for installed-plugin status as a hard requirement.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.
 """
 
 

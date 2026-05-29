@@ -403,30 +403,17 @@ Present final notebook + presentation PDF to the user. Wait for explicit accepta
 
 **If rejected:** If issue is analytical → return to step 9. If issue is presentational → return to step 11 (then re-run Gate 3). If issue is foundational (scope, question, data) → escalate as scope expansion and discuss with user whether to restart or abandon.
 
-**Exit:** User has accepted. Proceed to self-improvement.
-
-## Mandatory Self-Improvement
-
-After every non-lightweight research task, run Phase 9 self-improvement through `/aiws-improve`.
-
-Domain-specific dimensions to review:
-
-- was the interview thorough enough
-- were assumptions made explicit early enough
-- was EDA genuinely exploratory or just confirmatory
-- did hypothesis formulation precede testing
-- was the report understandable by a non-analyst
-- what confused the audience
-- did Gate 3 reviewers identify comprehension failures that Gate 2 missed
-- what jargon or complexity passed Gate 2 but failed Gate 3
-- what pattern of Gate 3 failures should refine Gate 2 Challenger B prompts
-- what should change in the workflow next time
+**Exit:** User has accepted. Proceed to shared-memory staging, then mandatory self-improvement.
 
 ## Shared-Memory Staging
 
 After delivery, if the task produced reusable cross-project learnings, stage one candidate event per learning with the plugin-local staging utility into `${CLAUDE_PLUGIN_DATA}/shared-memory/outbox/`.
 
 If `aiws-host-memory` is not bootstrapped yet and the outbox path is unavailable, skip shared-memory staging and continue. Do not block delivery on helper setup.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the Self-Improvement Protocol in `core-aiws/protocols/self-improvement.md` in realtime mode. Do not describe or substitute the protocol here.
 
 Use shared memory for durable analyst heuristics, recurring tool quirks, and workflow patterns that should help future projects. Keep project-specific findings, dataset-specific notes, and transient debugging state in project memory instead.
 

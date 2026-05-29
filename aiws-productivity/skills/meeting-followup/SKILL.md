@@ -37,3 +37,7 @@ Do not create task dashboards, perform daily planning, or manage recurring tasks
 Do not sync tasks into external tools without explicit request.
 Do not send or schedule Slack messages without explicit approval.
 Do not invent owners, dates, decisions, or priorities — mark unclear fields as `unspecified`.
+
+## Mandatory Self-Improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the Self-Improvement Protocol in `core-aiws/protocols/self-improvement.md` in realtime mode. Do not describe or substitute the protocol here.

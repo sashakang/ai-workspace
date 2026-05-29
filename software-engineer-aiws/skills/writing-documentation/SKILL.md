@@ -128,16 +128,6 @@ Gate 2 validates non-lightweight output before delivery:
 
 Use the default SOP documentation reviewer unless the subject needs a second lens. For AIWS skill or protocol docs, include a prompt/protocol review lens. For architecture or contract docs, include an architecture/contract review lens.
 
-## Self-Improvement
+## Mandatory Self-Improvement
 
-For every non-lightweight documentation task, run core SOP Phase 10 in realtime mode and then the Auto-Capture Protocol.
-
-During that pass, look specifically for:
-
-- recurring stale-doc patterns
-- missing document-type guidance
-- unclear AIWS infrastructure boundaries
-- user corrections about tone, audience, or depth
-- validation steps that should become reusable documentation workflow rules
-
-Do not directly mutate shared memory or sibling plugin files as a shortcut. Stage reusable learnings through the host-provided AIWS memory outbox when available, or route workflow changes through the canonical `aiws-improve` capability and the SOP review path.
+This phase is mandatory and must be the final phase of the procedure. Run the Self-Improvement Protocol in `core-aiws/protocols/self-improvement.md` in realtime mode. Do not describe or substitute the protocol here.

@@ -224,16 +224,7 @@ This is a review and discussion step, not a hand-off. The user may request refin
 
 Do not proceed until the user explicitly approves the deliverable. Do not treat silence as approval.
 
-### 12. Mandatory self-improvement
-
-After every non-lightweight forecasting task, run Phase 9 self-improvement through `/aiws-improve`.
-
-Capture:
-- what worked and what did not in model selection and validation
-- any data-quality issues that should be flagged for future runs
-- reusable patterns (e.g., holiday calendars, imputation defaults) worth persisting to shared memory
-
-### 13. Shared-memory staging
+### 12. Shared-memory staging
 
 After delivery, if the task produced reusable cross-project learnings, stage one candidate event per learning with the plugin-local staging utility into `${CLAUDE_PLUGIN_DATA}/shared-memory/outbox/`.
 
@@ -248,3 +239,7 @@ Capture to shared memory only when the learning is reusable across projects, sta
 - never hide wide confidence intervals behind confident narrative
 - never extrapolate beyond the defensible horizon without explicit caveat
 - never recommend action from a forecast whose assumptions were not checked
+
+### 13. Mandatory self-improvement
+
+This phase is mandatory and must be the final phase of the procedure. Run the Self-Improvement Protocol in `core-aiws/protocols/self-improvement.md` in realtime mode. Do not describe or substitute the protocol here.
