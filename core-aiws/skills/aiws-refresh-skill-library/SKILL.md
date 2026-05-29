@@ -23,13 +23,13 @@ If the user says `update <library-display-name> skill library`, treat it as refr
 
 ## Boundaries
 
-First action must be reading the Google Drive folder contents directly:
+First action must be reading the Google Drive folder contents directly via the host's Google Drive integration — the same surface used by `aiws-install-drive-skill-library` and `aiws-validate-skill-library`:
 
 ```text
 <Drive root>/skills/<skill-id>/SKILL.md
 ```
 
-Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, or activation tools. Those are not part of the Phase 1 Drive Skill Library refresh path.
+This flow is not an AIWS marketplace workflow. Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, or activation tools. Those are not part of the Phase 1 Drive Skill Library refresh path. A flat `skills/<skill-id>/SKILL.md` Drive folder is valid even if AIWS marketplace indexing would return no results. Do not use missing marketplace search results, an empty `<plugin-id>` marketplace, or absent materialized skills as evidence that the library cannot be refreshed — read Drive directly and proceed.
 
 Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `<plugin-id>` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to Drive Skill Library refresh.
 
