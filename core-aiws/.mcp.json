@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "aiws": {
+      "type": "stdio",
       "command": "sh",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-launcher"
