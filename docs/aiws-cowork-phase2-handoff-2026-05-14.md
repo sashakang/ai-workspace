@@ -69,7 +69,7 @@ The Cowork-installed `core-aiws` package exposes an MCP server through:
 
 ```text
 core-aiws/.mcp.json
-core-aiws/bin/aiws-mcp-launcher
+core-aiws/servers/aiws-mcp-launcher
 ```
 
 The launcher starts the bundled server through `uvx`:
@@ -619,7 +619,7 @@ Goal: remove `uvx` and local Python assumptions from normal Cowork user path.
 Current state:
 
 ```text
-core-aiws -> .mcp.json -> bin/aiws-mcp-launcher -> uvx -> bundled aiws-mcp
+core-aiws -> .mcp.json -> servers/aiws-mcp-launcher -> uvx -> bundled aiws-mcp
 ```
 
 Target:

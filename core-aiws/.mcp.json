@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "sh",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-launcher"
+        "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp-launcher"
       ]
     }
   }

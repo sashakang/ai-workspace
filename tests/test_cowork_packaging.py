@@ -52,13 +52,13 @@ class CoworkPackagingTests(unittest.TestCase):
         self.assertEqual(len(server_entries), len(set(server_entries)))
         self.assertIn(".claude-plugin/plugin.json", names)
         self.assertIn(".mcp.json", names)
-        self.assertIn("bin/aiws-mcp-launcher", names)
+        self.assertIn("servers/aiws-mcp-launcher", names)
         self.assertIn("servers/aiws-mcp/pyproject.toml", names)
         self.assertIn("servers/aiws-mcp/aiws_mcp/server.py", names)
         self.assertFalse(any(name.startswith("servers/aiws-mcp/build/") for name in names))
         self.assertFalse(any(name.startswith("servers/aiws-mcp/dist/") for name in names))
         self.assertEqual(mcp["mcpServers"]["aiws"]["command"], "sh")
-        self.assertIn("${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-launcher", mcp["mcpServers"]["aiws"]["args"])
+        self.assertIn("${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp-launcher", mcp["mcpServers"]["aiws"]["args"])
 
     def test_bundled_mcp_server_source_matches_root_source(self) -> None:
         root_server = REPO_ROOT / "aiws-mcp"
@@ -129,7 +129,7 @@ class CoworkPackagingTests(unittest.TestCase):
             )
             fake_uvx.chmod(0o755)
 
-            launcher = extracted_root / "bin" / "aiws-mcp-launcher"
+            launcher = extracted_root / "servers" / "aiws-mcp-launcher"
             env = {
                 **os.environ,
                 "CLAUDE_PLUGIN_ROOT": str(extracted_root),
@@ -181,7 +181,7 @@ class CoworkPackagingTests(unittest.TestCase):
             )
             fake_uvx.chmod(0o755)
 
-            launcher = extracted_root / "bin" / "aiws-mcp-launcher"
+            launcher = extracted_root / "servers" / "aiws-mcp-launcher"
             env = {
                 **os.environ,
                 "CLAUDE_PLUGIN_ROOT": str(extracted_root),
@@ -241,7 +241,7 @@ class CoworkPackagingTests(unittest.TestCase):
             )
             fake_uvx.chmod(0o755)
 
-            launcher = extracted_root / "bin" / "aiws-mcp-launcher"
+            launcher = extracted_root / "servers" / "aiws-mcp-launcher"
             env = {
                 **os.environ,
                 "CLAUDE_PLUGIN_ROOT": str(extracted_root),

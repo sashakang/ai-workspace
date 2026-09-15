@@ -19,7 +19,7 @@ The 2026-05-14 canonical Cowork user test also passed for the normal install/use
 Phase 2B is the end-user runtime gap. The current `core-aiws` package still starts the AIWS MCP bridge through:
 
 ```text
-core-aiws/.mcp.json -> sh -> core-aiws/bin/aiws-mcp-launcher -> uvx -> aiws-mcp serve
+core-aiws/.mcp.json -> sh -> core-aiws/servers/aiws-mcp-launcher -> uvx -> aiws-mcp serve
 ```
 
 That is acceptable for maintainers and technical testers, but not for normal Cowork users. A normal Cowork user must not need Python, `uv`, `uvx`, GitHub CLI, terminal commands, or manual MCP setup.
@@ -34,8 +34,8 @@ The hosted FastMCP or official MCP Python SDK connector proof remains useful, bu
 
 Local repo evidence:
 
-- `core-aiws/.mcp.json` starts the `aiws` MCP server with `sh` and `${CLAUDE_PLUGIN_ROOT}/bin/aiws-mcp-launcher`.
-- `core-aiws/bin/aiws-mcp-launcher` exits if `CLAUDE_PLUGIN_ROOT` is missing, then requires `uvx`, then runs `uvx --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve`.
+- `core-aiws/.mcp.json` starts the `aiws` MCP server with `sh` and `${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp-launcher`.
+- `core-aiws/servers/aiws-mcp-launcher` exits if `CLAUDE_PLUGIN_ROOT` is missing, then requires `uvx`, then runs `uvx --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve`.
 - `scripts/build_cowork_import.py` currently reports `missing_uvx` when `uvx` is unavailable.
 - `tests/test_cowork_packaging.py` currently asserts that the packaged launcher invokes the bundled server source with `uvx`.
 - `aiws-mcp/pyproject.toml` defines a Python package requiring Python `>=3.11` and dependency `mcp>=1.8.0`.
@@ -223,7 +223,7 @@ Update the launcher, import builder, and tests so dependency-free runtime is the
 
 Acceptance:
 
-- `core-aiws/bin/aiws-mcp-launcher` prefers the bundled executable.
+- `core-aiws/servers/aiws-mcp-launcher` prefers the bundled executable.
 - The `uvx` path is only a named technical-pilot fallback, not the default normal-user path.
 - Packaging tests assert that the package includes the bundled executable when Phase 2B mode is selected.
 - Packaging tests assert that missing bundled executable plus no explicit fallback returns a clear error.
@@ -231,7 +231,7 @@ Acceptance:
 
 Likely files:
 
-- `core-aiws/bin/aiws-mcp-launcher`
+- `core-aiws/servers/aiws-mcp-launcher`
 - `core-aiws/.mcp.json`
 - `scripts/build_cowork_import.py`
 - `tests/test_cowork_packaging.py`

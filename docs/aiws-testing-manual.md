@@ -1190,7 +1190,7 @@ OK
 Key expectations covered by the test:
 
 - package names are derived from plugin manifests, not hardcoded release versions
-- `core-aiws` package includes `.mcp.json`, `bin/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
+- `core-aiws` package includes `.mcp.json`, `servers/aiws-mcp-launcher`, and bundled `servers/aiws-mcp`.
 - `aiws-productivity` package is flat-root importable and contains `skills/meeting-followup/SKILL.md`.
 - the generic package builder can package a declared plugin by `plugin_id`
 
