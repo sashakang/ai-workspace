@@ -1649,6 +1649,26 @@ class AiwsMcpSkillTests(unittest.TestCase):
 
         with self.assertRaisesRegex(SkillValidationError, "not valid YAML"):
             self.runtime.list_local_skills()
+    def test_refresh_flags_personal_copy_shadowing_library_skill(self) -> None:
+        plugin_text = (REPO_ROOT / "core-aiws" / "skills" / "aiws-refresh-skill-library" / "SKILL.md").read_text()
+        builtin_text = self.runtime.get_resource("aiws://skills/aiws-refresh-skill-library")
+        for label, text in (("plugin", plugin_text), ("builtin", builtin_text)):
+            with self.subTest(label):
+                self.assertIn("anthropic-skills:<skill-id>", text)
+                self.assertIn("Personal copy shadowing library skill: none|<skill-id list>", text)
+
+    def test_save_plugin_handoff_tells_user_to_restart_and_check(self) -> None:
+        for skill_id in ("aiws-install-drive-skill-library", "aiws-refresh-skill-library"):
+            plugin_text = (REPO_ROOT / "core-aiws" / "skills" / skill_id / "SKILL.md").read_text()
+            builtin_text = self.runtime.get_resource(f"aiws://skills/{skill_id}")
+            for label, text in (("plugin", plugin_text), ("builtin", builtin_text)):
+                with self.subTest(skill=skill_id, copy=label):
+                    self.assertIn("Fully quit Claude and reopen it", text)
+                    self.assertIn("hasn't reached this computer yet", text)
+                    self.assertIn(
+                        "Which skills from <library-display-name> can you see? List them with their plugin prefix.",
+                        text,
+                    )
 
     def test_host_identity_is_persisted_and_conflicts_fail_closed(self) -> None:
         host = self.runtime.ensure_host(host_kind="claude-code")

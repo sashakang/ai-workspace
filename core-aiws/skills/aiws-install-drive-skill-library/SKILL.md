@@ -130,6 +130,17 @@ Proposal folders ignored as skills: PASS|FAIL|not verified
 
 Use `READY FOR SAVE` when the plugin card is generated and preflighted but the user has not clicked **Save plugin** yet. Use `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified. If Cowork reports `Plugin validation failed`, do not repeat the same artifact blindly; inspect and report the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and the exact Cowork error text if available.
 
+When the status is `READY FOR SAVE`, end the user-facing report with the block below, replacing `<library-display-name>` and `<plugin-id>` with the real values. Do not show it for any other status (`PASS`, `FAIL`, `NEEDS RETRY`, `NEEDS MANUAL ACTION`, or no rebuild needed). The check prompt in the block is for a new chat after restart; never run it in the current session.
+
+```text
+After you click Save plugin:
+1. Fully quit Claude and reopen it. If Cowork says the plugin "hasn't reached this computer yet",
+   the current chat cannot see the new version; this is expected.
+2. Start a new chat and type:
+   Which skills from <library-display-name> can you see? List them with their plugin prefix.
+3. Expected: every skill shows as <plugin-id>:<skill-id>.
+```
+
 ## Mandatory Self-Improvement
 
 This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.

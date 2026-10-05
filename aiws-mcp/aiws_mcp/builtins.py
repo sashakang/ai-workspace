@@ -250,6 +250,17 @@ Proposal folders ignored as skills: PASS|FAIL|not verified
 
 Use `READY FOR SAVE` when the plugin card is generated and preflighted but the user has not clicked **Save plugin** yet. Use `PASS` only after Cowork accepts the plugin and the installed plugin/container and skills are verified. If Cowork reports `Plugin validation failed`, do not repeat the same artifact blindly; inspect and report the generated archive entries, manifest JSON, contract JSON, packaged skill frontmatter, and the exact Cowork error text if available.
 
+When the status is `READY FOR SAVE`, end the user-facing report with the block below, replacing `<library-display-name>` and `<plugin-id>` with the real values. Do not show it for any other status (`PASS`, `FAIL`, `NEEDS RETRY`, `NEEDS MANUAL ACTION`, or no rebuild needed). The check prompt in the block is for a new chat after restart; never run it in the current session.
+
+```text
+After you click Save plugin:
+1. Fully quit Claude and reopen it. If Cowork says the plugin "hasn't reached this computer yet",
+   the current chat cannot see the new version; this is expected.
+2. Start a new chat and type:
+   Which skills from <library-display-name> can you see? List them with their plugin prefix.
+3. Expected: every skill shows as <plugin-id>:<skill-id>.
+```
+
 ## Mandatory Self-Improvement
 
 This phase is mandatory and must be the final phase of the procedure. Run the [Self-Improvement Protocol](../../protocols/self-improvement.md) in realtime mode. Do not describe or substitute the protocol here.
@@ -578,11 +589,12 @@ Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. D
 7. If installed content matches Drive, report no rebuild required.
 8. If installed content differs or cannot be verified, rebuild the whole Cowork plugin artifact from the Drive library root, preserving the stable `<plugin-id>` derived from `<library-display-name>`.
 9. Before presenting the **Save plugin** card, run the same artifact preflight as `aiws-install-drive-skill-library`: verify `.claude-plugin/plugin.json`, `contracts/<plugin-id>.contract.json`, every packaged `skills/<skill-id>/SKILL.md`, no wrapper folder, matching manifest/contract ids and versions, exact `public_skills`, portable skill frontmatter, matching skill folder names, and non-empty skill bodies.
-10. Present exactly one **Save plugin** card when rebuild is needed and preflight passes. Do not send the user to plugin management first if the current Cowork session can present the card.
+10. Present exactly one **Save plugin** card when rebuild is needed and preflight passes. Do not send the user to plugin management first if the current Cowork session can present the card. End the report with the post-save block from Output.
 11. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Skill Library Refresh: NEEDS RETRY` or `FAIL`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
 12. Use manual reinstall guidance only if Drive access, artifact creation, artifact preflight, or **Save plugin** presentation is unavailable in the current host.
 13. Verify the installed plugin/container when possible. Treat live skill invocation as a separate optional check unless the user explicitly asked to invoke the skill.
-14. Run mandatory self-improvement as the final phase.
+14. Check for personal copies that shadow library skills: compare the library's skill ids with the skills available in the current Cowork chat. If `anthropic-skills:<skill-id>` exists for a library `<skill-id>`, it shadows the library version. See Personal copy shadowing below.
+15. Run mandatory self-improvement as the final phase.
 
 ## Output
 
@@ -598,9 +610,31 @@ Proposal sync evidence: PASS|FAIL|not present
 Library validation: PASS|FAIL
 Cowork refresh/reinstall: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
 Skill invocation: PASS|FAIL|not verified|optional
+Personal copy shadowing library skill: none|<skill-id list>
 ```
 
 Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` only when the current host cannot complete Drive read, artifact build, preflight, or **Save plugin** presentation. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+
+When the status is `READY FOR SAVE`, end the user-facing report with the block below, replacing `<library-display-name>` and `<plugin-id>` with the real values. Do not show it for any other status (`PASS`, `FAIL`, `NEEDS RETRY`, `NEEDS MANUAL ACTION`, or no rebuild needed). The check prompt in the block is for a new chat after restart; never run it in the current session.
+
+```text
+After you click Save plugin:
+1. Fully quit Claude and reopen it. If Cowork says the plugin "hasn't reached this computer yet",
+   the current chat cannot see the new version; this is expected.
+2. Start a new chat and type:
+   Which skills from <library-display-name> can you see? List them with their plugin prefix.
+3. Expected: every skill shows as <plugin-id>:<skill-id>.
+```
+
+## Personal copy shadowing
+
+Detect only by matching `anthropic-skills:<skill-id>` against the library's skill ids. Do not match by any other name.
+
+A personal copy overrides the library version, so the user keeps using the stale personal copy after a successful refresh. Claude cannot disable a personal skill. Offer the user this: turn the personal copy off in Cowork's skill panel, then start a new chat to check that the library version is used. Keeping it is legitimate while the user is preparing a new proposal; do not insist.
+
+If the personal copy's content can be read and differs from canonical, warn that turning it off loses those local edits unless they are proposed first (see `aiws-propose-skill-update`). If it cannot be read, say the comparison was not possible. Do not guess.
+
+Shadowing is a warning, not a failure: it does not change `PASS` or `READY FOR SAVE`. Do not delete, edit or rename personal skills, and do not call tools to manage skills.
 
 ## Mandatory Self-Improvement
 
