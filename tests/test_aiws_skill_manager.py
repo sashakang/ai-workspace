@@ -41,6 +41,7 @@ from aiws_mcp.skill_manager import (  # noqa: E402
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     load_draft_record,
     load_marketplace_registry,
+    parse_skill_frontmatter,
     list_draft_files,
     read_draft_file,
     register_marketplace,
@@ -4326,6 +4327,77 @@ class AiwsSkillManagerTests(unittest.TestCase):
             "last_validation_status": "passed",
             "updated_at": "2026-05-09T00:00:00Z",
         }
+
+
+class SkillFrontmatterYamlTests(unittest.TestCase):
+    def frontmatter(self, *lines: str) -> str:
+        return "---\n" + "".join(f"{line}\n" for line in lines) + "---\n\n# Body\n"
+
+    def test_unquoted_colon_space_is_rejected_with_file_line(self) -> None:
+        content = self.frontmatter("name: x", "description: Country cards: build them")
+        with self.assertRaisesRegex(SkillManagerError, "not valid YAML at line 3"):
+            parse_skill_frontmatter(content)
+
+    def test_leading_backtick_is_rejected(self) -> None:
+        with self.assertRaisesRegex(SkillManagerError, "not valid YAML"):
+            parse_skill_frontmatter(self.frontmatter("name: x", "description: `cc` builds cards"))
+
+    def test_folded_description_is_accepted(self) -> None:
+        metadata, _ = parse_skill_frontmatter(
+            self.frontmatter("name: x", "description: >-", "  Country cards: build them", "  for KPI #2")
+        )
+        self.assertEqual(metadata["description"], "Country cards: build them for KPI #2")
+
+    def test_quoted_description_still_accepted(self) -> None:
+        metadata, _ = parse_skill_frontmatter(self.frontmatter("name: x", 'description: "Cards: KPI #2"'))
+        self.assertEqual(metadata["description"], "Cards: KPI #2")
+
+    def test_non_text_values_are_rejected(self) -> None:
+        cases = {
+            "description: yes": "description must be text",
+            "description: 2026-10-04": "description must be text",
+            "description: [a, b]": "description must be text",
+        }
+        for line, message in cases.items():
+            with self.subTest(line=line), self.assertRaisesRegex(SkillManagerError, message):
+                parse_skill_frontmatter(self.frontmatter("name: x", line))
+        with self.assertRaisesRegex(SkillManagerError, "name must be text"):
+            parse_skill_frontmatter(self.frontmatter("name: 12", "description: x"))
+
+    def test_empty_description_keeps_required_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            skill_root = Path(temp) / "meeting-followup"
+            skill_root.mkdir()
+            (skill_root / "SKILL.md").write_text(self.frontmatter("name: meeting-followup", "description:"))
+            with self.assertRaisesRegex(SkillManagerError, "Skill description is required"):
+                validate_skill_creator_compat(skill_root)
+
+    def test_empty_and_non_mapping_frontmatter(self) -> None:
+        self.assertEqual(parse_skill_frontmatter("---\n---\nbody\n")[0], {})
+        with self.assertRaisesRegex(SkillManagerError, "must be a YAML mapping"):
+            parse_skill_frontmatter(self.frontmatter("- a"))
+
+    def test_python_tag_payload_is_rejected_without_running(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            marker = Path(temp) / "pwned"
+            payload = f'description: !!python/object/apply:os.system ["touch {marker}"]'
+            with self.assertRaisesRegex(SkillManagerError, "not valid YAML"):
+                parse_skill_frontmatter(self.frontmatter("name: x", payload))
+            self.assertFalse(marker.exists())
+
+    def test_hostile_values_raise_module_error(self) -> None:
+        cases = {
+            "deep nesting": "a: " + "[" * 5000 + "]" * 5000,
+            "invalid date": "a: 2020-99-99",
+            "huge integer": "a: " + "9" * 10000,
+        }
+        for label, line in cases.items():
+            with self.subTest(label), self.assertRaises(SkillManagerError):
+                parse_skill_frontmatter(self.frontmatter("name: x", line))
+
+    def test_oversized_frontmatter_is_rejected(self) -> None:
+        with self.assertRaisesRegex(SkillManagerError, "64 KiB"):
+            parse_skill_frontmatter(self.frontmatter("name: x", "description: " + "a" * 70000))
 
 
 if __name__ == "__main__":

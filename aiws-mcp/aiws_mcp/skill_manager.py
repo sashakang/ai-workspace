@@ -18,9 +18,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
+import yaml
+
 
 NAME_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?")
 ALLOWED_SKILL_FRONTMATTER = {"name", "description"}
+MAX_SKILL_FRONTMATTER_BYTES = 64 * 1024
 SUPPORTED_SKILL_LIBRARY_SOURCE_KINDS = {"google_drive"}
 RESERVED_SKILL_LIBRARY_SOURCE_KINDS = {"github", "cowork_plugin"}
 PROPOSAL_ID_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]{0,127})")
@@ -372,23 +375,46 @@ def require_changes_only_under_skill(aiws_root: Path, record_id: str, draft_path
     return changed
 
 
-def parse_skill_frontmatter(content: str) -> tuple[dict[str, str], str]:
+def parse_skill_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     if not content.startswith("---\n"):
         raise SkillManagerError("SKILL.md must start with YAML frontmatter.")
     try:
         _, frontmatter, body = content.split("---", 2)
     except ValueError as exc:
         raise SkillManagerError("SKILL.md frontmatter is not closed.") from exc
+    if len(frontmatter.encode("utf-8")) > MAX_SKILL_FRONTMATTER_BYTES:
+        raise SkillManagerError("SKILL.md frontmatter is larger than 64 KiB.")
 
-    metadata: dict[str, str] = {}
-    for raw_line in frontmatter.splitlines():
-        line = raw_line.strip()
-        if not line:
+    # Parse with real YAML so validation matches what Cowork's skill loader accepts.
+    # safe_load can also raise RecursionError/ValueError on hostile input, so catch those too.
+    try:
+        loaded = yaml.safe_load(frontmatter)
+    except (yaml.YAMLError, RecursionError, ValueError) as exc:
+        mark = getattr(exc, "problem_mark", None)
+        location = f" at line {mark.line + 1}" if mark is not None else ""
+        problem = getattr(exc, "problem", None) or str(exc) or type(exc).__name__
+        raise SkillManagerError(
+            f"SKILL.md frontmatter is not valid YAML{location}: {problem}. "
+            'Quote the value or use "description: >-" for text containing ": " or " #".'
+        ) from exc
+
+    if loaded is None:
+        return {}, body
+    if not isinstance(loaded, dict):
+        raise SkillManagerError("SKILL.md frontmatter must be a YAML mapping.")
+    if not all(isinstance(key, str) for key in loaded):
+        raise SkillManagerError("SKILL.md frontmatter keys must be text.")
+    metadata = dict(loaded)
+    for key in ("name", "description"):
+        value = metadata.get(key)
+        if value is None:
+            if key in metadata:
+                metadata[key] = ""
             continue
-        key, sep, value = line.partition(":")
-        if not sep:
-            raise SkillManagerError(f"Invalid frontmatter line: {raw_line}")
-        metadata[key.strip()] = value.strip().strip("'\"")
+        if not isinstance(value, str):
+            raise SkillManagerError(
+                f"SKILL.md frontmatter {key} must be text; YAML read it as {type(value).__name__}. Quote the value."
+            )
     return metadata, body
 
 

@@ -1630,6 +1630,26 @@ class AiwsMcpSkillTests(unittest.TestCase):
         with self.assertRaises(SkillValidationError):
             self.runtime.list_local_skills()
 
+    def test_skill_content_frontmatter_uses_yaml(self) -> None:
+        validate = runtime_module.validate_skill_content
+        folded = "---\nname: x\ndescription: >-\n  Cards: KPI #2\n---\nbody\n"
+        self.assertEqual(validate(folded, "x")["description"], "Cards: KPI #2")
+        for content in (
+            "---\nname: x\ndescription: Cards: build them\n---\nbody\n",
+            "---\nname: x\ndescription: yes\n---\nbody\n",
+            "---\nname: x\na: " + "[" * 5000 + "]" * 5000 + "\n---\nbody\n",
+        ):
+            with self.subTest(content=content[:40]), self.assertRaises(SkillValidationError):
+                validate(content, "x")
+
+    def test_catalog_read_fails_closed_on_unquoted_colon_description(self) -> None:
+        skill_root = self.root / "personal" / "skills" / "country-cards"
+        skill_root.mkdir(parents=True)
+        (skill_root / "SKILL.md").write_text("---\nname: country-cards\ndescription: Cards: build them\n---\nbody\n")
+
+        with self.assertRaisesRegex(SkillValidationError, "not valid YAML"):
+            self.runtime.list_local_skills()
+
     def test_host_identity_is_persisted_and_conflicts_fail_closed(self) -> None:
         host = self.runtime.ensure_host(host_kind="claude-code")
 

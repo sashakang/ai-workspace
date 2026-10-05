@@ -240,24 +240,11 @@ def load_json(path: Path, default: Any) -> Any:
     return json.loads(path.read_text())
 
 
-def parse_skill_markdown(content: str) -> tuple[dict[str, str], str]:
-    if not content.startswith("---\n"):
-        raise SkillValidationError("SKILL.md must start with YAML frontmatter.")
+def parse_skill_markdown(content: str) -> tuple[dict[str, Any], str]:
     try:
-        _, frontmatter, body = content.split("---", 2)
-    except ValueError as exc:
-        raise SkillValidationError("SKILL.md frontmatter is not closed.") from exc
-
-    metadata: dict[str, str] = {}
-    for raw_line in frontmatter.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        key, sep, value = line.partition(":")
-        if not sep:
-            raise SkillValidationError(f"Invalid frontmatter line: {raw_line}")
-        metadata[key.strip()] = value.strip().strip("'\"")
-    return metadata, body
+        return skill_manager.parse_skill_frontmatter(content)
+    except skill_manager.SkillManagerError as exc:
+        raise SkillValidationError(str(exc)) from exc
 
 
 def validate_skill_content(content: str, expected_name: str) -> dict[str, str]:
