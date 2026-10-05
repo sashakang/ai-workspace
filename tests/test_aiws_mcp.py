@@ -1649,6 +1649,7 @@ class AiwsMcpSkillTests(unittest.TestCase):
 
         with self.assertRaisesRegex(SkillValidationError, "not valid YAML"):
             self.runtime.list_local_skills()
+
     def test_refresh_flags_personal_copy_shadowing_library_skill(self) -> None:
         plugin_text = (REPO_ROOT / "core-aiws" / "skills" / "aiws-refresh-skill-library" / "SKILL.md").read_text()
         builtin_text = self.runtime.get_resource("aiws://skills/aiws-refresh-skill-library")
