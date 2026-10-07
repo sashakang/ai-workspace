@@ -37,9 +37,9 @@ Do not inspect or report AIWS marketplace/materialized state in the normal user-
 
 Do not judge content quality, approve proposals, or resolve disagreements. Maintainer review happens before refresh, normally by comparing local Markdown copies of canonical and proposed `SKILL.md` files in VS Code/VSCodium or Meld.
 
-Do not modify canonical `skills/<skill-id>/SKILL.md` unless the maintainer explicitly asks for apply mode. The normal path is verification after the maintainer has already edited the canonical file.
+Refresh never modifies canonical `skills/<skill-id>/SKILL.md`; it verifies after the maintainer has already edited it. To accept a proposal, the maintainer uses `Accept proposal <proposal-id> for <library-display-name>`, handled by `aiws-update-skill-library`.
 
-If an Approved proposal is present and canonical already matches it, report that canonical is already in sync and continue. `Proposals/Approved/` and `Proposals/Rejected/` are optional archive/status folders, not mandatory gates.
+If an Approved proposal is present and canonical already matches it, report that canonical is already in sync and continue. Refresh does not require any proposal folder to exist. `Proposals/Approved/` is where the maintainer moves a proposal to accept it.
 
 Do not call AIWS marketplace tools, create or open drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations. Do not use marketplace or materialization results as evidence for or against refresh.
 

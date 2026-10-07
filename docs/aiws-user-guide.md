@@ -244,7 +244,7 @@ Inside your team's Drive library folder:
    aiws.proposal.json   ← who, when, why
 ```
 
-A new proposal puts a folder here. Older accepted/rejected ones stay only if you choose to keep them as a record — the default workflow doesn't archive.
+A new proposal puts a folder here. Accepted proposals move to `Proposals/Approved/`, and the canonical `SKILL.md` they replaced is kept under `<Library Name>/Archive/` (see Accept below).
 
 ### Review a proposal
 
@@ -289,17 +289,37 @@ For a **brand-new skill**, there's no canonical to diff against. Just open the p
 
 ### Accept
 
+Don't copy the proposed `SKILL.md` into the skill folder by hand. Drive doesn't replace a file with the same name; it puts a second `SKILL.md` next to the first, and validation then fails.
+
 For a full accept (you're fine with the proposed content as-is):
 
-1. Copy the proposed `SKILL.md` into `<Library Name>/skills/<skill-id>/SKILL.md` (overwrite the canonical, or create it if it's a new skill).
-2. Delete the entire `Proposals/Submitted/<skill-id>/<proposal-id>/` folder.
+1. In Drive, move the whole `Proposals/Submitted/<skill-id>/<proposal-id>/` folder to `Proposals/Approved/<skill-id>/` (create that folder if it doesn't exist yet). This move is your approval; Cowork never does it for you.
+2. In Cowork, type:
+
+   ```text
+   Accept proposal <proposal-id> for <Library Name>
+   ```
+
+   If the same proposal id exists for two skills, Cowork asks you to use `Accept proposal <proposal-id> for <skill-id> in <Library Name>`.
+
+Cowork then:
+
+- moves the current canonical to `<Library Name>/Archive/<skill-id>/<YYYY-MM-DD>-<proposal-id>/SKILL.md`,
+- puts the proposed file in its place, leaving exactly one `SKILL.md` in the skill folder (for a brand-new skill it creates the skill folder),
+- validates the library and refreshes it, which ends with a **Save plugin** button for you to click.
+
+Only `SKILL.md` is replaced; other files in the skill folder are untouched. The canonical becomes a new Drive file, so Drive's version history for the previous text lives with the archived copy.
+
+Cowork stops and asks before replacing anything if the canonical changed after the proposal was written, or if it can't tell when the proposal was written. The report shows both times. This check can't see a proposal written from an outdated copy of the skill: if the proposer worked from an old local copy, newer canonical edits are overwritten. The archived copy keeps them, so you can restore them by hand. Anyone with write access to `Proposals/Approved/` can approve, so keep that access to maintainers.
+
+If you already accepted this proposal, running the command again reports that the canonical is already in sync and only refreshes.
 
 For a partial accept (you take some of it, edit some, reject some):
 
 1. Edit `<Library Name>/skills/<skill-id>/SKILL.md` directly to reflect what you accept. Drive's own version history keeps the diff.
-2. Delete the entire `Proposals/Submitted/<skill-id>/<proposal-id>/` folder.
+2. Move the `Proposals/Submitted/<skill-id>/<proposal-id>/` folder to `Proposals/Approved/<skill-id>/` as the record, then run `Refresh <Library Name>`. Don't run `Accept proposal` on it afterwards: that would replace your edited version with the full proposal.
 
-Either way, leave `Proposals/Approved/` and `Proposals/Rejected/` empty unless your team specifically wants a paper trail there.
+To reject, move the proposal folder to `Proposals/Rejected/<skill-id>/`.
 
 ### Files besides SKILL.md
 
@@ -328,6 +348,22 @@ Cowork remembers your local skills in memory and writes them back to disk on qui
 ### "Refresh says no rebuild required, but I expected an update"
 
 You're already up to date with what's on Drive. If you were expecting your teammate's change, they may not have accepted the proposal into canonical yet, or Drive sync is still catching up (usually seconds, sometimes a minute or two). Wait a beat and try again.
+
+### "Validation says there are two SKILL.md files in one folder"
+
+Someone copied a `SKILL.md` into a folder that already had one, and Drive kept both. The validation report lists each copy with its modified time and size. Keep the one you want and move the other out of the folder (for example into `<Library Name>/Archive/`). To accept a proposal next time, use `Accept proposal <proposal-id> for <Library Name>` instead of copying by hand.
+
+### "Accept proposal says the proposal is still in Submitted"
+
+Move the proposal folder to `Proposals/Approved/<skill-id>/` in Drive first, then run the command again. Cowork doesn't move it for you, because that move is the maintainer's approval.
+
+### "Accept proposal stopped and says the skill folder has no SKILL.md"
+
+Accept was interrupted between moving the old file out and putting the new one in. Open `<Library Name>/skills/<skill-id>/` in Drive and rename `SKILL.md.incoming` to `SKILL.md`, or move the archived `SKILL.md` from the `Archive/` path in the report back into the skill folder and trash `SKILL.md.incoming`. Then run `Refresh <Library Name>`.
+
+If the report says validation failed after the accept, the new `SKILL.md` is in place but broken. Fix it in Drive, or trash it and move the archived copy back, so the folder again holds exactly one `SKILL.md`. Then refresh.
+
+If Cowork can't copy, move, or rename files in Drive, it changes nothing and gives you the exact steps to do by hand (report status `NEEDS MANUAL ACTION`).
 
 ### "I see a 'Save skill' button but I'm trying to install a library"
 

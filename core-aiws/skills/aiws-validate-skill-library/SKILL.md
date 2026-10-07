@@ -60,7 +60,10 @@ Optional AIWS metadata may exist at the library root:
 aiws.library.json
 aiws.skills/
 Proposals/
+Archive/
 ```
+
+An optional `Archive/` folder at the library root holds previous canonical versions saved by Accept. Do not validate it as skills, and do not fail or warn on it. Install ignores it.
 
 ## Validation Checklist
 
@@ -78,6 +81,7 @@ Check:
 8. The skill body is nonempty.
 9. Supporting files under `skills/<skill-id>/` are sorted by the Supporting File Rules in `aiws-install-drive-skill-library`, in the same order. Refused files fail validation. Skipped and unpackageable files are reported as `WARN` with their paths, because install leaves them out.
 10. Report `WARN` when a `SKILL.md` references a file in its skill folder that is missing or that install will skip.
+11. Two or more `SKILL.md` files in one skill folder or one proposal folder fail validation. Drive allows duplicate names in one folder, so copying a proposal file into canonical by hand leaves two. Apply this to `skills/<skill-id>/` and to each `Proposals/<state>/<skill-id>/<proposal-id>/` folder. List each copy with its modified time and size. Fix: keep the intended copy and move the other out of the folder, for example into `Archive/`. If the duplicate came from copying a proposal by hand, next time use `Accept proposal <proposal-id> for <library-display-name>`.
 
 ### Phase 1 Boundaries
 
@@ -132,7 +136,7 @@ Proposals/Rejected/<skill-id>/<proposal-id>/SKILL.md
 For each proposal:
 
 - proposal state is exactly `Submitted`, `Approved`, or `Rejected`
-- `<skill-id>` references an existing canonical skill
+- `<skill-id>` references an existing canonical skill. Exception: a proposal for a skill with no `skills/<skill-id>/` yet is `WARN`, not `FAIL`, reported as a brand-new skill proposal. Accept creates the skill.
 - proposal `SKILL.md` passes the same portable skill checks
 - proposal frontmatter `name` equals `<skill-id>`
 - `aiws.proposal.json` is valid JSON
