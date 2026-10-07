@@ -33,6 +33,8 @@ Collect the Google Drive folder URL.
 
 Before deriving a plugin id or building any artifact, list the Drive root and reject sources that are not a Drive Skill Library. A Drive Skill Library has a `skills/` subfolder and optionally `Proposals/` and `aiws.library.json` at the root.
 
+A library root is a folder with `skills/` directly inside it. If the linked folder has no `skills/` directly inside it, report `AIWS Drive Skill Library Install: FAIL` and stop. If it contains library roots, list them with their Drive links so the user can pick one and re-run the install. Do not package the parent folder.
+
 Fail fast with `AIWS Drive Skill Library Install: FAIL` and a clear message if the Drive root contains either of the following at top level:
 
 - `.claude-plugin/` — this is a pre-built Cowork plugin source tree, not a Drive Skill Library. Tell the user to install it via Cowork's plugin path (or, if this is a mirrored library, point the install at the matching Drive Skill Library root instead).

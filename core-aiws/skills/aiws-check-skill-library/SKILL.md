@@ -23,6 +23,15 @@ This is a read-only check. It is a stronger trigger alias for `aiws-validate-ski
 
 Start from the Google Drive Skill Library source, not from the installed Cowork plugin copy.
 
+A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+
+- If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+- If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+- If several folders match the name, ask which one.
+- If none is a library root, ask for the Drive link.
+
+Never check a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one, and report `FAIL`.
+
 Read and validate:
 
 ```text

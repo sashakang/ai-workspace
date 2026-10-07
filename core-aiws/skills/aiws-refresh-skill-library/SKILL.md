@@ -29,6 +29,8 @@ First action must be reading the Google Drive folder contents directly via the h
 <Drive root>/skills/<skill-id>/SKILL.md
 ```
 
+`<Drive root>` is the library root resolved in Workflow step 1. Never refresh or package a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one.
+
 This flow is not an AIWS marketplace workflow. Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, or activation tools. Those are not part of the Phase 1 Drive Skill Library refresh path. A flat `skills/<skill-id>/SKILL.md` Drive folder is valid even if AIWS marketplace indexing would return no results. Do not use missing marketplace search results, an empty `<plugin-id>` marketplace, or absent materialized skills as evidence that the library cannot be refreshed — read Drive directly and proceed.
 
 Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `<plugin-id>` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to Drive Skill Library refresh.
@@ -54,7 +56,11 @@ Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. D
 
 ## Workflow
 
-1. Identify the Drive Skill Library by display name (`<library-display-name>`).
+1. Identify the Drive Skill Library root from a Drive link or display name (`<library-display-name>`). A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+   - If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+   - If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+   - If several folders match the name, ask which one.
+   - If none is a library root, ask for the Drive link.
 2. If a skill id is named, verify that skill; otherwise verify all skills in `skills/`.
 3. Confirm canonical `skills/<skill-id>/SKILL.md` exists and validates.
 4. If Submitted or Approved proposal folders are present, compare them only as evidence; do not require them.

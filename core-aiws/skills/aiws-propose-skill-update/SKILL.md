@@ -60,6 +60,15 @@ Collect or infer:
 - proposer name or account, if available
 - short reason for the change
 
+A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+
+- If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+- If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+- If several folders match the name, ask which one.
+- If none is a library root, ask for the Drive link.
+
+Never write a proposal into a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one.
+
 If a value is missing but not required to write the proposal, use `unspecified` in metadata rather than blocking.
 
 Ask for missing information only when the proposal cannot be written safely. Prefer one concise question over a multi-step form.

@@ -29,6 +29,15 @@ For example: `update Test Plugin skill library`.
 
 For these prompts, verify/refresh the library by default. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If the skill id is named in the prompt, use it. If only the library is named, inspect the library and verify all changed or available skills.
 
+A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+
+- If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+- If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+- If several folders match the name, ask which one.
+- If none is a library root, ask for the Drive link.
+
+Never verify or refresh a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one.
+
 If a proposal folder is present and canonical already matches it, report that the canonical file is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall. If installed Cowork content already matches Drive canonical content, report that no rebuild is required.
 
 ## Boundaries

@@ -160,6 +160,10 @@ Do not tell the user that a `<plugin-id>` marketplace is empty or missing. Do no
 
 Collect the Google Drive folder URL.
 
+## Source-Shape Validation
+
+A library root is a folder with `skills/` directly inside it. If the linked folder has no `skills/` directly inside it, report `AIWS Drive Skill Library Install: FAIL` and stop. If it contains library roots, list them with their Drive links so the user can pick one and re-run the install. Do not package the parent folder.
+
 ## Package And Install
 
 If already running inside Cowork, treat the current user request as the install request. Do not tell the user to run another prompt in the same Cowork session.
@@ -353,6 +357,15 @@ Collect or infer:
 - proposer name or account, if available
 - short reason for the change
 
+A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+
+- If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+- If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+- If several folders match the name, ask which one.
+- If none is a library root, ask for the Drive link.
+
+Never write a proposal into a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one.
+
 If a value is missing but not required to write the proposal, use `unspecified` in metadata rather than blocking.
 
 Ask for missing information only when the proposal cannot be written safely. Prefer one concise question over a multi-step form.
@@ -487,6 +500,15 @@ For example: `update Test Plugin skill library`.
 
 For these prompts, verify/refresh the library by default. Do not ask what content changes the user wants to make unless the user explicitly says they want to edit, rewrite, propose, create, or change the skill content. If the skill id is named in the prompt, use it. If only the library is named, inspect the library and verify all changed or available skills.
 
+A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+
+- If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+- If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+- If several folders match the name, ask which one.
+- If none is a library root, ask for the Drive link.
+
+Never verify or refresh a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one.
+
 If a proposal folder is present and canonical already matches it, report that the canonical file is already in sync with the proposal and proceed to validation and Cowork refresh/reinstall. If installed Cowork content already matches Drive canonical content, report that no rebuild is required.
 
 ## Boundaries
@@ -579,6 +601,8 @@ First action must be reading the Google Drive folder contents directly:
 <Drive root>/skills/<skill-id>/SKILL.md
 ```
 
+`<Drive root>` is the library root resolved in Workflow step 1. Never refresh or package a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one.
+
 Do not start by calling AIWS marketplace workflow, materialize, resolve, export, draft, or activation tools. Those are not part of the Phase 1 Drive Skill Library refresh path.
 
 Do not inspect or report AIWS marketplace/materialized state in the normal user-visible path. In particular, do not say that a `<plugin-id>` marketplace exists, is empty, has zero published skills, or has no materialized skills. Those are debug-only implementation details and are not relevant to Drive Skill Library refresh.
@@ -604,7 +628,11 @@ Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. D
 
 ## Workflow
 
-1. Identify the Drive Skill Library by display name (`<library-display-name>`).
+1. Identify the Drive Skill Library root from a Drive link or display name (`<library-display-name>`). A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+   - If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+   - If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+   - If several folders match the name, ask which one.
+   - If none is a library root, ask for the Drive link.
 2. If a skill id is named, verify that skill; otherwise verify all skills in `skills/`.
 3. Confirm canonical `skills/<skill-id>/SKILL.md` exists and validates.
 4. If Submitted or Approved proposal folders are present, compare them only as evidence; do not require them.
@@ -691,6 +719,15 @@ For example: `Validate the Test Plugin Drive library and include installed plugi
 These prompts mean: inspect the Drive Skill Library, validate canonical skill files and proposal folders, report installed/visible skill status when available, and do not change anything.
 
 The shorter `Check <library-display-name>` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
+
+A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+
+- If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+- If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+- If several folders match the name, ask which one.
+- If none is a library root, ask for the Drive link.
+
+Never validate a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one, and report `FAIL`.
 
 For `Check <library-display-name>`, the Drive folder is the source of truth. Start with the Drive library root and read:
 
@@ -892,6 +929,15 @@ This is a read-only check. It is a stronger trigger alias for `aiws-validate-ski
 ## Required Behavior
 
 Start from the Google Drive Skill Library source, not from the installed Cowork plugin copy.
+
+A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+
+- If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+- If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+- If several folders match the name, ask which one.
+- If none is a library root, ask for the Drive link.
+
+Never check a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one, and report `FAIL`.
 
 Read and validate:
 

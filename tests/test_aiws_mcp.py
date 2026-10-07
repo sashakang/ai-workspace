@@ -1577,6 +1577,36 @@ class AiwsMcpSkillTests(unittest.TestCase):
         self.assertNotIn("CLAUDE_PLUGIN_DATA", improve)
         self.assertNotIn("registry/plugins", improve)
 
+    def test_skill_library_resolution_never_uses_a_parent_folder(self) -> None:
+        # Name-only prompts once resolved to a parent Drive folder that contained the library.
+        root_rule = "A library root is a folder with `skills/` directly inside it."
+        by_name = [
+            "aiws-check-skill-library",
+            "aiws-propose-skill-update",
+            "aiws-refresh-skill-library",
+            "aiws-update-skill-library",
+            "aiws-validate-skill-library",
+        ]
+        expected = {
+            skill_id: [
+                root_rule,
+                "contains library roots, stop and ask which one",
+                "If a Drive link points at a folder that is not a library root, stop",
+            ]
+            for skill_id in by_name
+        }
+        expected["aiws-install-drive-skill-library"] = [
+            root_rule,
+            "If the linked folder has no `skills/` directly inside it, report `AIWS Drive Skill Library Install: FAIL`",
+        ]
+        for skill_id, phrases in expected.items():
+            shipped = (REPO_ROOT / "core-aiws" / "skills" / skill_id / "SKILL.md").read_text(encoding="utf-8")
+            builtin = self.runtime.get_resource(f"aiws://skills/{skill_id}")
+            for label, text in (("core-aiws", shipped), ("builtins", builtin)):
+                for phrase in phrases:
+                    with self.subTest(skill=skill_id, copy=label, phrase=phrase[:40]):
+                        self.assertIn(phrase, text)
+
     def test_skill_library_packaging_includes_supporting_files(self) -> None:
         # Cowork ships core-aiws/skills/*/SKILL.md; the MCP resource serves builtins.py. Check both copies.
         def copies(skill_id: str) -> list[tuple[str, str]]:

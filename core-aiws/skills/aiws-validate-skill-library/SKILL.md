@@ -21,6 +21,15 @@ These prompts mean: inspect the Drive Skill Library, validate canonical skill fi
 
 The shorter `Check <library-display-name>` prompt is ambiguous in Cowork and may route to a generic installed-plugin summary.
 
+A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
+
+- If exactly one matching folder is a library root, use it and show its folder name and link in the report.
+- If the matched folder has no `skills/` but contains library roots, stop and ask which one, listing them with links.
+- If several folders match the name, ask which one.
+- If none is a library root, ask for the Drive link.
+
+Never validate a folder that is not a library root. If a Drive link points at a folder that is not a library root, stop: list any library roots inside it with their links and ask which one, and report `FAIL`.
+
 For `Check <library-display-name>`, the Drive folder is the source of truth. Start with the Drive library root and read:
 
 ```text
