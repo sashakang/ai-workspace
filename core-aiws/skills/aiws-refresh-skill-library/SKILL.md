@@ -54,6 +54,12 @@ plugin display name: <library-display-name>
 
 Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. Do not report that a missing `plugins/` folder blocks refresh; a flat `skills/<skill-id>/SKILL.md` Drive folder is the expected Phase 1 source shape.
 
+### Plugin Version
+
+Use the Plugin Version rules in `aiws-install-drive-skill-library`: the rebuilt `plugin.json.version` and contract `version` are `plugin_version` from `aiws.library.json`. Never write `aiws.library.json` during refresh.
+
+Version bump check: a rebuild reaches Cowork only if `plugin_version` changed since the last install. Before rebuilding, compare the modified time of `aiws.library.json` with the modified times of the packaged files under `skills/` (each `SKILL.md` and every supporting file in the Package group). If any packaged file was modified after `aiws.library.json`, the content changed without a version bump: report `AIWS Skill Library Refresh: NEEDS MANUAL ACTION`, name the newer files, do not build the artifact or present the **Save plugin** card, and tell the user to ask the maintainer to run `Bump plugin version for <library-display-name>`. Do the same when the installed plugin's version is readable, installed content differs, and the installed version is equal to or greater than the version the rebuild would use (`plugin_version`, or `1.0.0` when it is missing); this comparison applies even when `aiws.library.json` is missing. In that case name the installed version, and the prompt for the maintainer is `Bump plugin version for <library-display-name> past <installed version>`, because a plain bump may not get past it. An interrupted bump (`aiws.library.json.incoming` without `aiws.library.json`) stops refresh as in install. Otherwise, if `aiws.library.json` is missing or modified times are unavailable, continue and report `Version bump check: WARN` with the reason. A removed file leaves no newer timestamp, so this check cannot see removals.
+
 ## Workflow
 
 1. Identify the Drive Skill Library root from a Drive link or display name (`<library-display-name>`). A library root is a folder with `skills/` directly inside it. A folder that only contains other library roots is never used as a library. A Drive link from the user always wins over a name. To resolve a name:
@@ -67,7 +73,7 @@ Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. D
 5. Use `aiws-validate-skill-library` to validate the library and proposal structure.
 6. Compare the installed Cowork plugin content when available.
 7. If the installed plugin has the same set of packaged files as Drive, with the same content, report no rebuild required.
-8. If installed content differs or cannot be verified, rebuild the whole Cowork plugin artifact from the Drive library root, preserving the stable `<plugin-id>` derived from `<library-display-name>`.
+8. If installed content differs or cannot be verified, run the Version bump check under Plugin Version; if it stops, report and end here. Otherwise rebuild the whole Cowork plugin artifact from the Drive library root, preserving the stable `<plugin-id>` derived from `<library-display-name>`.
 9. Before presenting the **Save plugin** card, run the same artifact preflight as `aiws-install-drive-skill-library`: verify `.claude-plugin/plugin.json`, `contracts/<plugin-id>.contract.json`, every packaged `skills/<skill-id>/SKILL.md`, no wrapper folder, matching manifest/contract ids and versions, exact `public_skills`, portable skill frontmatter, matching skill folder names, non-empty skill bodies, every packaged supporting file present at its Drive path, and no file entries beyond the packaged set. Sort supporting files by the Supporting File Rules in `aiws-install-drive-skill-library`; a refused file fails the refresh, and skipped or unpackageable files are listed by path, never dropped silently.
 10. Present exactly one **Save plugin** card when rebuild is needed and preflight passes. Do not send the user to plugin management first if the current Cowork session can present the card. End the report with the post-save block from Output.
 11. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Skill Library Refresh: NEEDS RETRY` or `FAIL`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
@@ -88,6 +94,8 @@ Skill(s):
 Canonical SKILL.md verified: PASS|FAIL
 Proposal sync evidence: PASS|FAIL|not present
 Library validation: PASS|FAIL
+Plugin version: <installed version|unknown> -> <plugin_version>
+Version bump check: PASS|WARN|NEEDS MANUAL ACTION|not needed
 Supporting files packaged: none|<each skills/<skill-id>/<path>>
 Skipped files: none|<each skills/<skill-id>/<path> - script|unknown type|non-skill file>
 Unpackageable files: none|<each skills/<skill-id>/<path>>
@@ -96,7 +104,7 @@ Skill invocation: PASS|FAIL|not verified|optional
 Personal copy shadowing library skill: none|<skill-id list>
 ```
 
-Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` only when the current host cannot complete Drive read, artifact build, preflight, or **Save plugin** presentation. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
+Use `PASS` when canonical Drive content is verified, validation passes, and Cowork installed content is either already in sync or successfully refreshed. Use `READY FOR SAVE` when a rebuilt plugin artifact has passed preflight and a **Save plugin** card is presented but the user has not clicked it yet. Use `NEEDS RETRY` when Cowork produced a **Save skill** card or `.skill` artifact instead of the required **Save plugin** card. Use `NEEDS MANUAL ACTION` only when the current host cannot complete Drive read, artifact build, preflight, or **Save plugin** presentation, or when the Version bump check finds content changed without a version bump. Do not fail a successful refresh only because live skill invocation was not run; report `Skill invocation: not verified` or `optional` and offer the separate invocation check.
 
 When the status is `READY FOR SAVE`, end the user-facing report with the block below, replacing `<library-display-name>` and `<plugin-id>` with the real values. Do not show it for any other status (`PASS`, `FAIL`, `NEEDS RETRY`, `NEEDS MANUAL ACTION`, or no rebuild needed). The check prompt in the block is for a new chat after restart; never run it in the current session.
 

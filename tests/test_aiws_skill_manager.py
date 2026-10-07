@@ -575,6 +575,46 @@ class AiwsSkillManagerTests(unittest.TestCase):
             with self.assertRaisesRegex(SkillManagerError, "library_id must match"):
                 validate_skill_library(library_root)
 
+    def test_skill_library_validation_checks_plugin_version(self) -> None:
+        for value, ok in (("1.2.3", True), ("1.0.1", True), ("1.2", False), ("01.2.3", False), (1.2, False), ("v1.2.3", False)):
+            with self.subTest(plugin_version=value), tempfile.TemporaryDirectory() as temp:
+                library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+                library_path = library_root / "aiws.library.json"
+                metadata = json.loads(library_path.read_text())
+                metadata["plugin_version"] = value
+                library_path.write_text(json.dumps(metadata))
+
+                if ok:
+                    result = validate_skill_library(library_root)
+                    self.assertEqual(result["metadata"]["plugin_version"], value)
+                else:
+                    with self.assertRaisesRegex(SkillManagerError, "plugin_version must be MAJOR.MINOR.PATCH"):
+                        validate_skill_library(library_root)
+
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+            result = validate_skill_library(library_root)
+        self.assertIsNone(result["metadata"]["plugin_version"])
+        self.assertIn("aiws.library.json has no plugin_version", "\n".join(result["warnings"]))
+
+    def test_skill_library_validation_accepts_unspecified_library_id_after_metadata_added(self) -> None:
+        # Proposals written before aiws.library.json existed carry library_id "unspecified" or none.
+        for value in ("unspecified", None):
+            with self.subTest(library_id=value), tempfile.TemporaryDirectory() as temp:
+                library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+                proposal_root = self.write_library_proposal(library_root, state="Submitted", proposal_id="proposal-old")
+                for path in (proposal_root / "aiws.proposal.json", library_root / "aiws.skills" / "meeting-followup.json"):
+                    payload = json.loads(path.read_text())
+                    if value is None:
+                        payload.pop("library_id")
+                    else:
+                        payload["library_id"] = value
+                    path.write_text(json.dumps(payload))
+
+                result = validate_skill_library(library_root)
+
+            self.assertEqual(result["status"], "ok")
+
     def test_skill_library_validation_rejects_plugin_manifest_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             library_root = self.write_skill_library(Path(temp), include_metadata=False, include_proposal=False)

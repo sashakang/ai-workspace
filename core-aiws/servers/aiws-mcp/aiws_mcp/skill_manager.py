@@ -505,6 +505,11 @@ def validate_skill_library_metadata(
         if source_kind == "google_drive" and not isinstance(source.get("folder_id"), str):
             raise SkillManagerError(f"Google Drive Skill Library source must define folder_id: {library_file}")
         source_status = "supported" if source_kind in SUPPORTED_SKILL_LIBRARY_SOURCE_KINDS else "reserved"
+        plugin_version = library_metadata.get("plugin_version")
+        if plugin_version is None:
+            warnings.append("aiws.library.json has no plugin_version; Cowork may not pick up later refreshes.")
+        elif not isinstance(plugin_version, str) or not SEMVER_RE.fullmatch(plugin_version):
+            raise SkillManagerError(f"aiws.library.json plugin_version must be MAJOR.MINOR.PATCH: {library_file}")
     else:
         warnings.append("aiws.library.json is absent; stable library identity must be supplied out of band.")
 
@@ -527,7 +532,7 @@ def validate_skill_library_metadata(
             if skill_id not in actual_skill_names:
                 raise SkillManagerError(f"Skill metadata references missing skill folder: {skill_id}")
             metadata_library_id = payload.get("library_id")
-            if library_id is not None and metadata_library_id != library_id:
+            if library_id is not None and metadata_library_id not in (None, UNSPECIFIED_LIBRARY_ID, library_id):
                 raise SkillManagerError(f"Skill metadata library_id must match aiws.library.json id: {metadata_file}")
             source_path = payload.get("source_path", f"skills/{skill_id}/SKILL.md")
             resolved_source = validate_skill_library_relative_path(library_root, source_path, label="Skill metadata source_path")
@@ -562,6 +567,7 @@ def validate_skill_library_metadata(
             "display_name": library_metadata.get("display_name"),
             "source_kind": source_kind,
             "source_status": source_status,
+            "plugin_version": library_metadata.get("plugin_version"),
         }
     return metadata, metadata_results, warnings + proposals["warnings"], proposals["proposals"]
 
@@ -629,7 +635,7 @@ def validate_skill_library_proposals(
                     raise SkillManagerError(f"Proposal metadata proposal_id must match directory: {proposal_metadata_file}")
                 if payload.get("skill_id") != skill_id:
                     raise SkillManagerError(f"Proposal metadata skill_id must match directory: {proposal_metadata_file}")
-                if library_id is not None and payload.get("library_id") != library_id:
+                if library_id is not None and payload.get("library_id") not in (None, UNSPECIFIED_LIBRARY_ID, library_id):
                     raise SkillManagerError(f"Proposal metadata library_id must match aiws.library.json id: {proposal_metadata_file}")
                 source_path = payload.get("source_path")
                 source = validate_skill_library_relative_path(library_root, source_path, label="Proposal source_path")
@@ -4109,6 +4115,8 @@ def google_drive_api_token_from_env(env: dict[str, str] | None = None) -> str | 
     return None
 
 
+# Proposals and skill metadata written before aiws.library.json existed carry this library_id.
+UNSPECIFIED_LIBRARY_ID = "unspecified"
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 

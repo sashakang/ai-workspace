@@ -128,7 +128,7 @@ Expected:
 - Cowork presents exactly one **Save plugin** card for a `.plugin` artifact.
 - Preflight checks PASS (manifest, contract, archive layout, skill frontmatter).
 - Report header is `AIWS Drive Skill Library Install: READY FOR SAVE` while waiting for the click, and `PASS` after Cowork accepts.
-- Default `plugin.json` fields when `aiws.library.json` does not specify them: `version=0.1.0`, `author.name` defaults to the active Cowork user's display name (e.g., `Sasha Kang`). Either default may be overridden by an explicit field in `aiws.library.json`.
+- `plugin.json.version` equals `plugin_version` from `aiws.library.json`; when it is missing, `version=1.0.0` and the report warns `library has no plugin_version`. Default `author.name` defaults to the active Cowork user's display name (e.g., `Sasha Kang`). It may be overridden by an explicit field in `aiws.library.json`.
 - The install report may include a `Sources:` section with Drive links. Informational only.
 - The install report ends with `Self-improvement:` and either a concrete follow-up or `No self-improvement action identified`.
 
@@ -282,7 +282,7 @@ Expected:
 - AIWS reads Drive canonical `SKILL.md` files first.
 - AIWS compares installed Cowork plugin content.
 - Installed plugin had 2 skills (`morning-briefing`, `slack-response-triage`); Drive now has 3 (`morning-briefing`, `slack-response-triage`, `schedule-summary`).
-- AIWS rebuilds the `.plugin` artifact, bumps `plugin.json.version` to a new non-empty value greater than installed, and preflights. Observed bump convention when adding a new skill: minor bump (e.g., `v0.1.0 → v0.2.0`). The exact bump is not enforced; any version strictly greater than installed satisfies the contract.
+- AIWS rebuilds the `.plugin` artifact with `plugin.json.version` equal to `plugin_version` from `aiws.library.json`, and preflights. AIWS never picks the version itself: if the new skill landed without a bump (manual copy instead of `Accept proposal`), refresh reports `NEEDS MANUAL ACTION` and names the newer files; run `Bump plugin version for Test Plugin` and refresh again.
 - Cowork presents one **Save plugin** card.
 - Report header: `AIWS Skill Library Refresh: READY FOR SAVE` or `AIWS Skill Library Update: READY FOR SAVE`. Either label is accepted.
 - After Save: report header becomes `PASS`.
@@ -438,7 +438,7 @@ Expected:
 
 - AIWS reads Drive canonical first.
 - AIWS detects that the installed plugin's `schedule-summary` content differs from Drive canonical (v.2 was accepted in Step 9).
-- AIWS rebuilds the `.plugin` artifact with a bumped `plugin.json.version` (observed convention: patch bump for a content-only change, e.g. `v0.2.0 → v0.2.1`).
+- AIWS rebuilds the `.plugin` artifact with `plugin.json.version` equal to the `plugin_version` raised by the accept in Step 9 (patch bump, e.g. `1.0.1 → 1.0.2`).
 - Preflight passes; Cowork presents one **Save plugin** card.
 - Report header: `AIWS Skill Library Refresh: READY FOR SAVE` (or `Update`).
 

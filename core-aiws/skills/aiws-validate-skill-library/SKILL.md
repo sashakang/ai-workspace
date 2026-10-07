@@ -115,6 +115,7 @@ If `aiws.library.json` exists, check:
 - `display_name`, if present, is text
 - `source.kind` is `google_drive` for Phase 1
 - for `google_drive`, `source.folder_id` is present if known
+- `plugin_version`, if present, is a `MAJOR.MINOR.PATCH` string; if absent, report `WARN: library has no plugin_version`, because later refreshes may not reach Cowork
 
 If `aiws.skills/*.json` exists, check each file:
 

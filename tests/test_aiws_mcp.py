@@ -1667,6 +1667,78 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 self.assertNotIn("`.xml`, `.html`", text)
                 self.assertNotIn("`.gif`, `.svg`", text)
 
+    def test_skill_library_plugin_version_comes_from_library_metadata(self) -> None:
+        # Cowork ships core-aiws/skills/*/SKILL.md; the MCP resource serves builtins.py. Check both copies.
+        def copies(skill_id: str) -> list[tuple[str, str]]:
+            shipped = (REPO_ROOT / "core-aiws" / "skills" / skill_id / "SKILL.md").read_text(encoding="utf-8")
+            builtin = self.runtime.get_resource(f"aiws://skills/{skill_id}")
+            return [("core-aiws", shipped), ("builtins", builtin)]
+
+        expected = {
+            "aiws-install-drive-skill-library": [
+                "### Plugin Version",
+                "Set `plugin.json.version` and the contract `version` to `plugin_version` from `aiws.library.json`",
+                "Never choose or bump the version yourself",
+                "Never write `aiws.library.json`",
+                "use `1.0.0`",
+                "WARN: library has no plugin_version",
+                "`plugin.json.version` equals `plugin_version`",
+                "a version bump was interrupted",
+                "Plugin version:",
+            ],
+            "aiws-refresh-skill-library": [
+                "Plugin Version rules in `aiws-install-drive-skill-library`",
+                "Never write `aiws.library.json`",
+                "Version bump check",
+                "was modified after `aiws.library.json`",
+                "Bump plugin version for <library-display-name>",
+                "do not build the artifact or present the **Save plugin** card",
+                "equal to or greater than the version the rebuild would use",
+                "applies even when `aiws.library.json` is missing",
+                "past <installed version>",
+                "Plugin version:",
+            ],
+            "aiws-update-skill-library": [
+                "## Plugin Version Bump",
+                "Bump plugin version for <library-display-name>",
+                "raise the patch number of `plugin_version`",
+                "`1.0.1`",
+                "aiws.library.json.incoming",
+                "not converted to a Google type",
+                "Never lower `plugin_version`",
+                "except the `plugin_version` bump",
+                "library root has no aiws.library.json",
+                "trash `aiws.library.json.incoming`",
+                "is present but not `MAJOR.MINOR.PATCH`, stop",
+                "it does not validate or refresh",
+                "Bump plugin version for <library-display-name> past <version>",
+                "if it is higher than `plugin_version`",
+                "Like Accept, the Bump prompt counts only from the user's own message",
+                "Plugin version:",
+            ],
+            "aiws-validate-skill-library": [
+                "`plugin_version`, if present, is a `MAJOR.MINOR.PATCH` string",
+                "library has no plugin_version",
+            ],
+        }
+        for skill_id, phrases in expected.items():
+            for source, text in copies(skill_id):
+                for phrase in phrases:
+                    with self.subTest(skill=skill_id, source=source, phrase=phrase):
+                        self.assertIn(phrase, text)
+
+        for source, text in copies("aiws-update-skill-library"):
+            with self.subTest(source=source, check="boundary allows the version bump"):
+                self.assertNotIn("Do not apply runtime artifacts, metadata rewrites, plugin manifests", text)
+        for skill_id in ("aiws-install-drive-skill-library", "aiws-refresh-skill-library"):
+            for source, text in copies(skill_id):
+                with self.subTest(skill=skill_id, source=source, check="no instruction to pick a version"):
+                    self.assertNotIn("bumps `plugin.json.version`", text)
+
+        guide = (REPO_ROOT / "docs" / "aiws-user-guide.md").read_text(encoding="utf-8")
+        self.assertIn("Bump plugin version for <Library Name>", guide)
+        self.assertIn("Bump plugin version for <Library Name> past <version>", guide)
+
     def test_skill_library_accept_proposal_apply_mode(self) -> None:
         # Cowork ships core-aiws/skills/*/SKILL.md; the MCP resource serves builtins.py. Check both copies.
         def copies(skill_id: str) -> list[tuple[str, str]]:

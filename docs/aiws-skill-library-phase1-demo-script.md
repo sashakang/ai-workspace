@@ -129,7 +129,7 @@ Refresh Test Plugin
 
 Expected:
 
-- AIWS reads Drive canonical, sees 3 skills now (was 2), rebuilds the `.plugin` artifact with a minor version bump (e.g., `v0.1.0 → v0.2.0`), preflight passes.
+- AIWS reads Drive canonical, sees 3 skills now (was 2), rebuilds the `.plugin` artifact at the `plugin_version` from `aiws.library.json` (raised by the accept), preflight passes.
 - One **Save plugin** card.
 - After clicking Save plugin, `test-plugin:schedule-summary` is visible alongside `test-plugin:morning-briefing` and `test-plugin:slack-response-triage`.
 
@@ -207,7 +207,7 @@ Refresh Test Plugin
 
 Expected:
 
-- AIWS sees content-only change in `schedule-summary`, rebuilds with a patch bump (e.g., `v0.2.0 → v0.2.1`), one **Save plugin** card.
+- AIWS sees content-only change in `schedule-summary`, rebuilds at the `plugin_version` the accept raised (e.g., `1.0.1 → 1.0.2`), one **Save plugin** card.
 - After save, the installed `test-plugin:schedule-summary` reflects the v.2 canonical.
 
 Then remove the local override via Cowork's skill panel (it's still byte-identical to the last proposal → safe to remove) and run:

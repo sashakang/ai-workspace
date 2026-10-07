@@ -66,6 +66,12 @@ The artifact is a plugin artifact, not a `.skill` artifact. Name and present it 
 
 Derive `<plugin-id>` as a stable slug from `<library-display-name>` (lowercase, hyphenated). The manifest must include `name`, `description`, `version`, and `author.name`. The contract must include `plugin_id`, `version`, and `public_skills` listing exactly the packaged skill folder ids. Do not put files under an extra top-level wrapper folder inside the archive.
 
+### Plugin Version
+
+Cowork may treat a plugin saved again at the same version as unchanged, so the version comes from the library, not from you. Set `plugin.json.version` and the contract `version` to `plugin_version` from `aiws.library.json` at the library root. Never choose or bump the version yourself. Never write `aiws.library.json`: only the Plugin Version Bump in `aiws-update-skill-library` changes it.
+
+If the root has `aiws.library.json.incoming` but no `aiws.library.json`, a version bump was interrupted: do not build, report `NEEDS MANUAL ACTION`, and tell the user to ask the maintainer to rename `aiws.library.json.incoming` to `aiws.library.json`. Otherwise, if `aiws.library.json` or its `plugin_version` is missing, use `1.0.0` and report `WARN: library has no plugin_version; later refreshes may not reach Cowork. Ask the maintainer to run "Bump plugin version for <library-display-name>".` If `plugin_version` is present but is not a `MAJOR.MINOR.PATCH` string, report `AIWS Drive Skill Library Install: FAIL` naming the value.
+
 ### Supporting File Rules
 
 A skill folder may hold files besides `SKILL.md`, such as `references/`, `REFERENCE.md`, or images. A skill whose `SKILL.md` points at those files breaks when they stay on Drive, so package them with the skill.
@@ -93,7 +99,7 @@ Before presenting the **Save plugin** card, inspect the generated archive and ve
 - no skipped, unpackageable, or refused file is in the archive
 - no entry starts with `<plugin-id>/`, `<library-display-name>/`, or another wrapper folder
 - `plugin.json.name` equals the derived `<plugin-id>`
-- `plugin.json.version` is a non-empty semver-like string
+- `plugin.json.version` equals `plugin_version` from `aiws.library.json`, or `1.0.0` when it is missing
 - contract `plugin_id` and `version` match `plugin.json`
 - contract `public_skills` equals the packaged skill folder ids
 - each packaged `SKILL.md` has only `name` and `description` frontmatter
@@ -145,6 +151,7 @@ Install prompt:
 Plugin artifact generated: PASS|FAIL|NEEDS MANUAL ACTION
 Plugin artifact layout valid: PASS|FAIL|not verified
 Plugin artifact preflight: PASS|FAIL|not verified
+Plugin version: <version> (from aiws.library.json|default 1.0.0, WARN)
 Supporting files packaged: none|<each skills/<skill-id>/<path>>
 Skipped files: none|<each skills/<skill-id>/<path> - script|unknown type|non-skill file>
 Unpackageable files: none|<each skills/<skill-id>/<path>>

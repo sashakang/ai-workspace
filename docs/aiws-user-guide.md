@@ -306,6 +306,7 @@ Cowork then:
 
 - moves the current canonical to `<Library Name>/Archive/<skill-id>/<YYYY-MM-DD>-<proposal-id>/SKILL.md`,
 - puts the proposed file in its place, leaving exactly one `SKILL.md` in the skill folder (for a brand-new skill it creates the skill folder),
+- raises the library's plugin version in `<Library Name>/aiws.library.json` (creating the file if it doesn't exist), so teammates' Cowork picks up the change on refresh,
 - validates the library and refreshes it, which ends with a **Save plugin** button for you to click.
 
 Only `SKILL.md` is replaced; other files in the skill folder are untouched. The canonical becomes a new Drive file, so Drive's version history for the previous text lives with the archived copy.
@@ -317,7 +318,8 @@ If you already accepted this proposal, running the command again reports that th
 For a partial accept (you take some of it, edit some, reject some):
 
 1. Edit `<Library Name>/skills/<skill-id>/SKILL.md` directly to reflect what you accept. Drive's own version history keeps the diff.
-2. Move the `Proposals/Submitted/<skill-id>/<proposal-id>/` folder to `Proposals/Approved/<skill-id>/` as the record, then run `Refresh <Library Name>`. Don't run `Accept proposal` on it afterwards: that would replace your edited version with the full proposal.
+2. Move the `Proposals/Submitted/<skill-id>/<proposal-id>/` folder to `Proposals/Approved/<skill-id>/` as the record. Don't run `Accept proposal` on it afterwards: that would replace your edited version with the full proposal.
+3. Run `Bump plugin version for <Library Name>`, then `Refresh <Library Name>`.
 
 To reject, move the proposal folder to `Proposals/Rejected/<skill-id>/`.
 
@@ -328,6 +330,24 @@ A skill folder can hold reference files next to `SKILL.md`, for example `referen
 Scripts (anything in a `scripts/` folder, or files like `.py` and `.sh`) are not installed. Neither are README files, dotfiles, or other file types such as `.html` or `.docx`. The install report lists every skipped file by name, so you can see what was left out. Files that would change how Cowork behaves (hooks, `.mcp.json`, settings files) make the install fail instead of being skipped. Google Docs, Sheets, and Drive shortcuts can't be packaged either; save the content as a Markdown or PDF file in the skill folder instead.
 
 Changes to these files don't go through the proposal flow: proposals carry only `SKILL.md`. Anyone who can edit the Drive library can change them directly.
+
+### Plugin version
+
+Cowork installs a library as a plugin with a version number, and it may ignore a refreshed plugin whose version didn't change. The version lives in `<Library Name>/aiws.library.json` as `plugin_version`. Install and refresh only read it; `Accept proposal` raises it for you. After any edit you make directly in Drive (a partial accept, a changed reference file, a removed file), run:
+
+```text
+Bump plugin version for <Library Name>
+```
+
+If you forget, a teammate's refresh stops with `NEEDS MANUAL ACTION`, names the files changed since the last bump, and asks them to message you. Removing a file leaves nothing newer behind, so refresh can't notice a removal: bump after removals yourself. Copying the library folder in Drive can also make refresh stop this way; one bump fixes it.
+
+If a teammate's refresh says their installed version is already at or above the library's (common for libraries installed before AIWS tracked versions), run:
+
+```text
+Bump plugin version for <Library Name> past <version>
+```
+
+with the installed version from their report. The library then jumps past it.
 
 ### Telling your team
 
@@ -414,6 +434,7 @@ Replace `<Library Name>` with your team's library name (e.g. "Marketing Skills")
 | Propose a new skill | `Propose this new skill for <Library Name>: <skill-id>. Use my local <skill-id> SKILL.md as the proposed content.` |
 | Propose a change | `Propose this <skill-id> change for <Library Name>: use my current local <skill-id> SKILL.md as the proposed content.` |
 | Read a canonical skill | `Show me the canonical <skill-id> SKILL.md from <Library Name>` |
+| Bump the version after a direct Drive edit (maintainer) | `Bump plugin version for <Library Name>` |
 
 That's the whole user-facing surface for skill-library work.
 
