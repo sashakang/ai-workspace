@@ -67,6 +67,8 @@ Check:
 6. Frontmatter `name` equals the folder name.
 7. Frontmatter `description` is nonempty.
 8. The skill body is nonempty.
+9. Supporting files under `skills/<skill-id>/` are sorted by the Supporting File Rules in `aiws-install-drive-skill-library`, in the same order. Refused files fail validation. Skipped and unpackageable files are reported as `WARN` with their paths, because install leaves them out.
+10. Report `WARN` when a `SKILL.md` references a file in its skill folder that is missing or that install will skip.
 
 ### Phase 1 Boundaries
 
@@ -78,7 +80,7 @@ contracts/
 .mcp.json
 ```
 
-Runtime capability artifacts like MCP servers, connectors, auth config, scripts, packaged plugins, ZIP uploads, and host tools are outside Phase 1 Skill Library mode.
+Runtime capability artifacts like MCP servers, connectors, auth config, packaged plugins, ZIP uploads, and host tools are outside Phase 1 Skill Library mode. Scripts inside a skill folder are not installed in Phase 1: install skips them and reports each one. Reference files such as `references/*.md` and `REFERENCE.md` are installed with the skill.
 
 ### Read-Only Boundaries
 
@@ -149,7 +151,7 @@ Library:
 - source kind:
 
 Skills:
-- <skill-id>: PASS|FAIL - <reason>
+- <skill-id>: PASS|WARN|FAIL - <reason>
 
 Metadata:
 - aiws.library.json: PASS|WARN|FAIL|not present
@@ -163,7 +165,7 @@ Fixes:
 2. <specific fix>
 ```
 
-Use `PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata or unknown Drive folder id. Do not fail only because optional metadata is absent.
+Use `PASS` only if the required library shape and all present metadata/proposals validate. Use `WARN` for optional missing metadata, unknown Drive folder id, supporting files that install will skip, or `SKILL.md` references to missing files. Do not fail only because optional metadata is absent.
 
 When installed plugin status is available, include it as a separate section:
 

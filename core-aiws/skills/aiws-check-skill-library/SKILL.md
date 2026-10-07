@@ -34,6 +34,8 @@ aiws.library.json, if present
 aiws.skills/, if present
 ```
 
+Check each skill folder's supporting files the same way as `aiws-validate-skill-library`, using the Supporting File Rules in `aiws-install-drive-skill-library`.
+
 After Drive validation, include installed Cowork plugin status as secondary evidence:
 
 ```text

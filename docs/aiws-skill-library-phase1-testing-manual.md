@@ -267,7 +267,7 @@ Maintainer action on Drive:
 - Delete the entire `Proposals/Submitted/schedule-summary/<proposal-id>/` folder, including both `SKILL.md` and `aiws.proposal.json`. Drive version history preserves the proposal contents if needed later.
 - `Proposals/Approved/` and `Proposals/Rejected/` stay empty. No archive movement.
 
-Rationale: Step 1's validation asserts `Proposals/Submitted/` is empty, so the proposal folder must be cleared. `aiws.proposal.json` next to a canonical `SKILL.md` would pollute the canonical folder — the install/refresh flow expects only `SKILL.md` under `skills/<skill-id>/`.
+Rationale: Step 1's validation asserts `Proposals/Submitted/` is empty, so the proposal folder must be cleared. `aiws.proposal.json` next to a canonical `SKILL.md` would pollute the canonical folder — install/refresh skip it, but it would still sit in the canonical skill folder and show up as a validation warning.
 
 ## Step 5: User Refreshes Test Plugin
 

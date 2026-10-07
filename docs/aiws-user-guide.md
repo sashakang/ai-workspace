@@ -301,6 +301,14 @@ For a partial accept (you take some of it, edit some, reject some):
 
 Either way, leave `Proposals/Approved/` and `Proposals/Rejected/` empty unless your team specifically wants a paper trail there.
 
+### Files besides SKILL.md
+
+A skill folder can hold reference files next to `SKILL.md`, for example `references/metrics.md`, `REFERENCE.md`, PNG/JPG/GIF images, or PDFs. Install and refresh package these with the skill, so a skill that points at them keeps working in Cowork. Editing one of them on Drive and running `Refresh <Library Name>` picks up the change.
+
+Scripts (anything in a `scripts/` folder, or files like `.py` and `.sh`) are not installed. Neither are README files, dotfiles, or other file types such as `.html` or `.docx`. The install report lists every skipped file by name, so you can see what was left out. Files that would change how Cowork behaves (hooks, `.mcp.json`, settings files) make the install fail instead of being skipped. Google Docs, Sheets, and Drive shortcuts can't be packaged either; save the content as a Markdown or PDF file in the skill folder instead.
+
+Changes to these files don't go through the proposal flow: proposals carry only `SKILL.md`. Anyone who can edit the Drive library can change them directly.
+
 ### Telling your team
 
 Just message them — your team's normal channel, e.g. Slack — that the library has a new version. They run `Refresh <Library Name>` on their side and pick it up.

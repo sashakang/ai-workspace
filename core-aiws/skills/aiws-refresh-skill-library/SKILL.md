@@ -41,7 +41,7 @@ If an Approved proposal is present and canonical already matches it, report that
 
 Do not call AIWS marketplace tools, create or open drafts, activate drafts, patch runtime-installed plugin files, create GitHub pull requests, export bridge repositories, upload ZIPs, or change marketplace registrations. Do not use marketplace or materialization results as evidence for or against refresh.
 
-Refresh compares the Drive Skill Library root against the installed Cowork plugin when installed content is available. If installed content already matches Drive canonical content, report that no rebuild is required. If installed content differs, installed visibility is missing, or installed content cannot be confirmed, rebuild the whole Cowork plugin artifact from the Drive root and present a single **Save plugin** card in the current Cowork session. Fall back to manual reinstall guidance only when the host cannot read Drive, cannot build the artifact, or cannot present the **Save plugin** card.
+Refresh compares the Drive Skill Library root against the installed Cowork plugin when installed content is available. Installed content means the whole packaged skill folder: `SKILL.md` plus the supporting files selected by the Supporting File Rules in `aiws-install-drive-skill-library`, so a changed, added, or removed packaged file requires a rebuild. If installed content already matches Drive canonical content, report that no rebuild is required. If installed content differs, installed visibility is missing, or installed content cannot be confirmed, rebuild the whole Cowork plugin artifact from the Drive root and present a single **Save plugin** card in the current Cowork session. Fall back to manual reinstall guidance only when the host cannot read Drive, cannot build the artifact, or cannot present the **Save plugin** card.
 
 Any rebuilt artifact identity must remain stable across refreshes for the same library:
 
@@ -60,9 +60,9 @@ Do not generate per-skill plugin identities such as `<plugin-id>--<skill-id>`. D
 4. If Submitted or Approved proposal folders are present, compare them only as evidence; do not require them.
 5. Use `aiws-validate-skill-library` to validate the library and proposal structure.
 6. Compare the installed Cowork plugin content when available.
-7. If installed content matches Drive, report no rebuild required.
+7. If the installed plugin has the same set of packaged files as Drive, with the same content, report no rebuild required.
 8. If installed content differs or cannot be verified, rebuild the whole Cowork plugin artifact from the Drive library root, preserving the stable `<plugin-id>` derived from `<library-display-name>`.
-9. Before presenting the **Save plugin** card, run the same artifact preflight as `aiws-install-drive-skill-library`: verify `.claude-plugin/plugin.json`, `contracts/<plugin-id>.contract.json`, every packaged `skills/<skill-id>/SKILL.md`, no wrapper folder, matching manifest/contract ids and versions, exact `public_skills`, portable skill frontmatter, matching skill folder names, and non-empty skill bodies.
+9. Before presenting the **Save plugin** card, run the same artifact preflight as `aiws-install-drive-skill-library`: verify `.claude-plugin/plugin.json`, `contracts/<plugin-id>.contract.json`, every packaged `skills/<skill-id>/SKILL.md`, no wrapper folder, matching manifest/contract ids and versions, exact `public_skills`, portable skill frontmatter, matching skill folder names, non-empty skill bodies, every packaged supporting file present at its Drive path, and no file entries beyond the packaged set. Sort supporting files by the Supporting File Rules in `aiws-install-drive-skill-library`; a refused file fails the refresh, and skipped or unpackageable files are listed by path, never dropped silently.
 10. Present exactly one **Save plugin** card when rebuild is needed and preflight passes. Do not send the user to plugin management first if the current Cowork session can present the card. End the report with the post-save block from Output.
 11. If the host-generated card, filename, or report says `.skill`, **Save skill**, or individual skill install, do not tell the user to click it. Report `AIWS Skill Library Refresh: NEEDS RETRY` or `FAIL`, explain that Cowork produced a skill card instead of a plugin card, and repackage the same Drive contents as a `.plugin` artifact.
 12. Use manual reinstall guidance only if Drive access, artifact creation, artifact preflight, or **Save plugin** presentation is unavailable in the current host.
@@ -82,6 +82,9 @@ Skill(s):
 Canonical SKILL.md verified: PASS|FAIL
 Proposal sync evidence: PASS|FAIL|not present
 Library validation: PASS|FAIL
+Supporting files packaged: none|<each skills/<skill-id>/<path>>
+Skipped files: none|<each skills/<skill-id>/<path> - script|unknown type|non-skill file>
+Unpackageable files: none|<each skills/<skill-id>/<path>>
 Cowork refresh/reinstall: PASS|FAIL|READY FOR SAVE|NEEDS RETRY|NEEDS MANUAL ACTION
 Skill invocation: PASS|FAIL|not verified|optional
 Personal copy shadowing library skill: none|<skill-id list>
