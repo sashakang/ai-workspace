@@ -29,6 +29,7 @@ Test Plugin/
     Submitted/
     Approved/
     Rejected/
+  Archive/        (created by the first accept or version bump)
 ```
 
 Demo skill being built: `schedule-summary`.
@@ -36,7 +37,8 @@ Background canonical skills (not touched by the demo): `morning-briefing`, `slac
 
 ## Preconditions
 
-- AIWS plugin (core-aiws ≥ 0.4.23) is installed in Cowork and reachable.
+- AIWS plugin (core-aiws ≥ 0.5.6) is installed in Cowork and reachable.
+- The tester's Google account can edit the Test Plugin folder (the maintainer steps write to Drive).
 - Google Drive integration is connected and can read the Test Plugin folder.
 - The Drive root folder name is exactly `Test Plugin`.
 - The tester knows how to author a local Cowork user skill (Cowork's native local-skill mechanism). The manual treats the local-skill location as host-defined and does not pin a filesystem path.
@@ -51,7 +53,7 @@ On macOS the bash sandbox cannot directly write to the user's local filesystem, 
 User prompt:
 
 ```text
-Reset the Test Plugin demo environment. In the Test Plugin Drive folder, delete skills/meeting-followup/ and skills/schedule-summary/ if present, and empty Proposals/Submitted/, Proposals/Approved/, and Proposals/Rejected/. Keep skills/morning-briefing/, skills/slack-response-triage/, and aiws.library.json untouched. Then uninstall test-plugin from Cowork if installed, and remove the local schedule-summary user skill if present. Show me each deletion before executing.
+Reset the Test Plugin demo environment. In the Test Plugin Drive folder, delete skills/meeting-followup/ and skills/schedule-summary/ if present, and empty Proposals/Submitted/, Proposals/Approved/, Proposals/Rejected/, and Archive/. Keep skills/morning-briefing/, skills/slack-response-triage/, and aiws.library.json untouched. Then uninstall test-plugin from Cowork if installed, and remove the local schedule-summary user skill if present. Show me each deletion before executing.
 ```
 
 Expected:
@@ -61,7 +63,8 @@ Expected:
 - After confirmations:
   - Drive `Test Plugin/skills/` contains only `morning-briefing/` and `slack-response-triage/`.
   - Drive `Test Plugin/Proposals/Submitted/`, `Approved/`, `Rejected/` are empty.
-  - Drive `Test Plugin/aiws.library.json` is unchanged.
+  - Drive `Test Plugin/Archive/` is empty or absent.
+  - Drive `Test Plugin/aiws.library.json` is unchanged. Its `plugin_version` is never reset: the version only goes forward, or Cowork may ignore the next refresh.
   - Cowork reports `test-plugin: not installed`.
   - The local `schedule-summary` user skill is gone.
 - Cowork does NOT delete `skills/morning-briefing/`, `skills/slack-response-triage/`, or `aiws.library.json` under any circumstance.
@@ -103,6 +106,7 @@ Pass requires all of the following:
 - Drive `Proposals/Approved/` is empty.
 - Drive `Proposals/Rejected/` is empty.
 - `aiws.library.json` (if used) reports `id=test-plugin`, `display_name=Test Plugin`, `source=google_drive`.
+- `plugin_version` is a `MAJOR.MINOR.PATCH` string, or validation warns `library has no plugin_version` (expected before the first accept or bump).
 
 The validation output may also include informational sections that are not pass/fail signals:
 
@@ -259,15 +263,22 @@ Maintainer action: open `Proposals/Submitted/schedule-summary/<proposal-id>/SKIL
 
 ### 4.3 Maintainer accept
 
-**Role boundary**: Step 4.3 is a deliberate maintainer action. The assistant must NOT auto-execute it immediately after Step 4.1 / Step 4.2. Wait for an explicit maintainer signal (e.g., `accept as maintainer`, `approve`, `do it`) before touching canonical or deleting the proposal folder. In single-user demos where the proposer and the maintainer are the same person, the explicit signal is still required — it's the role transition that matters, not the identity of the actor.
+**Role boundary**: Step 4.3 is a deliberate maintainer action. The assistant must NOT auto-execute it immediately after Step 4.1 / Step 4.2. Wait for an explicit maintainer signal (e.g., `accept as maintainer`, `approve`, `do it`) before moving the proposal folder or running `Accept proposal`. In single-user demos where the proposer and the maintainer are the same person, the explicit signal is still required — it's the role transition that matters, not the identity of the actor.
 
-Maintainer action on Drive:
+Maintainer action on Drive: move the whole `Proposals/Submitted/schedule-summary/<proposal-id>/` folder to `Proposals/Approved/schedule-summary/` (create that folder). The move is the approval; AIWS never makes it. Do not copy `SKILL.md` into `skills/` by hand: Drive keeps a second `SKILL.md` instead of replacing the first, and the copy skips the version bump.
 
-- Create `skills/schedule-summary/SKILL.md` with the accepted content. This is a new file under `skills/`; do not move files out of `Proposals/Submitted/` into `skills/`.
-- Delete the entire `Proposals/Submitted/schedule-summary/<proposal-id>/` folder, including both `SKILL.md` and `aiws.proposal.json`. Drive version history preserves the proposal contents if needed later.
-- `Proposals/Approved/` and `Proposals/Rejected/` stay empty. No archive movement.
+User prompt (as maintainer):
 
-Rationale: Step 1's validation asserts `Proposals/Submitted/` is empty, so the proposal folder must be cleared. `aiws.proposal.json` next to a canonical `SKILL.md` would pollute the canonical folder — install/refresh skip it, but it would still sit in the canonical skill folder and show up as a validation warning.
+```text
+Accept proposal <proposal-id> for Test Plugin
+```
+
+Expected:
+
+- AIWS creates `skills/schedule-summary/` with exactly one `SKILL.md`, equal to the proposal. Brand-new skill, so nothing is archived under `Archive/schedule-summary/`.
+- AIWS raises `plugin_version` in `aiws.library.json`: `1.0.1` if it was missing, otherwise the next patch. The previous file goes to `Archive/aiws.library/<YYYY-MM-DD>-<old version or unversioned>/aiws.library.json`. The root holds exactly one `aiws.library.json`, plain JSON, not a Google Doc.
+- Report shows `Plugin version: <old> -> <new>`, validation passes, and the refresh ends with a **Save plugin** card. Do not click it here: Step 5 tests the same refresh from the reader's side.
+- Running the Accept prompt while the folder is still in `Submitted/` is refused with an instruction to move it to `Approved/` first.
 
 ## Step 5: User Refreshes Test Plugin
 
@@ -314,13 +325,13 @@ Do NOT remove the local skill if:
 
 In either case, leave the local override in place. Run the cleanup only after the next propose+accept+refresh cycle confirms the new canonical AND the local matches what was just proposed.
 
-Mechanical check: byte-compare the local user skill's SKILL.md against the SKILL.md inside the most recent `Proposals/Submitted/<skill-id>/<proposal-id>/` (or, if the proposal folder was already deleted, against current canonical). Match → safe to remove. Differ → keep local.
+Mechanical check: byte-compare the local user skill's SKILL.md against the SKILL.md inside the most recent proposal folder, `Proposals/Approved/<skill-id>/<proposal-id>/` after an accept (or, if the proposal folder was already deleted, against current canonical). Match → safe to remove. Differ → keep local.
 
 **Mechanism for removal**: per the Cowork persistence asymmetry note at the top of this manual, removing a local user skill requires Cowork's skill panel UI. File-side delete of the `skills-plugin/.../skills/<name>/` directory and the manifest entry is insufficient — Cowork writes its in-memory state back on quit and resurrects the deletion. The tester runs the byte-identity check, then opens Cowork's skill panel and removes the entry.
 
-Observed refresh report fields: `Library:`, `Skill(s):`, `Canonical SKILL.md verified:`, `Proposal sync evidence:`, `Library validation:`, `Cowork refresh/reinstall:`, `Skill invocation:`. The exact field set may vary; the headline `READY FOR SAVE | PASS | FAIL | NEEDS MANUAL ACTION` is the authoritative pass/fail signal.
+Observed refresh report fields: `Library:`, `Skill(s):`, `Canonical SKILL.md verified:`, `Proposal sync evidence:`, `Library validation:`, `Plugin version:`, `Version bump check:`, `Supporting files packaged:`, `Skipped files:`, `Cowork refresh/reinstall:`, `Skill invocation:`. The exact field set may vary; the headline `READY FOR SAVE | PASS | FAIL | NEEDS MANUAL ACTION` is the authoritative pass/fail signal.
 
-`Proposal sync evidence` is a useful diagnostic: it reports whether `Proposals/Submitted/<skill>/` content matches canonical and whether `Approved/`/`Rejected/` are empty. If the maintainer has not yet deleted the proposal folder after accepting (Step 4.3 / Step 9), expect a line like `Submitted/<skill> matches canonical` — that's an acceptable transient state, but Step 1 of the next demo run will fail the `Submitted/ empty` assertion until cleanup runs.
+`Proposal sync evidence` is a useful diagnostic: it reports whether `Proposals/Submitted/<skill>/` content matches canonical and whether `Approved/`/`Rejected/` are empty. After an accept the proposal sits in `Proposals/Approved/<skill>/`, so expect evidence that the Approved proposal matches canonical (after a partial accept in Step 9 it does not, which is expected). The Reset procedure empties `Approved/` before the next run.
 
 Known failure mode (degenerate refresh): if the refresh report says `NEEDS MANUAL ACTION`, `Canonical SKILL.md verified: FAIL`, or `no skills discoverable`, the refresh skill has fallen back to AIWS-internal Drive indexing instead of reading the Drive folder directly through the host's Google Drive integration. This is a skill bug, not a Drive problem. Recover with one of:
 
@@ -409,16 +420,34 @@ code --diff "<drive-local>/Test Plugin/skills/schedule-summary/SKILL.md" "<drive
 
 Maintainer reviews the diff and decides per-change. The accept can be full (canonical is overwritten with the proposed body) or partial (canonical is hand-edited to incorporate accepted parts and reject others).
 
+Step 4.3 already exercised a full accept (`Accept proposal <proposal-id> for Test Plugin`), so this step runs the partial accept, which exercises the Bump prompt and refresh's version check.
+
 Maintainer action on Drive:
 
 - Open canonical `skills/schedule-summary/SKILL.md` and the submitted proposal `SKILL.md` side by side in VS Code/VSCodium (`code --diff`) or Meld.
-- Edit canonical directly to incorporate accepted parts. Apply maintainer-authored edits where partial acceptance requires rewriting. Leave rejected parts out. Do not move files from `Proposals/Submitted/` into `skills/`.
-- Delete the entire `Proposals/Submitted/schedule-summary/<proposal-id-2>/` folder, including both `SKILL.md` and `aiws.proposal.json`. Drive version history preserves the proposal contents if needed later.
-- `Proposals/Approved/` and `Proposals/Rejected/` stay empty. No archive movement.
+- Edit canonical directly to incorporate accepted parts. Apply maintainer-authored edits where partial acceptance requires rewriting. Leave rejected parts out. Do not copy the proposal file into `skills/`.
+- Move the `Proposals/Submitted/schedule-summary/<proposal-id-2>/` folder to `Proposals/Approved/schedule-summary/` as the record. Do not run `Accept proposal` on it: that would replace the edited canonical with the full proposal.
+
+Version check (before the bump), user prompt:
+
+```text
+Refresh Test Plugin
+```
+
+Expected: `AIWS Skill Library Refresh: NEEDS MANUAL ACTION`, naming `skills/schedule-summary/SKILL.md` as modified after `aiws.library.json`, asking for `Bump plugin version for Test Plugin` (the wording may add `past <version>`; either is fine), and **no** Save plugin card. A Save plugin card here is a FAIL: Cowork could ignore that plugin because its version did not change.
+
+Maintainer prompt:
+
+```text
+Bump plugin version for Test Plugin
+```
+
+Expected: `Plugin version: <old> -> <new>` with the patch raised by one, the previous file under `Archive/aiws.library/`, exactly one `aiws.library.json` at the root. No validation or refresh runs.
 
 Outcome:
 
 - Canonical `skills/schedule-summary/SKILL.md` now reflects the partial-accept content. The new marker on canonical may be `> schedule-summary v2: running`, or a different marker chosen by the maintainer.
+- `plugin_version` is one patch above its Step 4.3 value.
 
 ## Step 10: User Refreshes And Verifies Canonical Reached The Installed Plugin
 
@@ -438,7 +467,7 @@ Expected:
 
 - AIWS reads Drive canonical first.
 - AIWS detects that the installed plugin's `schedule-summary` content differs from Drive canonical (v.2 was accepted in Step 9).
-- AIWS rebuilds the `.plugin` artifact with `plugin.json.version` equal to the `plugin_version` raised by the accept in Step 9 (patch bump, e.g. `1.0.1 → 1.0.2`).
+- AIWS rebuilds the `.plugin` artifact with `plugin.json.version` equal to the `plugin_version` raised by the bump in Step 9 (patch bump, e.g. `1.0.1 → 1.0.2`). `Version bump check: PASS`.
 - Preflight passes; Cowork presents one **Save plugin** card.
 - Report header: `AIWS Skill Library Refresh: READY FOR SAVE` (or `Update`).
 
@@ -465,7 +494,8 @@ Demo passes when all of the following are true at the end of Step 10:
 - Drive `skills/schedule-summary/SKILL.md` reflects the partial-accept content from Step 9.
 - Drive `skills/morning-briefing/SKILL.md` is unchanged from starting state.
 - Drive `skills/slack-response-triage/SKILL.md` is unchanged from starting state.
-- Drive `Proposals/Submitted/`, `Approved/`, `Rejected/` are empty or contain only Step 4 and Step 8 Submitted folders if the maintainer chose to leave them.
+- Drive `Proposals/Submitted/` and `Rejected/` are empty; `Approved/schedule-summary/` holds the Step 4 and Step 8 proposals.
+- Drive `aiws.library.json` is the only one at the root, plain JSON, with `plugin_version` two patches above its starting value (or `1.0.2` if it started without one); `Archive/aiws.library/` holds the two previous copies.
 - Cowork shows `test-plugin` installed with `test-plugin:morning-briefing`, `test-plugin:slack-response-triage`, and `test-plugin:schedule-summary` visible.
 - `Use schedule-summary` (with no overriding local skill) returns the partial-accepted canonical marker.
 - No `.skill` artifact, no **Save skill** card, no `test-plugin--<skill-id>` per-skill id, no `aiws-generated-plugin` identity has appeared at any step.
@@ -511,7 +541,7 @@ Avoid:
 
 - AIWS only enters when the user explicitly asks to install, refresh, validate, or propose. Authoring and using a local skill never invoke AIWS.
 - Maintainer review uses local Markdown diff (`code --diff` or Meld). Google Docs compare is not part of Phase 1.
-- Approved/Rejected folders are optional recordkeeping. This manual instructs the maintainer to leave them empty; testers may add them for audit if desired without changing the pass criteria.
+- Moving a proposal into `Approved/` is the maintainer's approval; `Accept proposal` refuses anything still in `Submitted/`. `Rejected/` is recordkeeping.
 - The local Cowork user-skill location is host-defined. The manual deliberately does not pin a filesystem path because that path can vary by host.
 - **Save plugin** and **Save skill** clicks are UI-only — the assistant can produce and present the artifact via `mcp__cowork__present_files`, but the click must come from the user. The assistant cannot complete the install/save itself; it can only verify the post-click state from disk after the user confirms.
 - **Role boundaries**: User (proposer), Maintainer (canonical owner), and the running Cowork host are three distinct actors even when the same human is performing all three. The manual gates Step 4.3 and Step 9 on an explicit maintainer signal so the assistant doesn't roll forward through a propose-then-accept on its own initiative.
