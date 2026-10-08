@@ -1708,6 +1708,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 "Never lower `plugin_version`",
                 "except the `plugin_version` bump",
                 "library root has no aiws.library.json",
+                "count only files whose own parent is the library root",
+                "a file moved out can still appear for a few seconds",
                 "trash `aiws.library.json.incoming`",
                 "is present but not `MAJOR.MINOR.PATCH`, stop",
                 "it does not validate or refresh",
