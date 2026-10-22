@@ -30,7 +30,7 @@ If you've used a shared Google Drive folder for team documents, the mental model
 3. **You propose changes.** When you want to share a new skill or improve an existing one, you author the change in your own Cowork first, test it, then run a single propose prompt. AIWS drops your version into a `Proposals/Submitted/` folder on the team's Drive. A maintainer reviews the diff and either accepts it (it becomes the new canonical), edits it, or rejects it.
 4. **Everyone refreshes.** A `Refresh <Library Name>` prompt pulls the latest canonical content into each teammate's Cowork. Your library stays in sync with the team without anyone re-installing anything.
 
-No hidden state, no separate accounts, no command-line work. Just Cowork prompts and a shared Drive folder you can open in your browser to inspect at any time.
+No hidden state, no separate accounts, and apart from one install command during setup, no command-line work. Just Cowork prompts and a shared Drive folder you can open in your browser to inspect at any time.
 
 The rest of this guide is the concrete recipe — what to type, what to click, and what to do when something looks off.
 
@@ -41,12 +41,31 @@ The rest of this guide is the concrete recipe — what to type, what to click, a
 ### What you need before you start
 
 - Cowork installed and signed in. (You have this.)
-- A Google account that can read the team's Drive folder.
+- A Google account that can read the team's Drive folder. To propose changes you also need write access to it.
 - The URL of the team's shared Drive folder. Someone on your team — your skill library maintainer — sends you this. It looks like `https://drive.google.com/drive/folders/1Ab…`.
 
 ### Steps
 
-1. **Add the AIWS marketplace, then install the plugin.**
+1. **Install uv (one command, once per computer).**
+   `core-aiws` starts a small local helper through `uvx`, so the free tool `uv` must be installed on your computer. Without it, AIWS prompts fail or do nothing.
+
+   - **macOS**: open the **Terminal** app and run:
+
+     ```
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
+
+     If you already use Homebrew, `brew install uv` works too.
+
+   - **Windows**: open **PowerShell** and run:
+
+     ```
+     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+     ```
+
+   Run this in Terminal or PowerShell, not in a Cowork chat: Cowork runs commands in its own sandbox, so uv installed there doesn't reach your computer.
+
+2. **Add the AIWS marketplace, then install the plugin.**
    AIWS isn't in Cowork's default plugin list — you add the marketplace it lives in first, then install the plugin from it.
 
    - **Customize** → **Browse Plugins** → **Personal** → **+** → **Add marketplace**
@@ -57,10 +76,19 @@ The rest of this guide is the concrete recipe — what to type, what to click, a
 
    You only do this once per machine. After install, AIWS-managed skills appear in your skill list with names starting with `aiws-` (for example `aiws-install-drive-skill-library`, `aiws-refresh-skill-library`).
 
-2. **Connect Google Drive.**
-   In Cowork's connectors / integrations panel, find Google Drive and sign in. Grant Cowork permission to read your Drive files. (AIWS uses Cowork's existing Drive connection — there's no separate AIWS-to-Drive login.)
+3. **Restart Claude and check the version.**
+   Fully quit Claude (not just close the window) and open it again. Then in a new Cowork chat, type:
 
-3. **Install your team's skill library.**
+   ```
+   Which version of core-aiws is installed?
+   ```
+
+   Cowork should name a version (for example `0.5.6`). If it says core-aiws isn't installed, repeat step 2. If you had core-aiws from before and the version is old, see "core-aiws doesn't show up or is still the old version" in Part 5.
+
+4. **Connect Google Drive.**
+   In Cowork's connectors / integrations panel, find Google Drive and sign in. Grant Cowork permission to read **and write** your Drive files: reading is enough to install and refresh, but proposing a change writes to Drive. (AIWS uses Cowork's existing Drive connection — there's no separate AIWS-to-Drive login.)
+
+5. **Install your team's skill library.**
 
    First, get the Drive folder's shared URL:
 
@@ -407,7 +435,15 @@ It should produce a `.skill` artifact with **Save skill**.
 
 ### "AIWS commands don't seem to do anything"
 
-Check that the AIWS plugin (core-aiws) is installed and enabled in Cowork's plugin panel. If it's missing or disabled, install/enable it.
+Check that the AIWS plugin (core-aiws) is installed and enabled in Cowork's plugin panel. If it's missing or disabled, install/enable it. Then check that uv is installed (Part 1, step 1): without it core-aiws can't start its helper. After installing uv, fully quit and reopen Claude.
+
+### "core-aiws doesn't show up or is still the old version" / "AIWS commands fail with CONNECTION_CLOSED"
+
+You most likely have an old core-aiws or an old copy of the marketplace. Re-syncing alone is not always enough. To fix:
+
+1. **Customize** → **Plugins** → uninstall core-aiws.
+2. **Customize** → **Browse Plugins** → **Personal** → **ai-workspace** → click **Sync**, then install core-aiws again. If core-aiws still isn't listed, remove the marketplace and add `sashakang/ai-workspace` again.
+3. Check that uv is installed (Part 1, step 1), fully quit and reopen Claude, then ask `Which version of core-aiws is installed?`
 
 ### "I can read the Drive library but I can't propose"
 
