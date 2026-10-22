@@ -1711,6 +1711,8 @@ class AiwsMcpSkillTests(unittest.TestCase):
                 "count only files whose own parent is the library root",
                 "a file moved out can still appear for a few seconds",
                 "trash `aiws.library.json.incoming`",
+                "copy it there, titled `aiws.library.json`, then trash the old file at the root",
+                "If the copy succeeded but trashing the old file failed",
                 "is present but not `MAJOR.MINOR.PATCH`, stop",
                 "it does not validate or refresh",
                 "Bump plugin version for <library-display-name> past <version>",
@@ -1732,6 +1734,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
         for source, text in copies("aiws-update-skill-library"):
             with self.subTest(source=source, check="boundary allows the version bump"):
                 self.assertNotIn("Do not apply runtime artifacts, metadata rewrites, plugin manifests", text)
+            # Shared-drive connectors refuse parent-folder changes; archiving must copy then trash.
+            with self.subTest(source=source, check="archive never moves files"):
+                self.assertNotIn("by changing its parent folder", text)
+                self.assertNotIn("change a file's parent folder, rename", text)
+                self.assertIn("Do not change a file's parent folder", text)
         for skill_id in ("aiws-install-drive-skill-library", "aiws-refresh-skill-library"):
             for source, text in copies(skill_id):
                 with self.subTest(skill=skill_id, source=source, check="no instruction to pick a version"):
@@ -1828,8 +1835,11 @@ class AiwsMcpSkillTests(unittest.TestCase):
             ],
             "\nA7. ": ["titled `SKILL.md.incoming`"],
             "\nA8. ": [
-                "by changing its parent folder",
+                "Copy the old `SKILL.md` into the archive folder",
+                "then trash the old `SKILL.md` in `skills/<skill-id>/`",
+                "never a parent-folder change",
                 "trash `SKILL.md.incoming`",
+                "If the copy succeeded but trashing the old `SKILL.md` failed",
                 "is no longer in `skills/<skill-id>/`",
             ],
             "\nA9. ": ["do not refresh", "already equals the proposal", "and trash `SKILL.md.incoming`"],
