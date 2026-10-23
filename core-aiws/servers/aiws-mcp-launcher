@@ -76,8 +76,118 @@ if [ -f "$manifest_path" ]; then
   export AIWS_MCP_PLUGIN_VERSION="$plugin_version"
 fi
 
-if ! command -v uvx >/dev/null 2>&1; then
-  launcher_error "AIWS MCP launcher error: uvx is required to start the bundled aiws-mcp server. Install uv from https://docs.astral.sh/uv/ and reopen Cowork." "missing_uvx"
+# uv's standalone installer puts uvx in ~/.local/bin, which a desktop app's PATH
+# often lacks, so look in the usual install locations as well as PATH.
+uv_install_dir="${HOME:-}/.local/bin"
+
+find_uvx() {
+  if command -v uvx >/dev/null 2>&1; then
+    command -v uvx
+    return 0
+  fi
+  for candidate in \
+    "${XDG_BIN_HOME:-}/uvx" \
+    "$uv_install_dir/uvx" \
+    "$uv_install_dir/bin/uvx" \
+    "${HOME:-}/.cargo/bin/uvx" \
+    /opt/homebrew/bin/uvx \
+    /usr/local/bin/uvx; do
+    if [ -x "$candidate" ] && [ ! -d "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Install uv with Astral's official standalone installer, into the user's own
+# ~/.local/bin: no admin rights, and no shell profile is modified. All output
+# goes to stderr or the launcher log, because stdout belongs to the MCP protocol.
+install_uv() {
+  # Astral's documented installer URL first, then the same installer from the
+  # uv release on GitHub, in case a network blocks one of the two hosts.
+  installer_urls="${AIWS_UV_INSTALLER_URL:-https://astral.sh/uv/install.sh https://github.com/astral-sh/uv/releases/latest/download/uv-installer.sh}"
+  if [ -z "${HOME:-}" ]; then
+    log_line "Cannot install uv: HOME is not set"
+    return 1
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    log_line "Cannot install uv: curl is not available"
+    return 1
+  fi
+  lock_dir="${TMPDIR:-/tmp}/aiws-uv-install.lock"
+  # A lock left behind by a launch that crashed mid-install is stale after 10 minutes.
+  if [ -n "$(find "$lock_dir" -maxdepth 0 -mmin +10 2>/dev/null)" ]; then
+    rmdir "$lock_dir" 2>/dev/null || true
+  fi
+  if ! mkdir "$lock_dir" 2>/dev/null; then
+    # Another AIWS launch is installing uv right now: wait for it to finish.
+    log_line "Waiting for another AIWS launch that is installing uv"
+    waited=0
+    while [ "$waited" -lt 120 ]; do
+      if find_uvx >/dev/null 2>&1; then
+        return 0
+      fi
+      if [ ! -d "$lock_dir" ]; then
+        break
+      fi
+      sleep 2
+      waited=$((waited + 2))
+    done
+    mkdir "$lock_dir" 2>/dev/null || true
+  fi
+  write_status "installing_uv"
+  mkdir -p "$uv_install_dir" 2>/dev/null || true
+  install_exit=1
+  for installer_url in $installer_urls; do
+    log_line "uvx not found; installing uv from $installer_url into $uv_install_dir"
+    # Download the whole installer first, so a failed or cut-off download is
+    # reported as such and a partial script never runs.
+    installer_path="$(mktemp "${TMPDIR:-/tmp}/aiws-uv-install.XXXXXX")" || installer_path=""
+    if [ -z "$installer_path" ]; then
+      log_line "Cannot install uv: could not create a temporary file"
+      break
+    fi
+    if [ "$diagnostics_enabled" -eq 1 ]; then
+      curl -LsSf -o "$installer_path" "$installer_url" 2>>"$AIWS_MCP_LOG_PATH"
+    else
+      curl -LsSf -o "$installer_path" "$installer_url" >&2
+    fi
+    install_exit=$?
+    if [ "$install_exit" -ne 0 ]; then
+      log_line "Downloading the uv installer failed with code $install_exit"
+      rm -f "$installer_path"
+      continue
+    fi
+    if [ "$diagnostics_enabled" -eq 1 ]; then
+      env UV_INSTALL_DIR="$uv_install_dir" UV_NO_MODIFY_PATH=1 sh "$installer_path" >>"$AIWS_MCP_LOG_PATH" 2>&1
+    else
+      env UV_INSTALL_DIR="$uv_install_dir" UV_NO_MODIFY_PATH=1 sh "$installer_path" >&2
+    fi
+    install_exit=$?
+    rm -f "$installer_path"
+    if [ "$install_exit" -eq 0 ]; then
+      break
+    fi
+  done
+  rmdir "$lock_dir" 2>/dev/null || true
+  log_line "uv installer exited with code $install_exit"
+  return "$install_exit"
+}
+
+uvx_path="$(find_uvx || true)"
+if [ -z "$uvx_path" ]; then
+  if [ "${AIWS_MCP_NO_AUTO_INSTALL_UV:-}" = "1" ]; then
+    launcher_error "AIWS MCP launcher error: uvx is required to start the bundled aiws-mcp server. Install uv from https://docs.astral.sh/uv/ and reopen Cowork." "missing_uvx"
+  fi
+  set +e
+  install_uv
+  set -e
+  uvx_path="$(find_uvx || true)"
+  if [ -z "$uvx_path" ]; then
+    launcher_error "AIWS MCP launcher error: uvx is required to start the bundled aiws-mcp server, and installing uv automatically failed. Install uv from https://docs.astral.sh/uv/ and reopen Cowork." "missing_uvx"
+  fi
+  log_line "Installed uv; using $uvx_path"
 fi
 
 write_status "execing_server"
@@ -85,9 +195,9 @@ log_line "Launching uvx --from ${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp aiws-mcp s
 
 set +e
 if [ "$diagnostics_enabled" -eq 1 ]; then
-  uvx --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve 2>>"$AIWS_MCP_LOG_PATH"
+  "$uvx_path" --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve 2>>"$AIWS_MCP_LOG_PATH"
 else
-  uvx --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve
+  "$uvx_path" --from "${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp" aiws-mcp serve
 fi
 exit_code=$?
 set -e
