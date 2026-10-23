@@ -46,8 +46,10 @@ The rest of this guide is the concrete recipe — what to type, what to click, a
 
 ### Steps
 
-1. **Install uv (one command, once per computer).**
-   `core-aiws` starts a small local helper through `uvx`, so the free tool `uv` must be installed on your computer. Without it, AIWS prompts fail or do nothing.
+1. **uv: nothing to do on a Mac.**
+   `core-aiws` starts a small local helper through `uvx`, part of the free tool `uv`. From core-aiws 0.5.8, if uv is missing, the helper installs it by itself the first time it starts: it downloads Astral's official installer (from `astral.sh`, or the same installer from uv's GitHub release if that site is blocked) and puts `uv` and `uvx` in `~/.local/bin`. No admin password is needed and your shell profile is not changed. That first start can take up to a minute.
+
+   Install uv by hand only if the automatic install fails (AIWS prompts still fail after a full restart of Claude) or if your company wants software installed a specific way:
 
    - **macOS**: open the **Terminal** app and run:
 
@@ -83,7 +85,7 @@ The rest of this guide is the concrete recipe — what to type, what to click, a
    Which version of core-aiws is installed?
    ```
 
-   Cowork should name a version (for example `0.5.6`). If it says core-aiws isn't installed, repeat step 2. If you had core-aiws from before and the version is old, see "core-aiws doesn't show up or is still the old version" in Part 5.
+   Cowork should name a version (for example `0.5.8`). If it says core-aiws isn't installed, repeat step 2. If you had core-aiws from before and the version is old, see "core-aiws doesn't show up or is still the old version" in Part 5.
 
 4. **Connect Google Drive.**
    In Cowork's connectors / integrations panel, find Google Drive and sign in. Grant Cowork permission to read **and write** your Drive files: reading is enough to install and refresh, but proposing a change writes to Drive. (AIWS uses Cowork's existing Drive connection — there's no separate AIWS-to-Drive login.)
@@ -435,7 +437,7 @@ It should produce a `.skill` artifact with **Save skill**.
 
 ### "AIWS commands don't seem to do anything"
 
-Check that the AIWS plugin (core-aiws) is installed and enabled in Cowork's plugin panel. If it's missing or disabled, install/enable it. Then check that uv is installed (Part 1, step 1): without it core-aiws can't start its helper. After installing uv, fully quit and reopen Claude.
+Check that the AIWS plugin (core-aiws) is installed and enabled in Cowork's plugin panel. If it's missing or disabled, install/enable it. Then fully quit and reopen Claude: core-aiws installs uv by itself on its first start (Part 1, step 1). If AIWS still does nothing, install uv by hand as described there and restart again.
 
 ### "core-aiws doesn't show up or is still the old version" / "AIWS commands fail with CONNECTION_CLOSED"
 
@@ -443,7 +445,7 @@ You most likely have an old core-aiws or an old copy of the marketplace. Re-sync
 
 1. **Customize** → **Plugins** → uninstall core-aiws.
 2. **Customize** → **Browse Plugins** → **Personal** → **ai-workspace** → click **Sync**, then install core-aiws again. If core-aiws still isn't listed, remove the marketplace and add `sashakang/ai-workspace` again.
-3. Check that uv is installed (Part 1, step 1), fully quit and reopen Claude, then ask `Which version of core-aiws is installed?`
+3. Fully quit and reopen Claude (core-aiws installs uv by itself if it is missing; see Part 1, step 1), then ask `Which version of core-aiws is installed?`
 
 ### "I can read the Drive library but I can't propose"
 

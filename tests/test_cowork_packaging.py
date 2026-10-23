@@ -267,6 +267,139 @@ class CoworkPackagingTests(unittest.TestCase):
         self.assertIn("server exited with code 42", log_text)
 
 
+    def _run_launcher_without_uvx(
+        self,
+        temp_path: Path,
+        installer_body: str | None,
+        extra_env: dict | None = None,
+        local_bin_uvx: str | None = None,
+    ):
+        """Run the packaged launcher with no uvx on PATH and a fake HOME.
+
+        installer_body is the shell script served at AIWS_UV_INSTALLER_URL
+        (a file:// URL), standing in for Astral's real installer.
+        """
+        package_path = build_core_aiws_package(REPO_ROOT, temp_path / "dist")
+        extracted_root = temp_path / "package"
+        _extract_package_preserving_modes(package_path, extracted_root)
+        home = temp_path / "home"
+        home.mkdir()
+        if local_bin_uvx is not None:
+            local_bin = home / ".local" / "bin"
+            local_bin.mkdir(parents=True)
+            (local_bin / "uvx").write_text(local_bin_uvx, encoding="utf-8")
+            (local_bin / "uvx").chmod(0o755)
+        plugin_data = temp_path / "plugin-data"
+        installer = temp_path / "fake-uv-install.sh"
+        installer.write_text(installer_body or "exit 1\n", encoding="utf-8")
+        env = {
+            "HOME": str(home),
+            "TMPDIR": str(temp_path),
+            "PATH": "/usr/bin:/bin",
+            "CLAUDE_PLUGIN_ROOT": str(extracted_root),
+            "CLAUDE_PLUGIN_DATA": str(plugin_data),
+            "AIWS_UV_INSTALLER_URL": installer.as_uri(),
+            "AIWS_UVX_ARGS_PATH": str(temp_path / "uvx-args.json"),
+            **(extra_env or {}),
+        }
+        result = subprocess.run(
+            [str(extracted_root / "servers" / "aiws-mcp-launcher")],
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        return result, extracted_root, home, plugin_data
+
+    @staticmethod
+    def _fake_uvx_script() -> str:
+        return (
+            f"#!{sys.executable}\n"
+            "import json, os, sys\n"
+            "with open(os.environ['AIWS_UVX_ARGS_PATH'], 'w', encoding='utf-8') as handle:\n"
+            "    json.dump(sys.argv[1:], handle)\n"
+        )
+
+    def test_launcher_installs_uv_when_uvx_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            fake_uvx_source = temp_path / "fake-uvx"
+            fake_uvx_source.write_text(self._fake_uvx_script(), encoding="utf-8")
+            installer_env = temp_path / "installer-env.txt"
+            installer_body = (
+                'echo "installing uv to $UV_INSTALL_DIR"\n'
+                f'printf "%s|%s\\n" "$UV_INSTALL_DIR" "$UV_NO_MODIFY_PATH" > "{installer_env}"\n'
+                'mkdir -p "$UV_INSTALL_DIR"\n'
+                f'cp "{fake_uvx_source}" "$UV_INSTALL_DIR/uvx"\n'
+                'chmod 755 "$UV_INSTALL_DIR/uvx"\n'
+            )
+            result, extracted_root, home, plugin_data = self._run_launcher_without_uvx(temp_path, installer_body)
+            actual_args = json.loads((temp_path / "uvx-args.json").read_text(encoding="utf-8"))
+            install_dir, no_modify_path = installer_env.read_text(encoding="utf-8").strip().split("|")
+            log_text = (plugin_data / "logs" / "aiws-mcp-launcher.log").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "", "installer output must never reach the MCP stdout channel")
+        self.assertEqual(install_dir, str(home / ".local" / "bin"))
+        self.assertEqual(no_modify_path, "1")
+        self.assertEqual(
+            actual_args,
+            ["--from", str(extracted_root / "servers" / "aiws-mcp"), "aiws-mcp", "serve"],
+        )
+        self.assertIn("uvx not found; installing uv", log_text)
+        self.assertIn("installing uv to", log_text)
+
+    def test_launcher_finds_uvx_in_local_bin_without_installing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            marker = temp_path / "installer-ran"
+            result, extracted_root, _, _ = self._run_launcher_without_uvx(
+                temp_path,
+                f'touch "{marker}"\nexit 1\n',
+                local_bin_uvx=self._fake_uvx_script(),
+            )
+            actual_args = json.loads((temp_path / "uvx-args.json").read_text(encoding="utf-8"))
+            installer_ran = marker.exists()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(installer_ran)
+        self.assertEqual(
+            actual_args,
+            ["--from", str(extracted_root / "servers" / "aiws-mcp"), "aiws-mcp", "serve"],
+        )
+
+    def test_launcher_auto_install_can_be_turned_off(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            marker = temp_path / "installer-ran"
+            result, _, _, plugin_data = self._run_launcher_without_uvx(
+                temp_path,
+                f'touch "{marker}"\n',
+                {"AIWS_MCP_NO_AUTO_INSTALL_UV": "1"},
+            )
+            status = json.loads((plugin_data / "runtime" / "aiws-mcp-status.json").read_text(encoding="utf-8"))
+            installer_ran = marker.exists()
+
+        self.assertEqual(result.returncode, 127)
+        self.assertFalse(installer_ran)
+        self.assertEqual(status["status"], "missing_uvx")
+        self.assertIn("uvx is required", result.stderr)
+
+    def test_launcher_reports_failed_uv_install(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            result, _, _, plugin_data = self._run_launcher_without_uvx(temp_path, "echo boom >&2\nexit 3\n")
+            status = json.loads((plugin_data / "runtime" / "aiws-mcp-status.json").read_text(encoding="utf-8"))
+            log_text = (plugin_data / "logs" / "aiws-mcp-launcher.log").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 127)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(status["status"], "missing_uvx")
+        self.assertIn("installing uv automatically failed", result.stderr)
+        self.assertIn("uv installer exited with code 3", log_text)
+
+
 def _extract_package_preserving_modes(package_path: Path, output_dir: Path) -> None:
     with zipfile.ZipFile(package_path) as package:
         for member in package.infolist():
