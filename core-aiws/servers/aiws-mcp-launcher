@@ -190,8 +190,16 @@ if [ -z "$uvx_path" ]; then
   log_line "Installed uv; using $uvx_path"
 fi
 
+# Run the server on a uv-managed CPython, not whatever Python happens to be on
+# the machine. An Intel (x86_64) Homebrew Python left over on an Apple Silicon
+# Mac, for example, has no prebuilt wheel for some dependencies (cryptography),
+# so uv tries to compile them and fails. A managed build matches the machine and
+# is downloaded once into uv's own folder. A user who set these keeps theirs.
+export UV_PYTHON_PREFERENCE="${UV_PYTHON_PREFERENCE:-only-managed}"
+export UV_PYTHON="${UV_PYTHON:-3.12}"
+
 write_status "execing_server"
-log_line "Launching uvx --from ${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp aiws-mcp serve"
+log_line "Launching uvx --from ${CLAUDE_PLUGIN_ROOT}/servers/aiws-mcp aiws-mcp serve (Python ${UV_PYTHON}, ${UV_PYTHON_PREFERENCE})"
 
 set +e
 if [ "$diagnostics_enabled" -eq 1 ]; then
