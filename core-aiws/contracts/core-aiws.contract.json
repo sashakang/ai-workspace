@@ -1,6 +1,6 @@
 {
   "plugin_id": "core-aiws",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "public_skills": [
     "aiws-check-skill-library",
     "aiws-improve",

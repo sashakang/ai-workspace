@@ -400,6 +400,33 @@ class CoworkPackagingTests(unittest.TestCase):
         self.assertIn("uv installer exited with code 3", log_text)
 
 
+    def test_launcher_runs_server_on_managed_python_by_default(self) -> None:
+        env_dump = (
+            f"#!{sys.executable}\n"
+            "import json, os\n"
+            "with open(os.environ['AIWS_UVX_ARGS_PATH'], 'w', encoding='utf-8') as handle:\n"
+            "    json.dump({k: os.environ.get(k) for k in ('UV_PYTHON', 'UV_PYTHON_PREFERENCE')}, handle)\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            result, _, _, _ = self._run_launcher_without_uvx(temp_path, "exit 1\n", local_bin_uvx=env_dump)
+            seen = json.loads((temp_path / "uvx-args.json").read_text(encoding="utf-8"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(seen, {"UV_PYTHON": "3.12", "UV_PYTHON_PREFERENCE": "only-managed"})
+
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            result, _, _, _ = self._run_launcher_without_uvx(
+                temp_path,
+                "exit 1\n",
+                {"UV_PYTHON": "3.13", "UV_PYTHON_PREFERENCE": "system"},
+                local_bin_uvx=env_dump,
+            )
+            seen = json.loads((temp_path / "uvx-args.json").read_text(encoding="utf-8"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(seen, {"UV_PYTHON": "3.13", "UV_PYTHON_PREFERENCE": "system"})
+
+
 def _extract_package_preserving_modes(package_path: Path, output_dir: Path) -> None:
     with zipfile.ZipFile(package_path) as package:
         for member in package.infolist():
