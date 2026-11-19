@@ -601,6 +601,7 @@ def validate_skill_library_proposals(
         raise SkillManagerError(f"Proposals must be a directory: {proposals_root}")
 
     proposals: list[dict[str, Any]] = []
+    warnings: list[str] = []
     allowed_states = set(SKILL_LIBRARY_PROPOSAL_STATES)
     for state_dir in sorted(path for path in proposals_root.iterdir() if path.is_dir()):
         if state_dir.is_symlink():
@@ -615,9 +616,19 @@ def validate_skill_library_proposals(
             if skill_dir.is_symlink():
                 raise SkillManagerError(f"Proposal skill directory must not be a symlink: {skill_dir}")
             skill_id = skill_dir.name
-            if skill_id not in actual_skill_names:
-                raise SkillManagerError(f"Proposal references missing skill folder: {skill_id}")
-            for proposal_dir in sorted(path for path in skill_dir.iterdir() if path.is_dir()):
+            proposal_dirs = sorted(path for path in skill_dir.iterdir() if path.is_dir())
+            is_new_skill = skill_id not in actual_skill_names
+            if is_new_skill:
+                # A proposal may introduce a skill that has no skills/<skill-id>/ yet; Accept creates it.
+                # An empty folder left behind after a proposal was moved or archived is harmless.
+                if not proposal_dirs:
+                    warnings.append(f"Empty proposal folder ignored: Proposals/{state}/{skill_id}/")
+                    continue
+                warnings.append(
+                    f"Proposal for a skill with no skills/{skill_id}/ folder (a new skill, or one that was removed): "
+                    f"Proposals/{state}/{skill_id}/"
+                )
+            for proposal_dir in proposal_dirs:
                 if proposal_dir.is_symlink():
                     raise SkillManagerError(f"Proposal directory must not be a symlink: {proposal_dir}")
                 proposal_id = proposal_dir.name
@@ -639,7 +650,7 @@ def validate_skill_library_proposals(
                     raise SkillManagerError(f"Proposal metadata library_id must match aiws.library.json id: {proposal_metadata_file}")
                 source_path = payload.get("source_path")
                 source = validate_skill_library_relative_path(library_root, source_path, label="Proposal source_path")
-                if not source.is_file():
+                if not source.is_file() and not is_new_skill:
                     raise SkillManagerError(f"Proposal source_path is missing: {source_path}")
                 expected_source = library_root / "skills" / skill_id / "SKILL.md"
                 if source.resolve() != expected_source.resolve():
@@ -654,7 +665,7 @@ def validate_skill_library_proposals(
                         "base_revision": payload.get("base_revision"),
                     }
                 )
-    return {"proposals": proposals, "warnings": []}
+    return {"proposals": proposals, "warnings": warnings}
 
 
 def validate_skill_library(library_root: Path, *, metadata_root: Path | None = None) -> dict[str, Any]:
