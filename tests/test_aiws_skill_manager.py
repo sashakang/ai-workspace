@@ -657,6 +657,33 @@ class AiwsSkillManagerTests(unittest.TestCase):
             {"Submitted", "Approved", "Rejected"},
         )
 
+    def test_skill_library_validation_warns_on_proposal_for_new_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+            self.write_library_proposal(library_root, state="Rejected", proposal_id="proposal-old")
+            shutil.rmtree(library_root / "skills" / "meeting-followup")
+            self.write_library_skill(library_root, "other-skill")
+            metadata_root = library_root / "aiws.skills"
+            if metadata_root.exists():
+                shutil.rmtree(metadata_root)
+
+            result = validate_skill_library(library_root)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual([proposal["proposal_id"] for proposal in result["proposals"]], ["proposal-old"])
+        self.assertTrue(any("no skills/meeting-followup/ folder" in warning for warning in result["warnings"]), result["warnings"])
+
+    def test_skill_library_validation_ignores_empty_proposal_folder_for_missing_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
+            (library_root / "Proposals" / "Approved" / "retired-skill").mkdir(parents=True)
+
+            result = validate_skill_library(library_root)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["proposals"], [])
+        self.assertTrue(any("Empty proposal folder" in warning for warning in result["warnings"]), result["warnings"])
+
     def test_skill_library_validation_rejects_flat_legacy_proposal_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             library_root = self.write_skill_library(Path(temp), include_metadata=True, include_proposal=False)
